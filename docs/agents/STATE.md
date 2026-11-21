@@ -12,7 +12,7 @@ Updated 2026-11-21.
 ## First jobs, in order
 
 1. DONE (merged 2026-11-21, gate main f2bca35): stack + skeleton: decisions in `docs/DECISIONS.md`, layout, one real unit test.
-2. SUBMITTED, HELD for the owner's approval (2026-11-21): the real `tools/check`, `ready/real-check` at 95815d3 (branch `work/real-check`), explained with `owner-gate explain`. Not merged until the owner approves that exact commit.
+2. SUBMITTED, HELD for the owner's approval (2026-11-21): the real `tools/check`, `ready/real-check` (branch `work/real-check`; first 95815d3, rebased once, see In flight), explained with `owner-gate explain`. Not merged until the owner approves that exact commit.
 3. DONE (merged 2026-11-21, gate main 64dfbbf): emulator of the 1280x400 7.9" panel with one screenshot per state (item 2, the real `tools/check`, is still not done).
 4. Product.
 
@@ -25,14 +25,13 @@ Updated 2026-11-21.
 
 ## In flight
 
-- `ready/real-check` (95815d3, only `tools/check`): HELD by the gate, waiting for the owner's approval. The gate already ran it as its own user: six steps ok, TESTS_PASSED=112 (1 seed + 81 unit + 30 Playwright), 7 screenshots. Do NOT move the branch: a new commit needs a new approval. When `gate-status` shows it merged: delete `ready/real-check` and `work/real-check`, set owner issue 20261121T174905Z-i-49aed7 to done, reply `done` to owner message 20261121T174915Z-o-4e2539, and mark first job 2 DONE here. If it shows `failed` (declined), read the owner's reason first.
-- Leftover worktree of the finished area lead: `.claude/worktrees/agent-af03c2039440df9d8` (detached, nothing uncommitted); a normal cycle may remove it.
+- `ready/real-check` (only `tools/check`): HELD by the gate, waiting for the owner's approval. The gate already ran it as its own user: six steps ok, TESTS_PASSED=112 (1 seed + 81 unit + 30 Playwright), 7 screenshots. It was first submitted as 95815d3 and then rebased once onto the final main of this cycle (same file content, new sha: see `gate-status real-check` and `owner-gate`). Do NOT move the branch again: a new commit needs a new approval. Note that every merge to main leaves this branch behind main; if the gate then reports it `rejected` (not based on current main), rebase it, explain it again with `owner-gate explain real-check`, and tell the owner. When `gate-status` shows it merged: delete `ready/real-check` and `work/real-check`, set owner issue 20261121T174905Z-i-49aed7 to done, reply `done` to owner message 20261121T174915Z-o-4e2539, and mark first job 2 DONE here. If it shows `failed` (declined), read the owner's reason first.
 
 The team is halted by the owner; one-shot cycle 4 of 2026-11-21 (owner message 20261121T174915Z-o-4e2539, backlog bb4fa3) ended with the branch held.
 
 ## Pending owner
 
-- Approval of `ready/real-check` at 95815d3 (the change to the checks).
+- Approval of `ready/real-check` (the change to the checks).
 
 ## Next
 
