@@ -25,7 +25,8 @@ State logic is tested with the built-in `node:test`: no dependency.
 | Path | Contents |
 |---|---|
 | `src/state/` | State core: pure logic, hook events to view state (`reducer.js`, `diff.js`, `format.js`, `states.js`). |
-| `src/view/` | The static glance page (HTML/CSS/JS). For now a placeholder that shows a state plainly. |
+| `src/view/` | The static glance page (HTML/CSS/JS). |
+| `src/server/` | Live server: hook POSTs in, state to the page over SSE (added with the glance view). |
 | `emulator/` | 1280x400 panel emulator (Playwright): `panel.js` (physical size), `mm.js`, `fixtures/` (one state per view state), `serve.js`, `tests/` (specs), `dev/` (developer page at physical size). |
 | `tests/unit/` | `node:test` unit tests; `tests/*.sh` are the gate's tests (`tests/unit.sh` runs `npm ci` + unit tests, `tests/emulator.sh` runs `npm ci` + the Playwright emulator tests). |
 | `out/` | Git-ignored output: `out/shots/` (screenshots), `out/test-results/` (Playwright). |
@@ -129,15 +130,14 @@ keeps updating underneath, so when the network returns the view shows the curren
 
 ## 2026-11-21: panel emulator
 
-- **Physical size in one place**: `emulator/panel.js`. Active area about 190 x 60 mm (DESIGN.md; not
+- **Physical size in one place**: `emulator/panel.js` (moved to `src/view/panel.js` with the glance view; the emulator file re-exports it). Active area about 190 x 60 mm (DESIGN.md; not
   measured on the real panel, bench item 13). 1280/190 = 6.737 and 400/60 = 6.667 px/mm differ by about 1%;
   one uniform scale is used, **1280/190**, the larger, so px-to-mm never overstates a size (400 px = 59.4 mm).
   Viewport 1280x400, device scale factor 1.
 - **Text height = cap height**: ink height of a capital H in the element's computed font, measured with
   canvas `measureText('H').actualBoundingBoxAscent` (`emulator/mm.js`), tested against painted ink. Not the
   CSS font-size (the em box, always larger). Measured with headless Chromium's fonts here, which are not the
-  Pi's (bench item 11). The placeholder view asserts a state word cap height of at least 10 mm; the real
-  design sets the real threshold.
+  Pi's (bench item 11). The thresholds are set by the glance view (see "glance view" below).
 - **Fixtures**: `emulator/fixtures/<state>.json`, one per entry of `STATES`, each exactly the reducer's
   state object. The list is `STATES` itself (`emulator/fixtures.js` `FIXTURE_IDS`), used by unit tests,
   Playwright specs and the developer page. Fixtures are generated, not written: the reducer's output for the
@@ -156,3 +156,85 @@ keeps updating underneath, so when the network returns the view shows the curren
   with `PLAYWRIGHT_BROWSERS_PATH` defaulting to `/opt/ms-playwright`).
 - **Developer page** `emulator/dev/`: the view in a 1280x400 iframe scaled to the panel's mm, calibrated by
   monitor diagonal or credit card (stored in localStorage), state picker over `STATES`.
+
+## 2026-11-21: glance view (the real 1280x400 renderer) and the live path
+
+### Layout
+
+Three lines, black background, no scrolling, nothing wraps:
+
+1. **State band**: full-width band in the state colour, black text: a shape, the state word, and
+   `repo · branch` right-aligned (hidden when it would be squeezed under about 8 characters, e.g. next to
+   NEEDS PERMISSION).
+2. Tool and file, diff `+N −N` at the right (green/red, bold, never shrinks; compact counts rounded down:
+   12.3k, 999k, 1.2M).
+3. `$ command` (monospace, at most 45% of the line) and the last output line.
+
+When the tool is Bash, line 2 shows the command instead of "Bash" with no file, and line 3 the output over
+the whole width. `starting`, `offline` and `insert-key` show a short plain note instead (offline also says
+what Claude is doing underneath). Fields that do not fit are cut with `…`; the file path is cut in the
+middle so the file name stays visible (`src/view/fit.js`). Fonts: DejaVu Sans / Sans Mono (what Raspberry
+Pi OS ships), not `system-ui`, so the Pi picks the same font as the emulator; WenQuanYi / IPA as CJK
+fallback.
+
+### Colour and shape per state (colour is never the only cue)
+
+| View | Band colour | Shape | Lowest contrast of any text in that state (measured) |
+|---|---|---|---|
+| working | `#5eb1ff` blue | filled circle | 8.32:1 |
+| waiting | `#c8a2ff` violet | two bars (pause) | 10.07:1 |
+| permission | `#ffb020` amber | triangle | 10.59:1 |
+| done | `#4fdc7a` green | check mark | 8.32:1 |
+| starting | `#e0e0e0` light grey | ring | 15.91:1 |
+| offline | `#ff6b6b` red | cross | 7.57:1 |
+| insert-key | `#ff8ad8` pink | key | 9.88:1 |
+
+Detail text is white `#fff` or grey `#b8b8b8` on black. The minimum per state comes from the Playwright
+test, which computes the WCAG ratio of every text element from its computed colour and its effective
+(opaque) background; the floor is **7:1** (WCAG AAA for normal text) because the panel is read in daylight
+through glare.
+
+### Type sizes in mm (cap height of a capital H, at 1280/190 px/mm)
+
+| Text | Design (`TYPE_MM`, `src/view/type.js`) | Asserted minimum (`MIN_MM`) | Measured in the emulator |
+|---|---|---|---|
+| State word | 10.6 mm | 10.5 mm | 10.69 mm |
+| Everything else | 6.1 mm | 6.0 mm (floor for any text) | 6.23 mm |
+
+Why: the panel sits on the dash about 700-800 mm from the eyes. 6 mm cap height at 750 mm is about 27
+arcminutes; in-vehicle display guidance (ISO 15008, from memory: not checked here, the standard is not
+reachable) asks for roughly 20 arcmin minimum and about 24 preferred, so the floor is above that with some
+margin for the Pi's rendering. The state word is the one thing for a one-second glance: 10.5 mm is about 48
+arcmin, and it is the largest round size at which the longest label, NEEDS PERMISSION, fits one line with
+its shape in 1280 px in DejaVu Sans Bold (about 1087 px of 1232). Bigger detail text would leave about 30
+characters per line and cut almost every path and output line. The sizes are set in mm: at runtime the
+view measures the real font's cap-height ratio (canvas `measureText('H')`) and sets the CSS font sizes from
+it, so a different font on the Pi keeps the cap heights (but may change widths: bench items 18-19).
+
+### Worst-case content
+
+`emulator/worst-case/*.json` (hand-written renderer stress content, NOT reducer output: far over the
+limits, unbroken tokens, CJK/emoji, exactly at the limits in `W`, a 999999999 diff), merged over every
+state in the layout tests and screenshotted (`worst-<id>.png`, `worst-<id>-permission.png`). They live
+outside `emulator/fixtures/` because every file there is a view state that must have its own screenshot.
+
+### Live path: `src/server/index.js`
+
+- Node standard library only. **Port 8138** by default (`REVVIEW_PORT` or the first argument; 8137 stays the
+  static dev server), bound to **127.0.0.1 only** (no option to bind elsewhere): the hooks and the kiosk
+  browser run on the same Pi.
+- `POST /event`, body = one raw Claude Code hook JSON object (exactly what a command hook gets on stdin, so
+  the hook is `curl -s -X POST --data-binary @- http://127.0.0.1:8138/event`). 204 accepted; 400 malformed
+  JSON or not an object; 413 over **1 MiB** (a Read or Write payload can carry a whole file; bigger events
+  are dropped, which only loses one diff count); 403 for a foreign `Origin` or `Host` (a web page in the
+  kiosk browser could otherwise POST cross-site, and DNS rebinding); 405/404 otherwise. Synthetic
+  `Revview*` events go the same way.
+- **Server-Sent Events** on `GET /events` (one-way push is all the page needs; built into the browser and
+  `node:http`, no WebSocket code): `retry: 1000`, then `{seq, state}` at once (a late joiner sees the
+  current state) and after every accepted POST; a comment ping every 15 s. `GET /state` for debugging.
+  State lives in memory only; a restarted server starts at `starting`.
+- The page (live when it has no `?fixture`/`?state`) shows `starting` until the first message, and also
+  whenever the link is down (a stale WORKING would be a lie); it reconnects by itself (the browser's own
+  retry, and a new EventSource after 1 s if the browser gave up).
+- The server serves only `src/view/` at `/`, so the view imports nothing outside that directory; that is
+  why the panel constants moved to `src/view/panel.js`.
