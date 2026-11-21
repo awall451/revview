@@ -9,9 +9,11 @@ import { fileURLToPath } from 'node:url';
 import { initialState, reduce } from '../state/index.js';
 
 export const DEFAULT_PORT = 8138;
-export const DEFAULT_HOST = '127.0.0.1';
+export const DEFAULT_HOST = '127.0.0.1'; // the only address it binds; there is no option for another
 export const MAX_BODY_BYTES = 1024 * 1024;
 const PING_MS = 15000;
+export const MAX_SSE_CLIENTS = 8;
+export const MAX_CLIENT_BACKLOG_BYTES = 256 * 1024; // unread bytes after which a stalled SSE client is dropped
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_VIEW_DIR = path.resolve(HERE, '..', 'view');
 
@@ -50,7 +52,7 @@ function serveStatic(req, res, root) {
   });
 }
 
-export async function startLiveServer({ port = 0, host = DEFAULT_HOST, viewDir = DEFAULT_VIEW_DIR } = {}) {
+export async function startLiveServer({ port = 0, viewDir = DEFAULT_VIEW_DIR, reduce: reduceEvent = reduce } = {}) {
   const root = path.resolve(viewDir);
   let state = initialState();
   let seq = 0;
@@ -60,7 +62,15 @@ export async function startLiveServer({ port = 0, host = DEFAULT_HOST, viewDir =
   const message = () => `data: ${JSON.stringify({ seq, state })}\n\n`;
   const broadcast = () => {
     const m = message();
-    for (const c of clients) c.write(m);
+    for (const c of clients) {
+      // a client that never reads would make the write buffer grow without bound: drop it
+      if (c.writableLength > MAX_CLIENT_BACKLOG_BYTES) {
+        clients.delete(c);
+        c.destroy();
+        continue;
+      }
+      c.write(m);
+    }
   };
 
   function readBody(req, res, done) {
@@ -101,11 +111,12 @@ export async function startLiveServer({ port = 0, host = DEFAULT_HOST, viewDir =
       if (event === null || typeof event !== 'object' || Array.isArray(event)) {
         return text(res, 400, 'body must be a JSON object');
       }
-      let next = state;
+      let next;
       try {
-        next = reduce(state, event);
+        next = reduceEvent(state, event);
       } catch (e) {
         console.error('reduce failed:', e);
+        return text(res, 500, 'state core failed; event ignored');
       }
       seq += 1;
       state = next;
@@ -115,6 +126,7 @@ export async function startLiveServer({ port = 0, host = DEFAULT_HOST, viewDir =
   }
 
   function events(req, res) {
+    if (clients.size >= MAX_SSE_CLIENTS) return text(res, 503, 'too many event streams', { 'retry-after': '5' });
     res.writeHead(200, {
       'content-type': 'text/event-stream',
       'cache-control': 'no-store',
@@ -166,18 +178,23 @@ export async function startLiveServer({ port = 0, host = DEFAULT_HOST, viewDir =
   });
 
   const timer = setInterval(() => {
-    for (const c of clients) c.write(': ping\n\n');
+    for (const c of clients) {
+      if (c.writableLength > MAX_CLIENT_BACKLOG_BYTES) {
+        clients.delete(c);
+        c.destroy();
+      } else c.write(': ping\n\n');
+    }
   }, PING_MS);
   timer.unref();
 
   await new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(port, host, resolve);
+    server.listen(port, DEFAULT_HOST, resolve);
   });
   ownPort = server.address().port;
 
   return {
-    url: `http://${host}:${ownPort}`,
+    url: `http://${DEFAULT_HOST}:${ownPort}`,
     port: ownPort,
     state: () => state,
     close: () =>

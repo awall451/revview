@@ -20,6 +20,7 @@ The synthetic `Revview*` events (see `src/state/README.md`) are POSTed the same 
 
 | Status | Meaning |
 | --- | --- |
+| 500 | the state core threw: event ignored, `seq` and state unchanged, the server keeps serving |
 | 204 | accepted: `seq += 1`, state reduced, message sent to every SSE client (even if the state did not change) |
 | 400 | empty body, malformed JSON, or JSON that is not a plain object; state unchanged |
 | 403 | bad `Origin` or `Host` header |
@@ -51,7 +52,9 @@ server started.
 - Any request with an `Origin` header that is not `http://127.0.0.1:<port>` or `http://localhost:<port>`
   gets 403, so a web page open in the browser cannot POST events. curl sends no `Origin` and is allowed.
 - Any request whose `Host` is not `127.0.0.1:<port>` or `localhost:<port>` gets 403 (DNS rebinding).
-- Stream errors and bad requests never crash the process; a throwing reducer leaves the state unchanged.
+- Stream errors and bad requests never crash the process; a throwing reducer answers 500 and leaves `seq` and the state unchanged.
+- At most **8** SSE clients (`MAX_SSE_CLIENTS`); the ninth `GET /events` gets 503. A client whose unread backlog
+  passes 256 KiB (it never reads) is dropped.
 
-Programmatic use (tests): `startLiveServer({ port: 0, host, viewDir })` resolves to
+Programmatic use (tests): `startLiveServer({ port: 0, viewDir, reduce })` (`reduce` is a test seam for a failing state core; there is no host option) resolves to
 `{ url, port, close(), state() }`.

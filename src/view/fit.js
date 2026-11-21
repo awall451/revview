@@ -12,7 +12,12 @@ function largest(lo, hi, ok) {
   return best;
 }
 
-// Keep n code points: about 1/3 from the front, 2/3 from the back, ellipsis between.
+// Grapheme clusters (user-perceived characters): a cut never strands a combining mark or splits an
+// emoji ZWJ sequence or a flag.
+const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+const graphemes = (t) => Array.from(segmenter.segment(t), (x) => x.segment);
+
+// Keep n graphemes: about 1/3 from the front, 2/3 from the back, ellipsis between.
 function cutMiddle(cps, n) {
   const front = Math.max(1, Math.floor(n / 3));
   const back = Math.max(1, n - front);
@@ -23,7 +28,7 @@ export function middleEllipsis(text, fits) {
   if (typeof text !== 'string' || text === '') return '';
   if (fits(text)) return text;
   const cut = text.lastIndexOf('/');
-  let dir = cut > 0 ? Array.from(text.slice(0, cut)) : [];
+  let dir = cut > 0 ? graphemes(text.slice(0, cut)) : [];
   let base = cut > 0 ? text.slice(cut + 1) : text;
   if (base === '') { dir = []; base = text; }
   if (dir.length) {
@@ -32,7 +37,7 @@ export function middleEllipsis(text, fits) {
     const k = largest(0, dir.length - 1, (m) => fits(form(m)));
     if (k >= 0) return form(k);
   }
-  const cps = Array.from(base);
+  const cps = graphemes(base);
   if (cps.length < 5) return base;
   // n = code points of the basename kept (at least 4: one in front, three at the end)
   const n = largest(4, cps.length - 1, (m) => fits(cutMiddle(cps, m)));

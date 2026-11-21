@@ -68,7 +68,7 @@ function fitFile(full) {
 }
 
 function cleanState(s) {
-  if (!s || typeof s !== 'object' || typeof s.view !== 'string' || !(s.view in LABELS) || s.view === 'none') {
+  if (!s || typeof s !== 'object' || typeof s.view !== 'string' || !Object.hasOwn(LABELS, s.view) || s.view === 'none') {
     return { view: 'none' };
   }
   return s;
@@ -91,7 +91,7 @@ export function render(input) {
   el.diff.hidden = true;
 
   const where = [str(s.repo), str(s.branch)].filter(Boolean).join(' · ');
-  const activity = (LABELS[s.activity] || str(s.activity)).toLowerCase();
+  const activity = (Object.hasOwn(LABELS, str(s.activity)) ? LABELS[s.activity] : str(s.activity)).toLowerCase();
   const showDiff = s.diff && (s.diff.added > 0 || s.diff.removed > 0) && view !== 'starting' && view !== 'insert-key';
   let file = '';
 

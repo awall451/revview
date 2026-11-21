@@ -71,3 +71,21 @@ test('formatCount', () => {
   assert.equal(formatCount(-5), '0');
   assert.equal(formatCount('x'), '0');
 });
+
+test('cuts never strand a combining mark, split a ZWJ emoji or a flag', () => {
+  const fam = '\u{1F468}‍\u{1F469}‍\u{1F467}';
+  const flag = '\u{1F1E9}\u{1F1EA}';
+  const names = ['é'.repeat(12) + '.txt', `${fam.repeat(5)}.md`, `${flag.repeat(5)}.md`];
+  const regionals = (t) => Array.from(t).filter((c) => /[\u{1F1E6}-\u{1F1FF}]/u.test(c)).length;
+  for (const name of names) {
+    for (let n = 3; n < Array.from(name).length; n++) {
+      const out = middleEllipsis(name, (s) => Array.from(s).length <= n);
+      const [head, tail = ''] = out.split('…');
+      assert.ok(!/^[̀-ͯ‍]/.test(tail), `stray mark after ellipsis: ${JSON.stringify(out)}`);
+      assert.ok(!head.endsWith('‍'), `split ZWJ: ${JSON.stringify(out)}`);
+      assert.ok(!lone.test(out), `lone surrogate: ${JSON.stringify(out)}`);
+      assert.equal(regionals(head) % 2, 0, `split flag: ${JSON.stringify(out)}`);
+      assert.equal(regionals(tail) % 2, 0, `split flag: ${JSON.stringify(out)}`);
+    }
+  }
+});

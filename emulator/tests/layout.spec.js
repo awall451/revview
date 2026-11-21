@@ -114,7 +114,8 @@ test('every state has its own shape and band colour; unknown input shows "no sta
   const colours = new Set();
   for (const id of [...FIXTURE_IDS, null]) {
     await openView(id ?? { garbage: true });
-    const shape = await page.locator('#shape').getAttribute('data-shape');
+    // the drawn markup, not data-shape (which is just the view name and cannot show two states sharing a shape)
+    const shape = await page.locator('#shape').innerHTML();
     const colour = await page.locator('#band').evaluate((e) => getComputedStyle(e).backgroundColor);
     expect(await page.locator('#shape').evaluate((e) => e.children.length)).toBeGreaterThan(0);
     shapes.add(shape);
@@ -126,6 +127,17 @@ test('every state has its own shape and band colour; unknown input shows "no sta
   }
   expect(shapes.size).toBe(FIXTURE_IDS.length + 1);
   expect(colours.size).toBe(FIXTURE_IDS.length + 1);
+});
+
+test('prototype keys in state data are plain text, not lookups', async ({ openView, page }) => {
+  for (const view of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+    await openView({ view });
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'none');
+    await expect(page.locator('#state-word')).toHaveText('NO STATE');
+  }
+  await openView({ view: 'offline', activity: 'constructor' });
+  await expect(page.locator('#state-word')).toHaveText('OFFLINE');
+  await expect(page.locator('#note1')).toHaveText('Claude: constructor');
 });
 
 test('worst case: every field at its limit', async ({ openView, page }) => {

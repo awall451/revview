@@ -228,7 +228,8 @@ outside `emulator/fixtures/` because every file there is a view state that must 
   JSON or not an object; 413 over **1 MiB** (a Read or Write payload can carry a whole file; bigger events
   are dropped, which only loses one diff count); 403 for a foreign `Origin` or `Host` (a web page in the
   kiosk browser could otherwise POST cross-site, and DNS rebinding); 405/404 otherwise. Synthetic
-  `Revview*` events go the same way.
+  `Revview*` events go the same way. A throwing state core answers 500 and changes nothing. At most 8 SSE
+  clients (503 beyond); a client that stops reading (backlog over 256 KiB) is dropped.
 - **Server-Sent Events** on `GET /events` (one-way push is all the page needs; built into the browser and
   `node:http`, no WebSocket code): `retry: 1000`, then `{seq, state}` at once (a late joiner sees the
   current state) and after every accepted POST; a comment ping every 15 s. `GET /state` for debugging.
