@@ -12,7 +12,7 @@ Updated 2026-11-21.
 ## First jobs, in order
 
 1. DONE (merged 2026-11-21, gate main f2bca35): stack + skeleton: decisions in `docs/DECISIONS.md`, layout, one real unit test.
-2. Real `tools/check` on its own branch, explained with `owner-gate explain`; held for owner approval.
+2. SUBMITTED, HELD for the owner's approval (2026-11-21): the real `tools/check`, `ready/real-check` at 95815d3 (branch `work/real-check`), explained with `owner-gate explain`. Not merged until the owner approves that exact commit.
 3. DONE (merged 2026-11-21, gate main 64dfbbf): emulator of the 1280x400 7.9" panel with one screenshot per state (item 2, the real `tools/check`, is still not done).
 4. Product.
 
@@ -25,15 +25,18 @@ Updated 2026-11-21.
 
 ## In flight
 
-Nothing. The team is halted by the owner; one-shot cycle 3 of 2026-11-21 (owner message 20261121T174854Z-o-c280c2, backlog d1780d, owner issue 20261121T174847Z-i-d78160) finished with the panel emulator merged.
+- `ready/real-check` (95815d3, only `tools/check`): HELD by the gate, waiting for the owner's approval. The gate already ran it as its own user: six steps ok, TESTS_PASSED=112 (1 seed + 81 unit + 30 Playwright), 7 screenshots. Do NOT move the branch: a new commit needs a new approval. When `gate-status` shows it merged: delete `ready/real-check` and `work/real-check`, set owner issue 20261121T174905Z-i-49aed7 to done, reply `done` to owner message 20261121T174915Z-o-4e2539, and mark first job 2 DONE here. If it shows `failed` (declined), read the owner's reason first.
+- Leftover worktree of the finished area lead: `.claude/worktrees/agent-af03c2039440df9d8` (detached, nothing uncommitted); a normal cycle may remove it.
+
+The team is halted by the owner; one-shot cycle 4 of 2026-11-21 (owner message 20261121T174915Z-o-4e2539, backlog bb4fa3) ended with the branch held.
 
 ## Pending owner
 
-Nothing. `apt:shellcheck` and `recipe:playwright-browsers@1.65.1` are installed.
+- Approval of `ready/real-check` at 95815d3 (the change to the checks).
 
 ## Next
 
-1. Real `tools/check` on its own branch (lint, unit + Playwright tests counted properly, shellcheck, `REVVIEW_SHOTS_DIR=<outdir>/shots`), explained with `owner-gate explain`; held for approval.
+1. After `real-check` merges: follow the list under In flight. Until then other branches merge on the old checks (3 tests).
 2. The real glance-view design in `src/view/`, built against the emulator (the 10 mm minimum state-word cap height in `emulator/tests/layout.spec.js` is a placeholder to be set by the design).
 3. Later, hook wiring must send the synthetic events the reducer expects (`RevviewContext` with the branch, `RevviewStarting`, `RevviewNetwork`, `RevviewDataLock`; see `src/state/README.md`). Open points: SessionEnd is ignored (view keeps its last state); a failed dictation has no event yet; `worker_permission_prompt`, `StopFailure`, `PostToolUseFailure`, `PermissionDenied` are handled from the package source only, not recorded.
 
@@ -42,3 +45,4 @@ Nothing. `apt:shellcheck` and `recipe:playwright-browsers@1.65.1` are installed.
 - (a) `emulator/tests/screenshots.spec.js` should assert `body[data-view]` equals the state before the screenshot (now it checks only the PNG size).
 - (b) Remove the stray third argument to `test()` at `emulator/tests/layout.spec.js:36`.
 - (c) Developer page: the diagonal calibration assumes resolution in CSS px (wrong with OS scaling if the physical resolution is entered).
+- (d) After `real-check` merges: `tests/unit.sh` and `tests/emulator.sh` are no longer run by the check (it calls the runners directly); remove them or keep them as developer shortcuts, and note that a new `tests/*.sh` is not picked up automatically. Reviewer's optional hardening for a later, separately approved change to `tools/check`: fail unit/emulator when zero tests passed; a `timeout` around the runners.
