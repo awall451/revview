@@ -7,7 +7,22 @@
 <script type="module" src="view.js"></script>
 </head>
 <body>
-<h1 id="state-word"></h1>
-<ul id="fields"></ul>
+<div id="band">
+  <svg id="shape" viewBox="0 0 24 24" aria-hidden="true"></svg>
+  <span id="state-word"></span>
+  <span id="where"></span>
+</div>
+<div class="row" id="line2">
+  <span id="tool"></span>
+  <span id="file"></span>
+  <span id="note1"></span>
+  <span id="diff"><span id="diff-added"></span><span id="diff-removed"></span></span>
+</div>
+<div class="row" id="line3">
+  <span id="note2"></span>
+  <span id="output"></span>
+</div>
+<!-- #cmdbox is moved by view.js: into line 2 for Bash, else to the start of line 3 -->
+<span id="cmdbox" hidden><span id="prompt">$</span><span id="command"></span></span>
 </body>
 </html>

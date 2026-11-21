@@ -1,0 +1,12 @@
+{
+  "repo": "repository repository repository repository repository repository repository repository repository repository repository",
+  "branch": "branch branch branch branch branch branch branch branch branch branch branch branch branch branch branch branch branch b",
+  "tool": "Edit",
+  "file": "src/some/deeply/nested/directory/structure/with_a_long_file_name_here.ts",
+  "command": "npm run build -- npm run build -- npm run build -- npm run build -- npm run build -- npm run build -- npm run build -- npm run build -- npm run build -- npm run build -- npm run build -- npm run build",
+  "output": "compiled with warnings compiled with warnings compiled with warnings compiled with warnings compiled with warnings compiled with warnings compiled with warnings compiled with warnings compiled with wa",
+  "diff": {
+    "added": 999999999,
+    "removed": 999999999
+  }
+}

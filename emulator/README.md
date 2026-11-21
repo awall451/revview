@@ -66,3 +66,7 @@ its resolution in CSS px (prefilled from the screen; with OS scaling, the CSS re
 divided by the device pixel ratio shown), or hold a credit card (85.60 x 53.98 mm) to the screen and adjust
 the outline until it matches. Check the 100 mm ruler with a real ruler. The view in it is the placeholder,
 not the real design.
+
+## Worst cases
+
+`worst-case/<id>.json` are hand-written CONTENT objects (repo, branch, tool, file, command, output, diff) that stress the renderer: far over the state core's limits, unbroken tokens, CJK and emoji, exactly at the limits in the widest letter, and a 999999999 diff. They are NOT reducer output and live outside `fixtures/` (every file there needs a screenshot). `worst-case.js` exports `WORST_CASE_IDS` and `loadWorstCase(id)`; the layout and screenshot specs merge each over every fixture state (`out/shots/worst-<id>.png`, `worst-<id>-permission.png`). The panel constants now live in `src/view/panel.js` (`panel.js` here re-exports them).

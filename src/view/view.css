@@ -1,35 +1,107 @@
-/* Placeholder styling, not the real design. */
-html, body { margin: 0; width: 1280px; height: 400px; overflow: hidden; }
+/* The glance view, 1280x400. Text sizes come from the CSS variables set by view.js (cap height in mm);
+   the fallbacks below are only used before JS runs (DejaVu: cap height about 0.73 em). */
+:root {
+  --state-font: 98px;
+  --detail-font: 56px;
+  --mono-font: 56px;
+  --diff-font: 56px;
+  --sans: "DejaVu Sans", "WenQuanYi Zen Hei", "IPAGothic", sans-serif;
+  --mono: "DejaVu Sans Mono", "WenQuanYi Zen Hei Mono", "IPAGothic", monospace;
+  --grey: #b8b8b8;
+  --band: #b0b0b0;
+}
+[hidden] { display: none !important; }
+html, body { margin: 0; width: 1280px; height: 400px; overflow: hidden; background: #000; }
 body {
-  box-sizing: border-box;
-  padding: 16px 24px;
-  font-family: system-ui, "DejaVu Sans", sans-serif;
-  font-size: 28px;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--sans);
+  font-size: var(--detail-font);
   line-height: 1.2;
   color: #fff;
-  background: #222;
 }
-body[data-view="working"] { background: #1c3d6e; }
-body[data-view="waiting"] { background: #1d5e2c; }
-body[data-view="permission"] { background: #8a3b12; }
-body[data-view="done"] { background: #2d2d2d; }
-body[data-view="starting"] { background: #4a3a6a; }
-body[data-view="offline"] { background: #5a1f1f; }
-body[data-view="insert-key"] { background: #5a1f1f; }
+body[data-view="working"] { --band: #5eb1ff; }
+body[data-view="waiting"] { --band: #c8a2ff; }
+body[data-view="permission"] { --band: #ffb020; }
+body[data-view="done"] { --band: #4fdc7a; }
+body[data-view="starting"] { --band: #e0e0e0; }
+body[data-view="offline"] { --band: #ff6b6b; }
+body[data-view="insert-key"] { --band: #ff8ad8; }
+body[data-view="none"] { --band: #b0b0b0; }
 
+#band {
+  flex: none;
+  box-sizing: border-box;
+  height: 140px;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 0.25em;
+  background: var(--band);
+  color: #000;
+  font-size: var(--detail-font);
+}
+#shape { flex: none; width: calc(var(--state-font) * 0.72); height: calc(var(--state-font) * 0.72); }
 #state-word {
-  margin: 0 0 12px;
-  font-size: 115px;
-  line-height: 1.1;
+  flex: none;
+  font-size: var(--state-font);
   font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+#where {
+  flex: 1 1 0;
+  min-width: 0;
+  margin-left: 0.4em;
+  text-align: right;
+  font-weight: 400;
+  font-size: var(--detail-font);
+}
+
+.row {
+  flex: 1 1 0;
+  min-height: 0;
+  box-sizing: border-box;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+}
+.row > *, #cmdbox > * {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
-#fields { margin: 0; padding: 0; list-style: none; }
-#fields li {
-  white-space: nowrap;
+#where, #state-word { white-space: nowrap; }
+#where { overflow: hidden; text-overflow: ellipsis; }
+span:empty { display: none; }
+
+#tool { flex: 0 1 auto; max-width: 28%; color: var(--grey); }
+#file { flex: 1 1 0; }
+#note1, #note2 { flex: 1 1 0; }
+#output { flex: 1 1 0; }
+#diff {
+  flex: none;
+  margin-left: auto;
+  overflow: visible;
+  font-size: var(--diff-font);
+  font-weight: 700;
+}
+#diff-added { color: #5fe08a; }
+#diff-removed { color: #ff7a7a; margin-left: 0.4em; }
+
+#cmdbox {
+  flex: 0 1 auto;
+  max-width: 45%;
+  min-width: 0;
+  display: flex;
+  gap: 0.4em;
+  font-family: var(--mono);
+  font-size: var(--mono-font);
   overflow: hidden;
-  text-overflow: ellipsis;
-  height: 1.2em;
 }
+#cmdbox.wide { flex: 1 1 0; max-width: none; }
+#cmdbox #prompt { flex: none; color: var(--grey); }
+#command { flex: 0 1 auto; min-width: 0; }
