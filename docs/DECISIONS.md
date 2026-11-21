@@ -24,11 +24,11 @@ State logic is tested with the built-in `node:test`: no dependency.
 
 | Path | Contents |
 |---|---|
-| `src/state/` | State core: pure logic, hook events to view state. Now: `states.js` (canonical names). |
+| `src/state/` | State core: pure logic, hook events to view state (`reducer.js`, `diff.js`, `format.js`, `states.js`). |
 | `src/view/` | The static glance page (HTML/CSS/JS). Not written yet. |
 | `emulator/` | 1280x400 panel emulator (Playwright). Not built yet. |
 | `tests/unit/` | `node:test` unit tests; `tests/*.sh` are the gate's tests (`tests/unit.sh` runs `npm ci` + unit tests). |
-| `fixtures/` | Recorded hook events. None yet. |
+| `fixtures/` | Recorded hook events (`sessions/*.jsonl`, real Claude Code 2.1.330 recordings) and their expected state sequences. |
 
 ## 2026-11-21: canonical view states
 
