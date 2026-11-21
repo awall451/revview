@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Revview panel, real size</title>
+<link rel="stylesheet" href="dev.css">
+</head>
+<body>
+<h1>Revview panel at real size</h1>
+<p class="note">This shows the placeholder view in an iframe. It is not proof of how the panel
+looks in daylight or with the Pi's fonts.</p>
+
+<section>
+  <label>State <select id="state"></select></label>
+  <button id="prev" type="button">&larr; prev</button>
+  <button id="next" type="button">next &rarr;</button>
+</section>
+
+<div id="strip"><iframe id="view" title="panel view"></iframe></div>
+<p id="caption" class="note"></p>
+
+<section id="calibration">
+  <h2>Calibration <span id="calibrated"></span></h2>
+  <p class="note">CSS millimetres are not true millimetres on most monitors. Calibrate one of two
+  ways; both set the same value. OS display scaling matters: use the resolution in CSS px
+  (device pixel ratio <span id="dpr"></span>).</p>
+  <fieldset>
+    <legend>A. Monitor size</legend>
+    <label>Diagonal (inches) <input id="diagonal" type="number" min="1" step="0.1"></label>
+    <label>Width (CSS px) <input id="res-w" type="number" min="1" step="1"></label>
+    <label>Height (CSS px) <input id="res-h" type="number" min="1" step="1"></label>
+  </fieldset>
+  <fieldset>
+    <legend>B. Credit card (85.60 x 53.98 mm)</legend>
+    <p class="note">Hold a real card against the screen and adjust until the outline matches.</p>
+    <label>Outline width (CSS px) <input id="card-width" type="number" min="10" step="0.5"></label>
+    <input id="card-slider" type="range" min="100" max="900" step="0.5" aria-label="card width slider">
+    <div id="card"></div>
+  </fieldset>
+  <p>Scale: <output id="px-per-mm"></output> CSS px/mm &middot; strip <output id="strip-mm"></output>
+    <button id="reset" type="button">reset</button></p>
+  <div id="ruler-label" class="note">100 mm ruler</div>
+  <div id="ruler"></div>
+</section>
+<script type="module" src="dev.js"></script>
+</body>
+</html>
