@@ -7,7 +7,9 @@ const browserGlobals = {
   window: 'readonly', document: 'readonly', console: 'readonly', setTimeout: 'readonly',
   clearTimeout: 'readonly', setInterval: 'readonly', clearInterval: 'readonly',
   fetch: 'readonly', EventSource: 'readonly', WebSocket: 'readonly', URL: 'readonly',
-  requestAnimationFrame: 'readonly',
+  requestAnimationFrame: 'readonly', getComputedStyle: 'readonly', devicePixelRatio: 'readonly',
+  location: 'readonly', URLSearchParams: 'readonly', localStorage: 'readonly', screen: 'readonly',
+  HTMLElement: 'readonly', Event: 'readonly', history: 'readonly',
 };
 const rules = {
   'no-undef': 'error', 'no-unused-vars': 'error', 'no-var': 'error', 'prefer-const': 'error',
@@ -22,5 +24,13 @@ export default [
     languageOptions: { ecmaVersion: 2024, sourceType: 'module', globals: nodeGlobals },
     rules,
   },
-  { files: ['src/view/**/*.js'], languageOptions: { globals: browserGlobals } },
+  {
+    files: ['src/view/**/*.js', 'emulator/dev/**/*.js', 'emulator/panel.js'],
+    languageOptions: { globals: browserGlobals },
+  },
+  // Specs run in Node but their page.evaluate callbacks use browser globals.
+  {
+    files: ['emulator/tests/**/*.js', 'emulator/mm.js'],
+    languageOptions: { globals: { ...nodeGlobals, ...browserGlobals } },
+  },
 ];

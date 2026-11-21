@@ -1,0 +1,35 @@
+/* Placeholder styling, not the real design. */
+html, body { margin: 0; width: 1280px; height: 400px; overflow: hidden; }
+body {
+  box-sizing: border-box;
+  padding: 16px 24px;
+  font-family: system-ui, "DejaVu Sans", sans-serif;
+  font-size: 28px;
+  line-height: 1.2;
+  color: #fff;
+  background: #222;
+}
+body[data-view="working"] { background: #1c3d6e; }
+body[data-view="waiting"] { background: #1d5e2c; }
+body[data-view="permission"] { background: #8a3b12; }
+body[data-view="done"] { background: #2d2d2d; }
+body[data-view="starting"] { background: #4a3a6a; }
+body[data-view="offline"] { background: #5a1f1f; }
+body[data-view="insert-key"] { background: #5a1f1f; }
+
+#state-word {
+  margin: 0 0 12px;
+  font-size: 115px;
+  line-height: 1.1;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#fields { margin: 0; padding: 0; list-style: none; }
+#fields li {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  height: 1.2em;
+}

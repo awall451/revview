@@ -9,6 +9,7 @@
   },
   "scripts": {
     "test:unit": "node --test \"tests/unit/**/*.test.js\"",
+    "test:emulator": "playwright test -c emulator/playwright.config.js",
     "lint": "eslint ."
   },
   "devDependencies": {
