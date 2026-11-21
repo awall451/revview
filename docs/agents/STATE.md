@@ -11,7 +11,7 @@ Updated 2026-11-21.
 
 ## First jobs, in order
 
-1. Stack + skeleton (branch `work/skeleton`): decisions in `docs/DECISIONS.md`, layout, one real unit test.
+1. DONE (merged 2026-11-21, gate main f2bca35): stack + skeleton: decisions in `docs/DECISIONS.md`, layout, one real unit test.
 2. Real `tools/check` on its own branch, explained with `owner-gate explain`; held for owner approval.
 3. Emulator of the 1280x400 7.9" panel with one screenshot per state. Blocked until the playwright-browsers recipe is installed.
 4. Product.
@@ -25,7 +25,7 @@ Updated 2026-11-21.
 
 ## In flight
 
-Nothing. The team was halted by the owner after this one-shot cycle.
+Nothing. The team is halted by the owner; the one-shot cycle of 2026-11-21 (owner message 20261121T174544Z-o-f9471a) finished with the skeleton merged.
 
 ## Pending owner
 
