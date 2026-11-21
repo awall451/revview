@@ -53,3 +53,12 @@ bash tools/check /tmp/check-out
 ```
 
 The gate runs the same script on every submitted branch.
+
+## Run the live view
+
+```bash
+npm start        # live server on http://127.0.0.1:8138/ (loopback only)
+```
+
+Claude Code hook events are POSTed to `/event`; the page at `/` follows them. Details in
+[src/server/README.md](src/server/README.md); the view itself in [src/view/README.md](src/view/README.md).

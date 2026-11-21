@@ -23,13 +23,14 @@ Screenshots: one `<state>.png` per state, exactly 1280x400 px, written to `out/s
 
 | Path | What |
 |---|---|
-| `panel.js` | The ONE place for the panel's size: `PANEL` (1280x400 px, 190x60 mm, `pxPerMm`), `pxToMm`, `mmToPx`. Browser-safe. |
+| `panel.js` | Re-exports `src/view/panel.js`, the ONE place for the panel's size: `PANEL` (1280x400 px, 190x60 mm, `pxPerMm`), `pxToMm`, `mmToPx`. Browser-safe. |
 | `mm.js` | `textSizeMm(locator)`, `boxSizeMm(locator)`: sizes in panel mm (see below). |
 | `fixtures.js` | `FIXTURE_IDS` (= `STATES` from `src/state/states.js`), `loadFixture(id)`. |
 | `fixtures/<state>.json` | One reducer state per view state. |
 | `fixtures/recipes.js` | The events each fixture is produced from (recorded sessions + synthetic `Revview*` events). |
 | `serve.js` | Dependency-free static server for the repository root (`node:http`). |
-| `playwright.config.js`, `tests/` | Config and specs (`mm`, `layout`, `screenshots`, `devpage`); `tests/harness.js` starts a server per worker on a free port. |
+| `playwright.config.js`, `tests/` | Config and specs (`mm`, `layout`, `screenshots`, `devpage`, `live`); `live` is the end-to-end test: it starts the live server (`src/server`), POSTs the recorded sessions in `fixtures/sessions/` to it and checks what the page shows, plus the starting, late-join, reconnect and malformed-POST cases; `tests/harness.js` starts a server per worker on a free port. |
+| `worst-case/` | Stress content for the renderer (see Worst cases). |
 | `dev/` | The developer page. |
 
 ## Millimetres
@@ -43,7 +44,7 @@ computed font, measured in the page with canvas `measureText('H').actualBounding
 against the rows of ink of an H painted on a canvas (within 1.5 px). `fontSizeMm` (the CSS font-size, the em
 box) is returned too but is always larger than any letter. Both come from this Chromium's fonts (DejaVu /
 FreeSans here); the Pi's fonts may measure differently. Example: "the state word's cap height is at least
-10 mm" (the placeholder's threshold; the real design sets its own).
+10.5 mm" (the real thresholds are `MIN_MM` in `src/view/type.js`: 10.5 mm state word, 6.0 mm any text).
 
 ## Fixtures
 
@@ -64,9 +65,8 @@ in a 1280x400 iframe scaled to 190 x 59.4 mm. CSS millimetres are not real milli
 so calibrate once (saved in the browser's localStorage): either enter the monitor's diagonal in inches and
 its resolution in CSS px (prefilled from the screen; with OS scaling, the CSS resolution is the physical one
 divided by the device pixel ratio shown), or hold a credit card (85.60 x 53.98 mm) to the screen and adjust
-the outline until it matches. Check the 100 mm ruler with a real ruler. The view in it is the placeholder,
-not the real design.
+the outline until it matches. Check the 100 mm ruler with a real ruler.
 
 ## Worst cases
 
-`worst-case/<id>.json` are hand-written CONTENT objects (repo, branch, tool, file, command, output, diff) that stress the renderer: far over the state core's limits, unbroken tokens, CJK and emoji, exactly at the limits in the widest letter, and a 999999999 diff. They are NOT reducer output and live outside `fixtures/` (every file there needs a screenshot). `worst-case.js` exports `WORST_CASE_IDS` and `loadWorstCase(id)`; the layout and screenshot specs merge each over every fixture state (`out/shots/worst-<id>.png`, `worst-<id>-permission.png`). The panel constants now live in `src/view/panel.js` (`panel.js` here re-exports them).
+`worst-case/<id>.json` are hand-written CONTENT objects (repo, branch, tool, file, command, output, diff) that stress the renderer: far over the state core's limits, unbroken tokens, CJK and emoji, exactly at the limits in the widest letter, and a 999999999 diff. They are NOT reducer output and live outside `fixtures/` (every file there needs a screenshot). `worst-case.js` exports `WORST_CASE_IDS` and `loadWorstCase(id)`; the layout and screenshot specs merge each over every fixture state (`out/shots/worst-<id>.png`, `worst-<id>-permission.png`).
