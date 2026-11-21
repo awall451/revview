@@ -18,20 +18,21 @@ Updated 2026-11-21.
 
 ## Milestone 1: glance view in the emulator
 
-- State core reduces recorded hook events to the named states (`working`, `waiting`, `permission`, `done`, `starting`, `offline`, `insert-key`), with unit tests.
+- DONE (merged 2026-11-21, gate main 4b18e29): state core `src/state/` (pure reducer, 66 node tests) with three real recorded sessions in `fixtures/sessions/` and replay tests.
 - A static view page renders each state at 1280x400.
 - The emulator runs at the physical panel size (about 190 x 60 mm active area).
 - `tools/check` writes one screenshot per state to `<outdir>/shots/`.
 
 ## In flight
 
-Nothing. The team is halted by the owner; the one-shot cycle of 2026-11-21 (owner message 20261121T174544Z-o-f9471a) finished with the skeleton merged.
+Nothing. The team is halted by the owner; the one-shot cycle of 2026-11-21 (owner message 20261121T180747Z-o-a0651c, backlog 5ffe86) finished with the state core merged.
 
 ## Pending owner
 
-- `apt:shellcheck`: request 20261121T174603Z-k-f1c293
-- `recipe:playwright-browsers@1.65.1`: request 20261121T174603Z-k-ee4355
+Nothing. `apt:shellcheck` and `recipe:playwright-browsers@1.65.1` are installed.
 
 ## Next
 
-Real `tools/check` branch, then the emulator once Chromium is installed.
+1. Real `tools/check` on its own branch (lint, unit tests counted properly, shellcheck), explained with `owner-gate explain`; held for approval.
+2. The static view page + 1280x400 emulator, screenshots per state, fed by `fixtures/sessions/*.jsonl` through `replay()` (these are the canonical fixtures; no placeholders).
+3. Later, hook wiring must send the synthetic events the reducer expects (`RevviewContext` with the branch, `RevviewStarting`, `RevviewNetwork`, `RevviewDataLock`; see `src/state/README.md`). Open points: SessionEnd is ignored (view keeps its last state); a failed dictation has no event yet; `worker_permission_prompt`, `StopFailure`, `PostToolUseFailure`, `PermissionDenied` are handled from the package source only, not recorded.
