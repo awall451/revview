@@ -18,16 +18,17 @@ State logic is tested with the built-in `node:test`: no dependency.
 **Owner package requests** (the team cannot install system packages):
 
 - `apt:shellcheck`, request 20261121T174603Z-k-f1c293: to lint the shell scripts (`tools/`, `tests/*.sh`, later the Pi image scripts). Not installed yet.
-- `recipe:playwright-browsers@1.65.1`, request 20261121T174603Z-k-ee4355: Chromium for Playwright (expected at `/opt/ms-playwright`, which does not exist yet). Needed for the emulator and screenshots. Do not run `playwright install`; no browser test is written until it is installed.
+- `recipe:playwright-browsers@1.65.1`, request 20261121T174603Z-k-ee4355: Chromium for Playwright (expected at `/opt/ms-playwright`, which does not exist yet). Needed for the emulator and screenshots. Do not run `playwright install`; no browser test is written until it is installed. Installed since (`chromium-1255` and the headless shell); the panel emulator uses it.
 
 **Layout**
 
 | Path | Contents |
 |---|---|
 | `src/state/` | State core: pure logic, hook events to view state (`reducer.js`, `diff.js`, `format.js`, `states.js`). |
-| `src/view/` | The static glance page (HTML/CSS/JS). Not written yet. |
-| `emulator/` | 1280x400 panel emulator (Playwright). Not built yet. |
-| `tests/unit/` | `node:test` unit tests; `tests/*.sh` are the gate's tests (`tests/unit.sh` runs `npm ci` + unit tests). |
+| `src/view/` | The static glance page (HTML/CSS/JS). For now a placeholder that shows a state plainly. |
+| `emulator/` | 1280x400 panel emulator (Playwright): `panel.js` (physical size), `mm.js`, `fixtures/` (one state per view state), `serve.js`, `tests/` (specs), `dev/` (developer page at physical size). |
+| `tests/unit/` | `node:test` unit tests; `tests/*.sh` are the gate's tests (`tests/unit.sh` runs `npm ci` + unit tests, `tests/emulator.sh` runs `npm ci` + the Playwright emulator tests). |
+| `out/` | Git-ignored output: `out/shots/` (screenshots), `out/test-results/` (Playwright). |
 | `fixtures/` | Recorded hook events (`sessions/*.jsonl`, real Claude Code 2.1.330 recordings) and their expected state sequences. |
 
 ## 2026-11-21: canonical view states
@@ -125,3 +126,33 @@ Not Claude hook events; the future hook-wiring and boot scripts send them on the
 
 `view` = `insert-key` if locked, else `offline` if offline, else the Claude-derived activity; the activity
 keeps updating underneath, so when the network returns the view shows the current activity again.
+
+## 2026-11-21: panel emulator
+
+- **Physical size in one place**: `emulator/panel.js`. Active area about 190 x 60 mm (DESIGN.md; not
+  measured on the real panel, bench item 13). 1280/190 = 6.737 and 400/60 = 6.667 px/mm differ by about 1%;
+  one uniform scale is used, **1280/190**, the larger, so px-to-mm never overstates a size (400 px = 59.4 mm).
+  Viewport 1280x400, device scale factor 1.
+- **Text height = cap height**: ink height of a capital H in the element's computed font, measured with
+  canvas `measureText('H').actualBoundingBoxAscent` (`emulator/mm.js`), tested against painted ink. Not the
+  CSS font-size (the em box, always larger). Measured with headless Chromium's fonts here, which are not the
+  Pi's (bench item 11). The placeholder view asserts a state word cap height of at least 10 mm; the real
+  design sets the real threshold.
+- **Fixtures**: `emulator/fixtures/<state>.json`, one per entry of `STATES`, each exactly the reducer's
+  state object. The list is `STATES` itself (`emulator/fixtures.js` `FIXTURE_IDS`), used by unit tests,
+  Playwright specs and the developer page. Fixtures are generated, not written: the reducer's output for the
+  events in `emulator/fixtures/recipes.js` (recorded sessions plus synthetic `RevviewContext`,
+  `RevviewStarting`, `RevviewNetwork`, `RevviewDataLock`); a unit test checks they still match and are
+  valid states. `offline` is the network overlay over a working turn, `insert-key` the lock overlay over
+  starting.
+- **Serving**: `emulator/serve.js`, a dependency-free `node:http` static server for the repository root
+  (`file://` blocks ES modules and `fetch`). Tests start one per Playwright worker on a free port (no fixed
+  port, so the gate and a developer run cannot clash); developers run `node emulator/serve.js` (port 8137).
+  The view takes `?fixture=<id>`, `?state=<JSON>` or `window.revviewRender(state)`.
+- **Screenshots**: `<state>.png`, exactly 1280x400 px (asserted from the PNG header), in `out/shots/`
+  (git-ignored) or `$REVVIEW_SHOTS_DIR` (meant for the future `tools/check` to point at `<outdir>/shots`;
+  `tools/check` is unchanged, so the gate's run currently writes them inside its checkout).
+- **Gate wiring**: `tests/emulator.sh` (`npm ci`, then `playwright test -c emulator/playwright.config.js`
+  with `PLAYWRIGHT_BROWSERS_PATH` defaulting to `/opt/ms-playwright`).
+- **Developer page** `emulator/dev/`: the view in a 1280x400 iframe scaled to the panel's mm, calibrated by
+  monitor diagonal or credit card (stored in localStorage), state picker over `STATES`.
