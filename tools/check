@@ -2,25 +2,214 @@
 # tools/check <outdir>: this project's checks. The gate runs exactly this script
 # on every submitted branch (see /opt/agent-kit/GATE-CONTRACT.md).
 #
-# A starting point only: it runs every tests/*.sh and counts those that pass.
-# Replace it with the project's real checks once its stack is chosen. A change
-# to this file waits for the owner's approval (explain it with `owner-gate
-# explain <topic>`).
+# Prints one line per step, "STEP <name> ok <secs>s" or "STEP <name> FAIL <secs>s",
+# then "TESTS_PASSED=<n>", and exits non-zero if any step failed. Each step's
+# full output goes to <outdir>/<step>.log (the tail is echoed when a step fails).
+#
+# Steps: setup (npm ci), lint (eslint, plus shellcheck on tracked shell scripts
+# when installed), seed (tests/seed.sh), unit (node --test), emulator
+# (Playwright), shots (every fixture state has a non-empty screenshot).
+# If setup fails, lint/unit/emulator/shots FAIL with 0s; seed still runs.
+#
+# Counting rules for TESTS_PASSED (sum over seed, unit, emulator):
+#   - seed counts 1 when it exits 0.
+#   - unit and emulator count leaf tests only (a describe/suite is not a test).
+#     Skipped and todo tests are NOT counted. Failed tests are not counted.
+#     A Playwright test that failed and then passed on retry (flaky) IS counted
+#     as passed (the config has retries: 0, so this normally cannot happen).
+#   - a step whose result file is missing or unreadable contributes 0 and FAILs.
+#
+# Browsers come from PLAYWRIGHT_BROWSERS_PATH (preinstalled). This script never
+# runs `playwright install`.
+# The step functions below are called indirectly by "step".
+# shellcheck disable=SC2317
 set -uo pipefail
+
 out=${1:-/tmp/check-out}
-mkdir -p "$out"
-cd "$(dirname "$0")/.." || exit 2
-passed=0 failed=0 t0=$SECONDS
-for t in tests/*.sh; do
-  [ -f "$t" ] || continue
-  log="$out/$(basename "$t").log"
-  if bash "$t" > "$log" 2>&1; then
-    passed=$((passed + 1))
+mkdir -p "$out" || exit 2
+out=$(cd "$out" && pwd) || exit 2
+root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd) || exit 2
+cd "$root" || exit 2
+
+export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-/opt/ms-playwright}"
+
+failed=0
+STEP_RC=0
+total=0
+setup_ok=0
+
+# step <name> <function>: run the function, log to $out/<name>.log, print one STEP line.
+step() {
+  local name=$1 fn=$2 start=$SECONDS rc status
+  "$fn" > "$out/$name.log" 2>&1
+  rc=$?
+  STEP_RC=$rc
+  if [ "$rc" -eq 0 ]; then status=ok; else status=FAIL; failed=1; fi
+  echo "STEP $name $status $((SECONDS - start))s"
+  if [ "$rc" -ne 0 ]; then tail -n 30 "$out/$name.log"; fi
+}
+
+# A step that cannot run because setup failed: FAIL with 0s.
+skipped_step() {
+  local name=$1
+  echo "skipped: setup failed"> "$out/$name.log"
+  failed=1
+  echo "STEP $name FAIL 0s"
+}
+
+do_setup() {
+  npm ci --no-audit --no-fund --loglevel=error
+}
+
+shell_files() {
+  local f
+  if git ls-files > /dev/null 2>&1; then
+    git ls-files
   else
-    failed=$((failed + 1))
-    echo "failed: $t"; tail -20 "$log"
+    find . -type f -not -path './node_modules/*' -not -path './.git/*' -not -path './out/*' | sed 's|^\./||'
+  fi | while IFS= read -r f; do
+    [ -f "$f" ] || continue
+    case "$f" in
+      *.sh) printf '%s\n' "$f" ;;
+      *) if head -n 1 "$f" 2> /dev/null | grep -aqE '^#![[:space:]]*(/usr/bin/env[[:space:]]+)?(/[A-Za-z0-9_./-]*/)?(ba)?sh([[:space:]]|$)'; then printf '%s\n' "$f"; fi ;;
+    esac
+  done
+}
+
+do_lint() {
+  local files=() f rc=0
+  # Run both linters even when the first fails, so every problem is reported at once.
+  ./node_modules/.bin/eslint . || rc=1
+  if command -v shellcheck > /dev/null 2>&1; then
+    while IFS= read -r f; do files+=("$f"); done < <(shell_files)
+    if [ "${#files[@]}" -gt 0 ]; then
+      echo "shellcheck: ${files[*]}"
+      shellcheck "${files[@]}" || rc=1
+    fi
+  else
+    lint_note="shellcheck not installed: shell lint skipped"
+    echo "$lint_note"
   fi
-done
-if [ "$failed" -eq 0 ]; then echo "STEP tests ok $((SECONDS - t0))s"; else echo "STEP tests FAIL $((SECONDS - t0))s"; fi
-echo "TESTS_PASSED=$passed"
-[ "$failed" -eq 0 ]
+  return "$rc"
+}
+
+do_seed() {
+  bash tests/seed.sh
+}
+
+# Count passed leaf testcases in a node junit file: no <failure>, no <skipped> child.
+count_junit() {
+  node -e '
+const fs = require("node:fs");
+let xml;
+try { xml = fs.readFileSync(process.argv[1], "utf8"); } catch (e) { console.error("junit file unreadable: " + e.message); process.exit(1); }
+const re = /<testcase\b(?:"[^"]*"|[^>"])*?(?:\/>|>([\s\S]*?)<\/testcase>)/g;
+let total = 0, passed = 0, m;
+while ((m = re.exec(xml))) {
+  total++;
+  const body = m[1] || "";
+  if (!/<(failure|skipped|error)\b/.test(body)) passed++;
+}
+if (total === 0) { console.error("junit file contains zero testcases"); process.exit(1); }
+console.log(passed);
+' "$1"
+}
+
+do_unit() {
+  local rc n
+  rm -f "$out/unit-junit.xml"
+  node --test --test-reporter=spec --test-reporter-destination=stdout \
+    --test-reporter=junit --test-reporter-destination="$out/unit-junit.xml" \
+    "tests/unit/**/*.test.js"
+  rc=$?
+  if n=$(count_junit "$out/unit-junit.xml"); then
+    echo "unit tests passed: $n"
+    unit_n=$n
+  else
+    echo "could not count unit tests"
+    rc=1
+  fi
+  return "$rc"
+}
+
+count_playwright() {
+  node -e '
+const fs = require("node:fs");
+let j;
+try { j = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); } catch (e) { console.error("playwright json unreadable: " + e.message); process.exit(1); }
+const s = j && j.stats;
+if (!s || typeof s.expected !== "number" || typeof s.flaky !== "number") { console.error("playwright json has no numeric stats.expected/flaky"); process.exit(1); }
+console.log(s.expected + s.flaky);
+' "$1"
+}
+
+do_emulator() {
+  local rc n
+  rm -rf "$out/shots"
+  rm -f "$out/emulator.json"
+  REVVIEW_SHOTS_DIR="$out/shots" PLAYWRIGHT_JSON_OUTPUT_NAME="$out/emulator.json" \
+    ./node_modules/.bin/playwright test -c emulator/playwright.config.js --reporter=list,json
+  rc=$?
+  if n=$(count_playwright "$out/emulator.json"); then
+    echo "emulator tests passed: $n"
+    emu_n=$n
+  else
+    echo "could not count emulator tests"
+    rc=1
+  fi
+  return "$rc"
+}
+
+do_shots() {
+  local states s missing=0 f
+  states=$(
+    {
+      node --input-type=module -e '
+import { pathToFileURL } from "node:url";
+const m = await import(pathToFileURL(process.argv[1] + "/emulator/fixtures.js").href);
+for (const id of m.FIXTURE_IDS) console.log(id);
+' "$root" || exit 1
+      for f in emulator/fixtures/*.json; do
+        [ -f "$f" ] && basename "$f" .json
+      done
+    } | sort -u
+  ) || { echo "cannot compute the state list"; return 1; }
+  if [ -z "$states" ]; then echo "state list is empty"; return 1; fi
+  while IFS= read -r s; do
+    if [ -s "$out/shots/$s.png" ]; then
+      echo "ok: $s"
+    else
+      echo "missing or empty screenshot: $out/shots/$s.png"
+      missing=1
+    fi
+  done <<< "$states"
+  return "$missing"
+}
+
+unit_n=0
+emu_n=0
+lint_note=""
+
+step setup do_setup
+if [ "$STEP_RC" -eq 0 ]; then setup_ok=1; fi
+
+run_after_setup() {
+  if [ "$setup_ok" -eq 1 ]; then step "$1" "$2"; else skipped_step "$1"; fi
+}
+
+run_after_setup lint do_lint
+[ -n "$lint_note" ] && echo "$lint_note"
+
+step seed do_seed
+if [ "$STEP_RC" -eq 0 ]; then total=$((total + 1)); fi
+
+run_after_setup unit do_unit
+total=$((total + unit_n))
+
+run_after_setup emulator do_emulator
+total=$((total + emu_n))
+
+run_after_setup shots do_shots
+
+echo "TESTS_PASSED=$total"
+exit "$failed"
