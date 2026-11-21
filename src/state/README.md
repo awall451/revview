@@ -19,7 +19,7 @@ Pure logic that turns Claude Code hook events into the view state (no DOM, no I/
 | `view` | what the screen shows: `locked ? 'insert-key' : offline ? 'offline' : activity` |
 | `activity` | `starting`, `working`, `waiting`, `permission` or `done` (derived from Claude events) |
 | `offline`, `locked` | overlays from the synthetic events below |
-| `repo` | last path segment of the event `cwd` |
+| `repo` | last path segment of `cwd`; set by `SessionStart` and `RevviewContext`, otherwise only filled from a Claude event's `cwd` while still null |
 | `branch` | only from `RevviewContext` |
 | `tool`, `file` | current tool name and its target file (relative to cwd, shortened) |
 | `diff` | `{added, removed}` running total for the current turn |
@@ -45,7 +45,10 @@ Pure logic that turns Claude Code hook events into the view state (no DOM, no I/
 | `RevviewNetwork` `{online: boolean}` (synthetic) | `offline = !online` |
 | `RevviewDataLock` `{locked: boolean}` (synthetic) | `locked` |
 
-Every accepted Claude event with a string `cwd` also sets `repo`. Activity keeps updating under the
+`repo` is never renamed by other events, so a hook fired from a subdirectory keeps the repo name. On `Stop`
+(and `StopFailure`/idle) tool, file, command and output are kept on purpose: at `done` the driver can still
+see the last command and its result (e.g. "2 passed"). Fields persist through `done`/`waiting` until the next
+`UserPromptSubmit` resets them; the renderer decides what to show per state. Activity keeps updating under the
 offline/locked overlays and shows again when they clear.
 
 ## Diff counting

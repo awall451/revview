@@ -95,3 +95,30 @@ test('shortenPath with a file name that is too long keeps its tail', () => {
 test('shortenPath returns null for empty or non-string', () => {
   for (const v of ['', null, undefined, 1, {}]) assert.equal(shortenPath(v), null);
 });
+
+test('lastOutputLine handles CRLF output', () => {
+  assert.equal(lastOutputLine('a\r\nb\r\n'), 'b');
+  assert.equal(lastOutputLine({ stdout: '', stderr: 'err\r\n' }), 'err');
+  assert.equal(lastOutputLine('a\r\n\r\n'), 'a');
+  assert.equal(lastOutputLine('10%\r50%\r100%\r\n'), '100%');
+});
+
+test('stripAnsi handles 8-bit C1 controls', () => {
+  assert.equal(stripAnsi('x\u009b31my'), 'xy');
+  assert.equal(stripAnsi('a\u0080b\u0090c\u009fd'), 'abcd');
+});
+
+test('truncation never splits a surrogate pair', () => {
+  const lone = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
+  const name = '😀'.repeat(30) + '.txt';
+  for (let max = 2; max < 30; max++) {
+    const out = shortenPath('/a/b/' + name, max);
+    assert.ok(!lone.test(out), `max ${max}`);
+    assert.ok(Array.from(out).length <= max);
+  }
+  for (let max = 2; max < 20; max++) {
+    const cmd = shortenCommand('echo ' + '😀'.repeat(50), max);
+    assert.ok(!lone.test(cmd), `cmd max ${max}`);
+  }
+  assert.ok(!lone.test(lastOutputLine('😀'.repeat(100), 11)));
+});

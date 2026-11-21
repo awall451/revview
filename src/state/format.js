@@ -1,5 +1,5 @@
 // Pure string helpers for display. Every shortener returns a string no longer than `max`
-// (UTF-16 code units), or null for non-string / empty input.
+// (Unicode code points), or null for non-string / empty input.
 export const LIMITS = Object.freeze({ path: 40, command: 60, output: 80 });
 
 const ELLIPSIS = '…';
@@ -7,11 +7,14 @@ const ESC = '\u001b';
 const OSC_RE = new RegExp(`${ESC}\\][^\\u0007${ESC}]*(?:\\u0007|${ESC}\\\\)?`, 'g');
 const CSI_RE = new RegExp(`${ESC}\\[[0-?]*[ -/]*[@-~]`, 'g');
 const ESC_PAIR_RE = new RegExp(`${ESC}[\\s\\S]?`, 'g');
-const CONTROL_RE = /[\u0000-\u0008\u000b-\u001f\u007f]/g;
+const C1_CSI_RE = /\u009b[0-?]*[ -/]*[@-~]/g;
+const CONTROL_RE = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g;
+const len = (s) => Array.from(s).length;
 
 function truncate(s, max) {
   if (!Number.isInteger(max) || max < 1) return null;
-  return s.length <= max ? s : s.slice(0, max - 1) + ELLIPSIS;
+  const cps = Array.from(s);
+  return cps.length <= max ? s : cps.slice(0, max - 1).join('') + ELLIPSIS;
 }
 
 export function stripAnsi(s) {
@@ -19,6 +22,7 @@ export function stripAnsi(s) {
   return s
     .replace(OSC_RE, '')
     .replace(CSI_RE, '')
+    .replace(C1_CSI_RE, '')
     .replace(ESC_PAIR_RE, '')
     .replace(/\t/g, ' ')
     .replace(CONTROL_RE, '');
@@ -27,7 +31,8 @@ export function stripAnsi(s) {
 function lastLine(text) {
   const lines = text.split('\n');
   for (let i = lines.length - 1; i >= 0; i--) {
-    const part = lines[i].slice(lines[i].lastIndexOf('\r') + 1);
+    const raw = lines[i].replace(/\r+$/, '');
+    const part = raw.slice(raw.lastIndexOf('\r') + 1);
     const line = stripAnsi(part).trim();
     if (line !== '') return line;
   }
@@ -54,19 +59,19 @@ export function shortenCommand(cmd, max = LIMITS.command) {
 
 export function shortenPath(path, max = LIMITS.path) {
   if (typeof path !== 'string' || path === '') return null;
-  if (path.length <= max) return path;
+  if (len(path) <= max) return path;
   const segs = path.split('/').filter((x) => x !== '');
   const name = segs[segs.length - 1] ?? '';
   if (name === '') return truncate(path, max);
   let best = null;
   for (let i = segs.length - 1; i >= 0; i--) {
     const cand = ELLIPSIS + '/' + segs.slice(i).join('/');
-    if (cand.length > max) break;
+    if (len(cand) > max) break;
     best = cand;
   }
   if (best !== null) return best;
   if (!Number.isInteger(max) || max < 1) return null;
-  return ELLIPSIS + name.slice(name.length - (max - 1));
+  return ELLIPSIS + Array.from(name).slice(-(max - 1)).join('');
 }
 
 // Strip a leading `cwd + '/'`; otherwise return the path unchanged.

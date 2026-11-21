@@ -107,7 +107,7 @@ Fields the state core relies on: `hook_event_name`, `cwd`, `tool_name`, `tool_in
   cut with `…`. Paths are made relative to `cwd`, then keep the file name and as many trailing directories as
   fit after `…/`. Commands collapse whitespace to one line. Output is the last non-empty line (stdout, else
   stderr), ANSI/escape codes removed, only the text after the last `\r`.
-- **Repo** = last segment of the event's `cwd`. **Branch** only arrives through a synthetic event.
+- **Repo** = last segment of `cwd`, set by `SessionStart` and `RevviewContext`; any other Claude event sets it only while it is still null (so a hook from a subdirectory never renames it). **Branch** only arrives through a synthetic event.
 - Unknown tool names (Glob, Grep, MCP tools, ...) still mean "working" and show the tool name; they never
   count diff. Malformed input never throws and leaves the state unchanged (same reference).
 

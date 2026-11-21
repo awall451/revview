@@ -328,3 +328,16 @@ test('replay folds and returns the state after each event', () => {
   const start = reduce(null, e('SessionStart'));
   assert.equal(replay([e('Stop')], start)[0].repo, 'repo');
 });
+
+test('repo: SessionStart and RevviewContext set it; other events only fill a null repo', () => {
+  let s = run([e('SessionStart')]);
+  assert.equal(s.repo, 'repo');
+  s = reduce(s, { hook_event_name: 'UserPromptSubmit', cwd: `${CWD}/sub/dir` });
+  assert.equal(s.repo, 'repo');
+  s = reduce(s, { hook_event_name: 'RevviewContext', cwd: '/tmp/other' });
+  assert.equal(s.repo, 'other');
+  s = reduce(s, { hook_event_name: 'SessionStart', cwd: '/tmp/third' });
+  assert.equal(s.repo, 'third');
+  const mid = reduce(initialState(), { hook_event_name: 'UserPromptSubmit', cwd: CWD });
+  assert.equal(mid.repo, 'repo');
+});

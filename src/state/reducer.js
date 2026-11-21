@@ -129,8 +129,9 @@ export function reduce(state, event) {
   if (patch === null) {
     patch = patchFor(event);
     if (patch === null) return base;
+    // Only SessionStart sets repo; other events fill it in when still unknown.
     const repo = repoFromCwd(event.cwd);
-    if (repo !== null) patch.repo = repo;
+    if (repo !== null && (event.hook_event_name === 'SessionStart' || base.repo === null)) patch.repo = repo;
   }
 
   const { addDiff, ...fields } = patch;
