@@ -1,0 +1,16 @@
+{
+  "view": "starting",
+  "activity": "starting",
+  "offline": false,
+  "locked": false,
+  "repo": "revview",
+  "branch": "main",
+  "tool": null,
+  "file": null,
+  "diff": {
+    "added": 0,
+    "removed": 0
+  },
+  "command": null,
+  "output": null
+}

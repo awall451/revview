@@ -1,0 +1,16 @@
+{
+  "view": "waiting",
+  "activity": "waiting",
+  "offline": false,
+  "locked": false,
+  "repo": "revview",
+  "branch": "main",
+  "tool": "Bash",
+  "file": null,
+  "diff": {
+    "added": 0,
+    "removed": 0
+  },
+  "command": "rm -f /tmp/revrec/repo/old.log && echo removed",
+  "output": "removed"
+}

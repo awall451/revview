@@ -1,0 +1,16 @@
+{
+  "view": "insert-key",
+  "activity": "starting",
+  "offline": false,
+  "locked": true,
+  "repo": null,
+  "branch": null,
+  "tool": null,
+  "file": null,
+  "diff": {
+    "added": 0,
+    "removed": 0
+  },
+  "command": null,
+  "output": null
+}

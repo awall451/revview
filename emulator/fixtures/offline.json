@@ -1,0 +1,16 @@
+{
+  "view": "offline",
+  "activity": "working",
+  "offline": true,
+  "locked": false,
+  "repo": "revview",
+  "branch": "main",
+  "tool": "Bash",
+  "file": null,
+  "diff": {
+    "added": 4,
+    "removed": 1
+  },
+  "command": "git -c color.ui=always diff --stat && printf '\\033[32m2 pas…",
+  "output": "2 passed in 0.01s"
+}
