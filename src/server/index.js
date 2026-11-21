@@ -1,0 +1,200 @@
+// Live server: hook scripts POST raw Claude Code hook JSON to /event, the state core
+// (src/state) reduces it, and the new state is pushed to the page over Server-Sent Events.
+// It also serves the view. Binds to 127.0.0.1 only; see src/server/README.md.
+//   node src/server/index.js [port]      (default 8138, or REVVIEW_PORT)
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { initialState, reduce } from '../state/index.js';
+
+export const DEFAULT_PORT = 8138;
+export const DEFAULT_HOST = '127.0.0.1';
+export const MAX_BODY_BYTES = 1024 * 1024;
+const PING_MS = 15000;
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const DEFAULT_VIEW_DIR = path.resolve(HERE, '..', 'view');
+
+const TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+};
+
+const text = (res, status, msg, extra = {}) =>
+  res.writeHead(status, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store', ...extra }).end(msg + '\n');
+
+function serveStatic(req, res, root) {
+  let rel;
+  try {
+    rel = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+  } catch {
+    return text(res, 400, 'bad path');
+  }
+  if (rel.includes('\0')) return text(res, 400, 'bad path');
+  const file = path.resolve(root, '.' + rel);
+  if (file !== root && !file.startsWith(root + path.sep)) return text(res, 403, 'forbidden');
+  fs.stat(file, (err, st) => {
+    const target = !err && st.isDirectory() ? path.join(file, 'index.html') : file;
+    fs.readFile(target, (err2, body) => {
+      if (err2) return text(res, 404, 'not found');
+      res.writeHead(200, {
+        'content-type': TYPES[path.extname(target)] || 'application/octet-stream',
+        'cache-control': 'no-store',
+      });
+      res.end(req.method === 'HEAD' ? undefined : body);
+    });
+  });
+}
+
+export async function startLiveServer({ port = 0, host = DEFAULT_HOST, viewDir = DEFAULT_VIEW_DIR } = {}) {
+  const root = path.resolve(viewDir);
+  let state = initialState();
+  let seq = 0;
+  const clients = new Set();
+  let ownPort = 0;
+
+  const message = () => `data: ${JSON.stringify({ seq, state })}\n\n`;
+  const broadcast = () => {
+    const m = message();
+    for (const c of clients) c.write(m);
+  };
+
+  function readBody(req, res, done) {
+    const declared = Number(req.headers['content-length']);
+    let size = 0;
+    const chunks = [];
+    let finished = false;
+    const tooBig = () => {
+      if (finished) return;
+      finished = true;
+      chunks.length = 0;
+      req.removeAllListeners('data');
+      res.on('finish', () => req.socket.destroy());
+      text(res, 413, 'body too large (max 1 MiB)', { connection: 'close' });
+    };
+    if (declared > MAX_BODY_BYTES) return tooBig();
+    req.on('data', (c) => {
+      if (finished) return;
+      size += c.length;
+      if (size > MAX_BODY_BYTES) return tooBig();
+      chunks.push(c);
+    });
+    req.on('end', () => {
+      if (finished) return;
+      finished = true;
+      done(Buffer.concat(chunks).toString('utf8'));
+    });
+  }
+
+  function postEvent(req, res) {
+    readBody(req, res, (body) => {
+      let event;
+      try {
+        event = JSON.parse(body);
+      } catch {
+        return text(res, 400, body.trim() === '' ? 'empty body' : 'malformed JSON');
+      }
+      if (event === null || typeof event !== 'object' || Array.isArray(event)) {
+        return text(res, 400, 'body must be a JSON object');
+      }
+      let next = state;
+      try {
+        next = reduce(state, event);
+      } catch (e) {
+        console.error('reduce failed:', e);
+      }
+      seq += 1;
+      state = next;
+      broadcast();
+      res.writeHead(204).end();
+    });
+  }
+
+  function events(req, res) {
+    res.writeHead(200, {
+      'content-type': 'text/event-stream',
+      'cache-control': 'no-store',
+      connection: 'keep-alive',
+    });
+    res.write('retry: 1000\n\n');
+    res.write(message());
+    clients.add(res);
+    const drop = () => clients.delete(res);
+    res.on('close', drop);
+    res.on('error', drop);
+  }
+
+  function originOk(req) {
+    const allowed = [`127.0.0.1:${ownPort}`, `localhost:${ownPort}`];
+    if (!allowed.includes(req.headers.host)) return false;
+    const origin = req.headers.origin;
+    return origin === undefined || allowed.some((a) => origin === `http://${a}`);
+  }
+
+  const ROUTES = {
+    '/event': { POST: postEvent },
+    '/events': { GET: events },
+    '/state': { GET: (req, res) => res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify({ seq, state })) },
+  };
+
+  const server = http.createServer((req, res) => {
+    req.on('error', () => {});
+    res.on('error', () => {});
+    if (!originOk(req)) return text(res, 403, 'forbidden origin or host');
+    let pathname;
+    try {
+      pathname = new URL(req.url, 'http://x').pathname;
+    } catch {
+      return text(res, 400, 'bad url');
+    }
+    const route = Object.hasOwn(ROUTES, pathname) ? ROUTES[pathname] : null;
+    if (route) {
+      const h = route[req.method];
+      if (!h) return text(res, 405, 'method not allowed', { allow: Object.keys(route).join(', ') });
+      return h(req, res);
+    }
+    if (req.method !== 'GET' && req.method !== 'HEAD') return text(res, 405, 'method not allowed', { allow: 'GET, HEAD' });
+    serveStatic(req, res, root);
+  });
+  server.on('clientError', (err, socket) => {
+    if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\nconnection: close\r\n\r\n');
+    else socket.destroy();
+  });
+
+  const timer = setInterval(() => {
+    for (const c of clients) c.write(': ping\n\n');
+  }, PING_MS);
+  timer.unref();
+
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, host, resolve);
+  });
+  ownPort = server.address().port;
+
+  return {
+    url: `http://${host}:${ownPort}`,
+    port: ownPort,
+    state: () => state,
+    close: () =>
+      new Promise((resolve) => {
+        clearInterval(timer);
+        server.close(() => resolve());
+        for (const c of clients) c.end();
+        clients.clear();
+        server.closeAllConnections();
+      }),
+  };
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const port = Number(process.argv[2] || process.env.REVVIEW_PORT || DEFAULT_PORT);
+  const { url } = await startLiveServer({ port });
+  console.log(`revview live server (127.0.0.1 only)`);
+  console.log(`view:  ${url}/`);
+  console.log(`post:  curl -s -X POST --data-binary @- ${url}/event < <(head -1 fixtures/sessions/working-turn.jsonl)`);
+}

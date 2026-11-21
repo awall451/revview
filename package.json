@@ -8,6 +8,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "start": "node src/server/index.js",
     "test:unit": "node --test \"tests/unit/**/*.test.js\"",
     "test:emulator": "playwright test -c emulator/playwright.config.js",
     "lint": "eslint ."

@@ -2,6 +2,7 @@
 const nodeGlobals = {
   console: 'readonly', process: 'readonly', URL: 'readonly', setTimeout: 'readonly',
   clearTimeout: 'readonly', setInterval: 'readonly', clearInterval: 'readonly',
+  Buffer: 'readonly', fetch: 'readonly',
 };
 const browserGlobals = {
   window: 'readonly', document: 'readonly', console: 'readonly', setTimeout: 'readonly',
