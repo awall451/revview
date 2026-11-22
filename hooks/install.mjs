@@ -103,7 +103,8 @@ if (existing !== null && JSON.stringify(settings) === before) {
 }
 const dir = path.dirname(real);
 if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-if (text !== null && !fs.existsSync(`${real}.revview-backup`)) fs.copyFileSync(real, `${real}.revview-backup`);
+// --remove never starts a backup: without one there was no original (install.mjs created the file), and a copy now would hold revview's own hooks
+if (text !== null && !remove && !fs.existsSync(`${real}.revview-backup`)) fs.copyFileSync(real, `${real}.revview-backup`);
 const tmpFile = path.join(dir, `.${path.basename(real)}.revview-${process.pid}.tmp`);
 const fd = fs.openSync(tmpFile, 'w', mode);
 try {

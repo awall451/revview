@@ -451,9 +451,9 @@ test('placeholders: same board when nothing changes; come back after RevviewStar
 });
 
 test('placeholders: removed when no longer owned; a real session whose window is gone ends too (QA r5-03)', () => {
-  const b = run([owned([U1, U2]), start(U2), owned([])]);
+  const b = run([owned([U1, U2]), start(U2), owned([]), owned([])]);
   assert.deepEqual(sessionOrder(b), []);
-  assert.equal(b.ended.includes(U2), true);
+  assert.equal(b.ended.includes(U2), false, 'a gone window is not remembered as ended (QA r5b)');
 });
 
 test('placeholders: the first hook event replaces it: normal session, same born, no quiet', () => {

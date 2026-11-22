@@ -93,7 +93,7 @@ export function relativeTo(path, cwd) {
 }
 
 const cleanText = (s, max = LIMITS.path) => {
-  const t = s.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim();
+  const t = s.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, '').trim();
   return t === '' ? null : truncate(t, max);
 };
 
@@ -113,5 +113,5 @@ export const shortenQuery = (q) => (typeof q === 'string' ? cleanText(q) : null)
 // `mcp__<server>__<tool>` reads "<server>: <tool>"; any other name is unchanged.
 export function displayTool(name) {
   const m = typeof name === 'string' ? /^mcp__(.+?)__(.+)$/.exec(name) : null;
-  return m === null ? name : `${m[1]}: ${m[2]}`;
+  return m === null ? name : cleanText(`${m[1]}: ${m[2]}`, 64) ?? name;
 }

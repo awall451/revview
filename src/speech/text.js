@@ -37,6 +37,14 @@ export function permissionText(prompt) {
     const command = flat(scrub(p.command.replace(CONTROL, (c) => (/\s/.test(c) ? ' ' : ''))));
     if (command !== '') return `Permission: ${tool} ${cutWords(command, SPEECH_LIMITS.maxCommandChars)}`;
   }
+  if (p.tool === 'WebFetch' && isStr(p.file)) {
+    const host = flat(scrub(p.file.split('/')[0]));
+    if (host !== '') return `Permission: ${tool} ${host}`;
+  }
+  if (p.tool === 'WebSearch' && isStr(p.file)) {
+    const q = flat(scrub(p.file.replace(CONTROL, ' ')));
+    if (q !== '') return `Permission: ${tool} ${cutWords(q, SPEECH_LIMITS.maxCommandChars)}`;
+  }
   if (isStr(p.file)) {
     const base = flat(scrub(p.file).split('/').filter((x) => x !== '').pop() ?? '');
     if (base !== '') return `Permission: ${tool} ${base}`;

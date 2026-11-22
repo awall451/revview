@@ -286,3 +286,11 @@ for (const withSpace of [false, true]) {
     assert.equal(r.stdout, '');
   });
 }
+
+test('--remove on a file install.mjs created itself writes no backup (QA r5b-03)', () => {
+  const { home, file } = setup();
+  assert.equal(run([], { home }).code, 0);
+  assert.equal(fs.existsSync(`${file}.revview-backup`), false);
+  assert.equal(run(['--remove'], { home }).code, 0);
+  assert.equal(fs.existsSync(`${file}.revview-backup`), false);
+});

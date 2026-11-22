@@ -72,7 +72,9 @@ Built in WB5, off by default. With the wiring installed, set `"speakOnStop": tru
 
 ## A Claude that dies without SessionEnd
 
-It stays on the bar with its last state (the state core has no clock; DECISIONS "stage 2 hook wiring").
+A session revview started itself (a window of the `--sessions` runner) leaves the bar once its tmux window is missing from two
+consecutive polls (about 10 s; DECISIONS "owned window gone"). A Claude that was not started by revview and dies without
+`SessionEnd` still stays on the bar with its last state (the state core has no clock).
 
 ## permission-request.mjs: no decision means the terminal prompt stays
 

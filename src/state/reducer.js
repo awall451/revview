@@ -1,6 +1,6 @@
 // Pure reducer: (state, hook event) -> state. No clock, I/O, randomness or timers.
 import { countDiff } from './diff.js';
-import { lastOutputLines, displayTool, relativeTo, shortenCommand, shortenPath, shortenQuery, shortenUrl } from './format.js';
+import { stripAnsi, lastOutputLines, displayTool, relativeTo, shortenCommand, shortenPath, shortenQuery, shortenUrl } from './format.js';
 
 const isObj = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
 const isStr = (x) => typeof x === 'string' && x !== '';
@@ -87,7 +87,7 @@ const ERROR_WORD = /^[a-z_]{1,40}$/;
 function failedOf(event) {
   const error = typeof event.error === 'string' && ERROR_WORD.test(event.error) ? event.error : 'unknown';
   const text = typeof event.last_assistant_message === 'string'
-    ? event.last_assistant_message.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim().slice(0, 200).trim() : '';
+    ? Array.from(stripAnsi(event.last_assistant_message).replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim()).slice(0, 200).join('').trim() : '';
   return { error, message: text === '' ? null : text };
 }
 

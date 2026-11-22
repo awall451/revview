@@ -51,3 +51,11 @@ test('board: pending prompt carries the readable tool; matching still uses the r
   assert.equal(v.tool, 'WebFetch');
   assert.equal(v.file, 'example.com/a');
 });
+
+test('cleanText strips bidi and zero-width characters; displayTool is cleaned and capped at 64 code points', () => {
+  assert.equal(shortenQuery('a\u202Eb\u200Bc\u2066d\u200Fe'), 'abcde');
+  assert.equal(displayTool('mcp__evil__a\u202Eb'), 'evil: ab');
+  const d = displayTool(`mcp__srv__${'x'.repeat(100)}`);
+  assert.equal(Array.from(d).length, 64);
+  assert.equal(displayTool('Edit'), 'Edit');
+});

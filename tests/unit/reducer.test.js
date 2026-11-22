@@ -440,7 +440,7 @@ test('StopFailure sets failed {error, message}; the turn fields stay', () => {
     e('StopFailure', { error: 'rate_limit', last_assistant_message: '  API Error: slow down\n\u001b[31mnow  ' })]);
   assert.equal(s.activity, 'waiting');
   assert.equal(s.view, 'waiting');
-  assert.deepEqual(s.failed, { error: 'rate_limit', message: 'API Error: slow down[31mnow' });
+  assert.deepEqual(s.failed, { error: 'rate_limit', message: 'API Error: slow downnow' });
   assert.equal(s.tool, 'Bash');
   assert.equal(s.command, 'ls');
   assert.equal(initialState().failed, null);
@@ -477,4 +477,11 @@ test('every other event that changes the turn clears failed', () => {
 test('a command up to 300 code points is kept', () => {
   const cmd = 'echo ' + 'a'.repeat(295);
   assert.equal(reduce(initialState(), e('PreToolUse', { tool_name: 'Bash', tool_input: { command: cmd } })).command, cmd);
+});
+
+test('StopFailure message: ANSI stripped, cut by code points (no split surrogate)', () => {
+  const s = run([e('StopFailure', { error: 'x', last_assistant_message: '\u001b[31m' + '\u{1F600}'.repeat(250) })]);
+  assert.equal(Array.from(s.failed.message).length, 200);
+  assert.equal(s.failed.message.includes('['), false);
+  assert.equal(s.failed.message.includes('\uFFFD'), false);
 });

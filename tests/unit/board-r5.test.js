@@ -70,10 +70,10 @@ test('an allowed Bash after an earlier different Bash shows its own output after
   assert.deepEqual(v.outputLines, ['all good']);
 });
 
-test('the answer record carries the answered request identity', () => {
+test('the answer record carries the answered call (tool, file, command, decision)', () => {
   const b = asked(CALLS[0][1]);
   const a = reduceBoard(b, ANS(pendingPrompts(b)[0], 'deny'));
-  assert.equal(a.sessions.A.answer.tuid, 'e1');
+  assert.equal(a.sessions.A.answer.decision, 'deny');
   assert.equal(a.sessions.A.answer.tool, 'Edit');
 });
 

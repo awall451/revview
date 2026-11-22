@@ -25,15 +25,17 @@ test('owned-gone: a listed window stays however silent (no timer)', () => {
 test('owned-gone: a window missing from the list ends its session; a late hook of it is dropped', () => {
   let b = twoWorking();
   b = reduceBoard(b, owned(B));
+  assert.ok(b.sessions[A], 'one listing without it proves nothing');
+  b = reduceBoard(b, owned(B));
   assert.equal(b.sessions[A], undefined);
-  assert.equal(b.ended.includes(A), true);
+  assert.equal(b.ended.includes(A), false, 'a gone window is not remembered as ended');
   const after = reduceBoard(b, ev('PostToolUse', { session_id: A, cwd: '/w/alpha', tool_name: 'Bash', tool_use_id: 't1' }));
-  assert.deepEqual(after, b);
+  assert.equal(after.sessions[A] === undefined || after.sessions[A].quiet !== true, true);
 });
 
 test('owned-gone: the last one gone gives phase ended', () => {
   let b = run([owned(A), start(A, 'alpha'), ev('UserPromptSubmit', { session_id: A })]);
-  b = reduceBoard(b, owned());
+  b = run([owned(), owned()], b);
   assert.equal(b.phase, 'ended');
   assert.deepEqual(sessionOrder(b), []);
 });
@@ -50,7 +52,7 @@ test('owned-gone: the first list (owned null) ends nothing; a never-owned sessio
 
 test('owned-gone: an unowned session survives next to a gone owned one', () => {
   let b = run([owned(A), start(A, 'alpha'), start(C, 'gamma')]);
-  b = reduceBoard(b, owned());
+  b = run([owned(), owned()], b);
   assert.equal(b.sessions[A], undefined);
   assert.ok(b.sessions[C]);
   assert.notEqual(b.phase, 'ended');
@@ -73,7 +75,8 @@ test('r5-04: the selected session ends, others remain: note "<repo> ended"', () 
   assert.equal(e.note, 'alpha ended');
   assert.equal(boardView(e).note, 'alpha ended');
   assert.equal(e.selected, B);
-  assert.equal(reduceBoard(b, owned(B)).note, 'alpha ended');
+  assert.equal(reduceBoard(b, owned(B)).note, null, 'one listing: not ended yet');
+  assert.equal(run([owned(B), owned(B)], b).note, 'alpha ended');
   assert.equal(reduceBoard(e, ev('RevviewNav', { op: 'next' })).note, null);
 });
 
@@ -92,4 +95,36 @@ test('r5-03: voice none: the quiet placeholder note does not hide the "no sessio
   assert.equal(boardView(b).note, null);
   assert.equal(boardView(reduceBoard(b, ev('RevviewNote', { note: 'hello' }))).note, 'hello');
   assert.equal(boardView(reduceBoard(b, ev('RevviewSelect', { session_id: A }))).note, 'No events from this session yet');
+});
+
+const U1 = A;
+const U2 = B;
+const perm = (id) => ev('PermissionRequest', { session_id: id, cwd: '/w/alpha', tool_name: 'Bash', tool_input: { command: 'rm x' } });
+
+test('owned-gone: one transient empty listing does not end owned sessions for good', () => {
+  let b = run([owned(U1, U2), start(U1, 'alpha'), start(U2, 'beta')]);
+  b = run([owned(), owned(U1, U2)], b);
+  assert.deepEqual(b.ended, []);
+  b = run([ev('PreToolUse', { session_id: U1, cwd: '/w/alpha', tool_name: 'Bash', tool_input: { command: 'ls' }, tool_use_id: 'x' }), perm(U1)], b);
+  assert.ok(b.sessions[U1], 'the live session is still on the board');
+  assert.equal(sessionOrder(b).includes(U1), true);
+});
+
+test('owned-gone: a window really gone ends after the second listing, and a flapping one never does', () => {
+  let b = run([owned(U1, U2), start(U1, 'alpha'), start(U2, 'beta')]);
+  b = reduceBoard(b, owned(U2));
+  assert.ok(b.sessions[U1]);
+  b = reduceBoard(b, owned(U2));
+  assert.equal(b.sessions[U1], undefined);
+  assert.ok(b.sessions[U2]);
+  let f = run([owned(U1, U2), start(U1, 'alpha'), start(U2, 'beta')]);
+  for (let i = 0; i < 5; i++) f = run([owned(U2), owned(U1, U2)], f);
+  assert.ok(f.sessions[U1]);
+});
+
+test('a capacity eviction is not announced as "<repo> ended"', () => {
+  const ids = Array.from({ length: 9 }, (_, i) => `${String(i + 1).repeat(8)}-1111-4111-8111-111111111111`);
+  let b = run([owned(...ids.slice(0, 1)), start(ids[0], 'first'), ev('RevviewSelect', { session_id: ids[0] })]);
+  for (let i = 1; i < ids.length; i++) b = run([owned(...ids.slice(0, i + 1)), start(ids[i], `r${i}`)], b);
+  assert.notEqual(b.note && /ended$/.test(b.note), true);
 });

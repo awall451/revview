@@ -330,8 +330,10 @@ inverted on purpose: a display fault must not look like any coloured Claude stat
 
 ### Not solved here (known limits)
 
-- A Claude that dies without SessionEnd (crash, power cut) stays on the bar with its last state until a new
-  session pushes it out or `RevviewStarting` clears the board: the state core has no clock by design.
+- A Claude that dies without SessionEnd (crash, power cut) and was NOT started by revview stays on the bar with its last
+  state until a new session pushes it out or `RevviewStarting` clears the board: the state core has no clock by design.
+  A session revview started (an owned tmux window) now ends when its window is gone from two listings (see
+  "owned window gone ... confirmation", 2026-11-22).
 - Ended sessions are remembered by id (last 256, `MAX_ENDED`) so that late hooks cannot resurrect them. A
   late event of a session that ended more than 256 SessionEnds ago re-creates it (and its repo name) on the
   bar until the next `SessionEnd`/`RevviewStarting`. Bounded memory without a clock cannot do better.
@@ -950,7 +952,7 @@ Code: `src/state/board.js`, `tests/unit/board-hardening.test.js`, `tests/unit/sp
   **PermissionDenied** (the auto-mode classifier allowed the command we tried; we did not try a really dangerous one),
   **worker_permission_prompt** (agent teams only). No duplicated PostToolUse (r3-07) and no late PostToolUse after
   Stop (r3-08) were seen.
-- **A Claude that dies without SessionEnd** (decided, not built here). Hooks cannot see a death, and the state core
+- **A Claude that dies without SessionEnd** (decided; built later for owned windows only, see 2026-11-22 "owned window gone"). Hooks cannot see a death, and the state core
   has no clock by design. On the car every driver session is a revview tmux window (`--sessions`), and the server
   already polls the owned windows every 5 s (`RevviewOwned`); today `board.js` drops an id that is no longer owned
   only while it is still a quiet placeholder. Proposal: treat a session that WAS owned and is no longer owned like a
@@ -1010,3 +1012,22 @@ QA r3-05: after an API error the bar showed a plain WAITING FOR ME, like a turn 
   wording is unchanged: BUTTONS.md does not say a press chooses a session, so "press to choose" would be false.
 - Changed assertion: `board-wb4.test.js` "placeholders: removed when no longer owned" expected a real session to stay when
   its window left the list; it now ends.
+
+## 2026-11-22: a window must be missing twice (QA r5b blocking)
+
+- **Rule.** One empty or short tmux listing proves nothing (the runner returns `[]` for any "no server" style error, which
+  includes "error connecting" and "No such file or directory", so a hiccup looks like "nothing is running"). A session
+  ends only when its id is missing from two consecutive successful `RevviewOwned` listings: the board keeps `missing`
+  (ids that were owned or missing and are absent from the last listing); an id in `missing` that is absent again ends, an id
+  that reappears is dropped from `missing`. A confirmation, not a timer.
+- **Not put in `ended`.** A gone window's id is NOT remembered in `ended` (this replaces the first QA r5-03 wording): a dead
+  Claude sends no hooks, a live one whose window was only misread comes back with its next poll (placeholder) or hook.
+  Cost: a late hook of a really dead Claude would show it again; none comes in practice.
+- **What clears the answered mark.** `answer` holds `{decision, tool, file, command}` only (the `tuid`/`agent` fields were
+  never read and are gone). The mark clears at the session's next call (PreToolUse), a new permission request, SessionStart
+  or a driver prompt, as before.
+- **Not done:** `list()` still treats "error connecting" as no server (it is how tmux says it when the socket is absent, which
+  is a real no-server); the two-listing rule is what protects the sessions. The server already skips the post on a thrown error.
+- **Small:** `cleanText` also strips bidi/zero-width characters; `displayTool` output is cleaned and cut to 64 code points;
+  the StopFailure message loses ANSI and is cut by code points; WebFetch prompts are spoken with the host, WebSearch with the
+  query cut by words; `--remove` writes no backup (QA r5b-03).

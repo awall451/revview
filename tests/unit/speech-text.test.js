@@ -143,3 +143,11 @@ test('speech text never carries [[ ]] or < >', () => {
   assert.equal(closingText('Say [[h@lou]] and <break time="1s"/> then a < b > c.'), 'Say h@lou and then a b c.');
   assert.equal(permissionText({ tool: 'Bash', file: null, command: 'if [[ -f x ]]; then <b>hi</b>' }), 'Permission: Bash if -f x ; then b hi /b');
 });
+
+test('permissionText: WebFetch speaks the host, WebSearch the query cut by words', () => {
+  assert.equal(permissionText({ tool: 'WebFetch', file: 'docs.example.com/a/b/page.html', command: null }), 'Permission: WebFetch docs.example.com');
+  assert.equal(permissionText({ tool: 'WebSearch', file: 'how to a/b test', command: null }), 'Permission: WebSearch how to a/b test');
+  const long = Array.from({ length: 80 }, () => 'word').join(' ');
+  const t = permissionText({ tool: 'WebSearch', file: long, command: null });
+  assert.ok(t.length <= 'Permission: WebSearch '.length + SPEECH_LIMITS.maxCommandChars + 5);
+});

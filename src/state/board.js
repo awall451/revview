@@ -345,7 +345,7 @@ function reduceInner(b, event) {
       const kept = live.pending.filter((p) => !(p.since === event.since && p.agent === event.agent));
       if (kept.length === live.pending.length) return b;
       const gone = live.pending.find((p) => p.since === event.since && p.agent === event.agent);
-      const answer = { decision: event.decision, tool: gone.tool, file: gone.file, command: gone.command, tuid: gone.tuid, agent: gone.agent };
+      const answer = { decision: event.decision, tool: gone.tool, file: gone.file, command: gone.command };
       const tick = b.tick + 1;
       return { ...b, tick, sessions: withSession(b.sessions, id, { ...live, pending: kept, answer, touched: tick }) };
     }
@@ -377,14 +377,20 @@ function reduceInner(b, event) {
         if (!nameOf.has(id)) nameOf.set(id, ok ? n.trim().slice(0, 64) || null : null);
       });
       const owned = [...new Set(ids)];
-      // a window that is gone ends its session like a SessionEnd of a not-owned id (a Claude that died without one);
-      // no timer: a listed window stays however silent. b.owned === null (first list) ends nothing.
+      // a window gone from TWO consecutive successful listings ends its session (a Claude that died without a
+      // SessionEnd). One empty or short listing proves nothing (a tmux hiccup): the id is only marked missing.
+      // The id is not put in `ended`: a dead Claude sends no hooks, a live one comes back with its next poll or hook.
+      // No timer: a listed window stays however silent. b.owned === null (first list) ends nothing.
       let gone = b;
+      let missing = [];
       if (b.owned !== null) {
-        for (const id of b.owned) {
+        const before = b.missing ?? [];
+        for (const id of new Set([...b.owned, ...before])) {
+          if (owned.includes(id)) continue;
           const s = gone.sessions[id];
-          if (owned.includes(id) || s === undefined || s.quiet === true) continue;
-          gone = endSession(gone, s, id, pushEnded(gone.ended, id));
+          if (s === undefined || s.quiet === true) continue;
+          if (before.includes(id)) gone = endSession(gone, s, id, gone.ended);
+          else missing.push(id);
         }
       }
       // one tick per placeholder, in owned order, so the list order (born) follows the order revview started them
@@ -400,10 +406,11 @@ function reduceInner(b, event) {
           state: { ...initialState(), repo: nameOf.get(id) ?? null }, open: [], pending: [], pre: [], touched: tick, born: tick, dropped: false, quiet: true,
         });
       }
-      const same = b.owned !== null && owned.length === b.owned.length && owned.every((x) => b.owned.includes(x));
+      const same = b.owned !== null && owned.length === b.owned.length && owned.every((x) => b.owned.includes(x))
+        && missing.length === (b.missing ?? []).length && missing.every((x) => (b.missing ?? []).includes(x));
       if (same && sessions === b.sessions && gone === b) return b;
       sessions = capSessions(sessions, null, b.selected ?? b.focus, b.selected, b.want, owned);
-      return { ...gone, owned, sessions, tick };
+      return { ...gone, owned, missing, sessions, tick };
     }
     case 'RevviewProjects': {
       const paths = event.paths;
