@@ -45,7 +45,7 @@ Docs: <https://code.claude.com/docs/en/voice-dictation>
 | Screen | Waveshare 7.9" HDMI LCD, 400×1280 native, mounted landscape → **1280×400** | Sold for the Pi 4B. A micro-HDMI to HDMI cable or adapter to the Pi's HDMI0. 300–530 cd/m², capacitive touch over a separate USB cable, 470–640 mA at 5 V: at high brightness feed it from its own 5 V port rather than the Pi's USB. |
 | Power | A 12 V → USB-C car adapter rated 5 V / 3 A, or a car Pi HAT with ignition-sense safe shutdown | 3 A is enough for the Pi 4B with the mic and button; an under-powered supply shows the lightning-bolt warning and throttles. Power is cut at key-off: see "Survives a car" (clean shutdown or a read-only root). |
 | Mic | USB mic near the visor or A-pillar | Cabin noise is the big unknown. |
-| Button | **A 2.4 GHz remote with its own USB dongle** (a presenter/clicker, a steering-wheel media remote sold for head units, or a 1–3-key wireless macro pad). Bluetooth only as a fallback. | Factory-paired: the Pi sees a plain USB keyboard from the first second of boot, with no pairing and no reconnecting. Bluetooth remotes sleep, and the first press after waking is often lost while they reconnect; on the Pi 4B they also share the radio with the hotspot Wi-Fi. Whatever key the remote sends (Page Down, Play/Pause, volume), **keyd** on the Pi maps that one device's button to Claude Code's push-to-talk key; it works under Wayland and from boot. Strap it to the rim or a spoke, never over the airbag cover. |
+| Button | **Two coin-cell wireless pods on the wheel (ZMK on nRF52840, a split keyboard) plus an nRF52840 USB dongle in the Pi.** Not bought yet. | The Pi sees ONE USB HID keyboard from the first second of boot, with no pairing on the Pi. The pods send F13-F24 and a few combos. Voice pod on the 9 o'clock spoke (push-to-talk, read aloud, cancel, deny); navigation pod on the lower-right spoke (up, down, left, right, press, back, menu). **keyd is replaced by revview's own reader** of the dongle (exclusive grab, key map in config; proposal, the owner to confirm): keyd only remaps a key to a key, and some actions are not keys. Details, the input layer and the evidence: `docs/BUTTONS.md`. Strap pods to the rim or a spoke, never over the airbag cover. |
 | Network | Phone hotspot over Wi-Fi | Prefer the hotspot's 5 GHz band if the phone has it (the Pi 4B supports it): it keeps Wi-Fi out of the button's 2.4 GHz band. |
 | Audio out | The Pi 4B's own 3.5 mm jack (or the screen's jack over HDMI) → car AUX | For spoken replies. |
 | PoE HAT (owned) | **Bench only** | Power and wired network over one Ethernet cable while developing on the desk (phase 1). Not in the car: there is no PoE there, and the HAT covers the GPIO header a GPIO button or a power HAT would need. Nothing in the software may depend on Ethernet; in the car the network is the phone hotspot over Wi-Fi. |
@@ -94,8 +94,8 @@ Screen: <https://www.waveshare.com/7.9inch-hdmi-lcd.htm> · wiki <https://www.wa
   active area), driven by Playwright. QA checks every change there, and the gate saves one screenshot per
   state for the owner's gallery.
 - Touch is for when parked. Nothing while moving should need it.
-- Permission prompts need a plan: a permissive allow-list on the Pi so it rarely asks, or a second button
-  for "yes".
+- Permission prompts need a plan: a permissive allow-list on the Pi so it rarely asks, or buttons for "yes" and "no"
+  (allow and deny on the wheel, answered through a waiting PermissionRequest hook: `docs/BUTTONS.md`, section 2).
 
 ## Living in a car: what else to design for
 

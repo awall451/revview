@@ -336,6 +336,8 @@ inverted on purpose: a display fault must not look like any coloured Claude stat
   bar until the next `SessionEnd`/`RevviewStarting`. Bounded memory without a clock cannot do better.
 - With two sessions, voice goes to whichever terminal has focus; the bar shows the neediest session and the
   `+N` hint, but cannot say where push-to-talk will land.
+  Design decision 2026-11-22 (not built): push-to-talk will go to the session the driver selected by button, and
+  the bar will show that session; see docs/BUTTONS.md. Until that is built the limit stands.
 
 ## Detail lines polish (QA round 1: 06 07 08 09 12)
 
@@ -482,3 +484,42 @@ holds. Smaller text has the same ratio but is harder to read at equal ratio; tha
 Tests: `emulator/tests/dense.spec.js` checks that no text lies outside the panel, is clipped or overlaps another,
 for every fixture and every worst case, plus the wrapped and cut command and 1 to 3 output rows; `expectFits`
 in `emulator/tests/checks.js` now checks text boxes too.
+
+## 2026-11-22: wheel buttons (design, not built)
+
+Owner request 20261122T060852Z-p-dcd34d. Full note: `docs/BUTTONS.md`. Nothing here is built, and nothing was
+tried on hardware. Scope beyond charter stage 3 is an open escalation (`docs/agents/ESCALATIONS.md`); until
+the owner answers, only stage 3 is built.
+
+Rules chosen (proposals until the owner confirms):
+
+- **One selected session.** The bar shows the selected session and every action goes to it. Only the driver
+  changes the selection (left/right, back-hold home, a list row, a new session) or the session ending. Other
+  sessions' events show as the `+N` hint. In `board.js`, `focus` becomes driver-owned; `spokenTo` is not needed
+  for focus.
+- **revview owns the sessions:** plain interactive `claude` in a private tmux server (`tmux -L revview`, one
+  window per session). Keys go by `tmux send-keys`. The `--bg` + `attach` hub pattern stays the fallback.
+- **Allow and deny** through a waiting PermissionRequest hook answered by the revview server, with an explicit
+  `timeout` (proposal 600 s). Space, Esc and one Ctrl+C go as keys. Never two Ctrl+C in a row.
+- **Presses during `starting` are dropped**, not queued: a late Esc or allow could hit the wrong thing.
+- **Push-to-talk in `/voice` tap mode.** Hold mode needs imitated key auto-repeat and may break with an update.
+- **keyd is superseded** by revview's own reader (exclusive grab, key map in config) because several sessions and
+  non-key actions need more than a key-to-key remap. The owner to confirm. The grab needs a new dependency
+  (python3-evdev or a small C helper), to be decided with its own entry when it is built.
+
+Recorded facts (Claude Code 2.1.330, `fixtures/buttons/`):
+
+- Esc mid-turn stops the turn at once; the hooks fire no Stop and no PostToolUse (`events-a-esc.jsonl`). The
+  session works afterwards. One Ctrl+C mid-turn does the same; at an idle prompt two Ctrl+C within the hint
+  window exit Claude (`pane-b-6-ctrlc-idle-first-of-fast-pair.txt`).
+- A waiting PermissionRequest hook does not hide the terminal dialog (`pane-c2-1-hook-waiting.txt`). Its allow
+  answer dismisses the dialog in about 1.5 s and the command runs (`pane-c2-2-after-answer-file.txt`).
+- Its deny answer shows the reason, the command does not run, and the turn ends with a Stop, but no
+  PermissionDenied event (`pane-d-1-after-deny.txt`, `events-c2-d-d2-allow-deny-terminal.jsonl`).
+- With `"timeout": 5` and a silent hook, the hook is killed, nothing is allowed or denied, and the dialog stays
+  (`events-c1-hook-timeout5.jsonl`, `pane-c1-2-after-timeout-8s.txt`). The default timeout was not recorded.
+- An answer in the terminal wins at once; the waiting hook is not killed and its late answer has no effect
+  (`pane-d2-1-after-terminal-1-while-hook-waits.txt`, `permhook-log.txt`).
+- Two `claude --bg` sessions are listed by `claude agents --json` (`agents.json`). `claude attach` in a tmux
+  pane takes keys for that session only (`pane-e-3-attached-after-esc.txt`); Left opens the agent list
+  (`pane-e-4-after-left-arrow.txt`). No command to send input to a `--bg` session was found in the binary.
