@@ -71,16 +71,19 @@ PreToolUse and no Post yet, `touched` = board tick of the last applied event).
   list, phase `starting`. `RevviewContext`: applied to its live session if it has a `session_id` of one,
   otherwise to `board.context`.
 - `RevviewDropped` (internal, sent by the server when an event body was too large to read): marks that live
-  session `dropped` (the diff may be incomplete), or every live session without a usable id. Reset by
-  `UserPromptSubmit`.
-- `SessionEnd`: removes the session and remembers its id in `ended` (last 16). With no session left, phase is
-  `ended` and `board.context` keeps its repo/branch. Later events of an ended id are ignored, except
-  `SessionStart`, which recreates the session.
+  session `dropped` (the diff may be incomplete), or every live session without a usable id; an id the board
+  does not know marks nothing. Reset by `UserPromptSubmit`.
+- `SessionEnd`: removes the session and remembers its id in `ended` (last 16; the anonymous `''` session is
+  never remembered). With no session left, phase is `ended` and `board.context` keeps its repo/branch. Later
+  events of an ended id are ignored, except `SessionStart`, which recreates the session.
 - Ignored events (the reducer returns the same state) never create a session.
-- Late events: when a session is `done` or `waiting`, `PermissionDenied` and Post* events never change its
-  activity. A Post* whose `tool_use_id` is in `open` (it was running when `Stop` came) still updates output,
-  diff and tool but keeps activity and view; any other is ignored. `PreToolUse` after `Stop` is accepted
-  (Claude can start work on its own).
+- Late events: a session's turn has ended when it is `done`, or `waiting` with no tool open (an idle_prompt
+  during an unanswered permission prompt has not ended it). Then `PermissionDenied` and Post* events never
+  change its activity: a Post* whose `tool_use_id` is in `open` (it was running when `Stop` came) still
+  updates output, diff and tool but keeps activity and view; any other is ignored. `PermissionRequest` and
+  permission Notifications are ignored too (a permission needs a running turn). `PreToolUse` after `Stop` is
+  accepted (Claude can start work on its own).
+- A board that this module did not build (any session not of the shape above) is replaced by `initialBoard()`.
 - At most `MAX_SESSIONS = 8` live sessions (the band hint `+N` has room for one digit); on overflow the least recently touched is dropped (a crashed
   Claude never sends `SessionEnd`).
 - Shown session: priority `permission` > `waiting` > `working` > `done` > anything else; tie -> highest `touched`.

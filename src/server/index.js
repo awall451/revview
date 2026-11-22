@@ -80,7 +80,8 @@ export async function startLiveServer({ port = 0, viewDir = DEFAULT_VIEW_DIR, re
   };
 
   // An event the core can take: seq += 1, new board, broadcast. A throwing core leaves everything alone.
-  function apply(event) {
+  // A POSTed event always counts (even if nothing changed); an internal one (onlyIfChanged) only when it did.
+  function apply(event, onlyIfChanged = false) {
     let next;
     try {
       next = reduceEvent(board, event);
@@ -88,6 +89,7 @@ export async function startLiveServer({ port = 0, viewDir = DEFAULT_VIEW_DIR, re
       console.error('reduce failed:', e);
       return false;
     }
+    if (onlyIfChanged && next === board) return true;
     seq += 1;
     board = next;
     broadcast();
@@ -105,7 +107,7 @@ export async function startLiveServer({ port = 0, viewDir = DEFAULT_VIEW_DIR, re
     const tool = TOOL_NAME_RE.exec(head);
     if (tool && !DIFF_TOOLS.includes(tool[1])) return;
     const m = SESSION_ID_RE.exec(head);
-    apply(m ? { hook_event_name: 'RevviewDropped', session_id: m[1] } : { hook_event_name: 'RevviewDropped' });
+    apply(m ? { hook_event_name: 'RevviewDropped', session_id: m[1] } : { hook_event_name: 'RevviewDropped' }, true);
   }
 
   function readBody(req, res, done) {

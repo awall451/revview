@@ -307,6 +307,17 @@ test('oversize event that cannot carry a diff (Bash output, Read, PreToolUse): 4
   });
 });
 
+test('oversize diff event of a session the board does not know: 413, seq and view unchanged', async () => {
+  await withServer(async (srv) => {
+    const seq = await working(srv);
+    const head = '{"session_id":"nobody","hook_event_name":"PostToolUse","tool_name":"Edit","tool_response":{"originalFile":"';
+    assert.equal(await rawPost(srv, Buffer.from(head + 'x'.repeat(MAX_BODY_BYTES + 5000) + '"}}')), 413);
+    const s = await getState(srv);
+    assert.equal(s.seq, seq);
+    assert.equal(s.state.diffIncomplete, false);
+  });
+});
+
 test('oversize body that is not a hook event: 413, seq unchanged', async () => {
   await withServer(async (srv) => {
     const seq = await working(srv);

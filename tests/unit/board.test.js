@@ -196,3 +196,58 @@ test('replayView of every recording ends in ended', () => {
     assert.equal(out.at(-1).view, 'ended', f);
   }
 });
+
+// Review findings on the board (late permission, idle during an open tool, unknown ids, malformed boards).
+const PRE = (id) => ev('PreToolUse', { ...A, ...BASH, tool_use_id: id });
+const POST = (id) => ev('PostToolUse', { ...A, ...BASH, tool_use_id: id, tool_response: { stdout: 'ok\n' } });
+
+test('a permission event after Stop (late hook) does not bring NEEDS PERMISSION back', () => {
+  const b = run([ev('SessionStart', A), ev('UserPromptSubmit', A), PRE('t1'), POST('t1'), ev('Stop', A)]);
+  assert.equal(reduceBoard(b, ev('Notification', { ...A, notification_type: 'permission_prompt' })), b);
+  assert.equal(reduceBoard(b, ev('PermissionRequest', { ...A, ...BASH })), b);
+  // a new turn can still ask for permission
+  const t = run([ev('UserPromptSubmit', A), PRE('t2'), ev('Notification', { ...A, notification_type: 'permission_prompt' })], b);
+  assert.equal(boardView(t).view, 'permission');
+});
+
+test('idle_prompt while a tool is still open (unanswered prompt) does not freeze the turn at waiting', () => {
+  const b = run([ev('SessionStart', A), ev('UserPromptSubmit', A), PRE('t1'),
+    ev('Notification', { ...A, notification_type: 'permission_prompt' }),
+    ev('Notification', { ...A, notification_type: 'idle_prompt' })]);
+  assert.equal(boardView(b).view, 'waiting');
+  assert.equal(boardView(reduceBoard(b, POST('t1'))).view, 'working');
+});
+
+test('waiting after Stop with no open tool still ignores late Posts and permission events', () => {
+  const b = run([ev('SessionStart', A), ev('UserPromptSubmit', A), PRE('t1'), POST('t1'), ev('Stop', A),
+    ev('Notification', { ...A, notification_type: 'idle_prompt' })]);
+  assert.equal(boardView(b).view, 'waiting');
+  assert.equal(reduceBoard(b, POST('t1')), b);
+  assert.equal(reduceBoard(b, ev('Notification', { ...A, notification_type: 'permission_prompt' })), b);
+});
+
+test('RevviewDropped with an id the board does not know marks nothing', () => {
+  const b = run([ev('SessionStart', A), ev('UserPromptSubmit', A)]);
+  assert.equal(reduceBoard(b, ev('RevviewDropped', { session_id: 'nobody' })), b);
+});
+
+test('SessionEnd without a session_id does not block later id-less events', () => {
+  const b = run([ev('SessionStart'), ev('SessionEnd'), ev('UserPromptSubmit')]);
+  assert.equal(boardView(b).view, 'working');
+});
+
+test('a malformed board is replaced, never throws', () => {
+  const ctx = { repo: null, branch: null };
+  const base = { phase: 'x', offline: false, locked: false, context: ctx, ended: [], tick: 0 };
+  const bad = [
+    { ...base, context: {}, sessions: { q: {} } },
+    { ...base, sessions: { q: { state: null, open: [], touched: 1, dropped: false } } },
+    { ...base, sessions: { q: { state: { activity: 'done', diff: { added: 0, removed: 0 } }, open: 'no', touched: 1, dropped: false } } },
+  ];
+  for (const b of bad) {
+    assert.doesNotThrow(() => boardView(b));
+    assert.equal(boardView(b).view, 'unknown');
+    assert.doesNotThrow(() => reduceBoard(b, ev('SessionStart', A)));
+    assert.equal(boardView(reduceBoard(b, ev('SessionStart', A))).view, 'waiting');
+  }
+});

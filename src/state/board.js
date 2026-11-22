@@ -21,9 +21,16 @@ export function initialBoard() {
   };
 }
 
+function isValidSession(s) {
+  return isObj(s) && isObj(s.state) && typeof s.state.activity === 'string' && isObj(s.state.diff)
+    && Array.isArray(s.open) && Number.isInteger(s.touched) && typeof s.dropped === 'boolean';
+}
+
+// Only boards this module built are used; anything else is replaced, so nothing below can throw on it.
 function isValidBoard(b) {
   return isObj(b) && typeof b.phase === 'string' && isObj(b.context) && isObj(b.sessions)
-    && Array.isArray(b.ended) && Number.isInteger(b.tick);
+    && Array.isArray(b.ended) && Number.isInteger(b.tick)
+    && Object.keys(b.sessions).every((k) => isValidSession(b.sessions[k]));
 }
 
 const keyOf = (event) => (isStr(event.session_id) ? event.session_id : '');
@@ -104,6 +111,8 @@ export function reduceBoard(board, event) {
       return withContext(b, patch);
     }
     case 'RevviewDropped': {
+      // an id the board does not know marks nothing (it is none of the sessions on the board)
+      if (isStr(event.session_id) && live === null) return b;
       const live1 = isStr(event.session_id) && live !== null;
       const sessions = mapSessions(b.sessions, (s) => (s.dropped || (live1 && s !== live) ? s : { ...s, dropped: true }));
       return sessions === b.sessions ? b : { ...b, sessions };
@@ -111,7 +120,8 @@ export function reduceBoard(board, event) {
     case 'SessionEnd': {
       if (live === null && b.ended.includes(id)) return b;
       const sessions = withoutSession(b.sessions, id);
-      const ended = pushEnded(b.ended, id);
+      // the anonymous session ('') is never remembered as ended, so later id-less events still count
+      const ended = id === '' ? b.ended : pushEnded(b.ended, id);
       if (Object.keys(sessions).length > 0) return { ...b, sessions, ended };
       const repo = live !== null && live.state.repo !== null ? live.state.repo : b.context.repo;
       const branch = live !== null && live.state.branch !== null ? live.state.branch : b.context.branch;
@@ -126,6 +136,7 @@ export function reduceBoard(board, event) {
 }
 
 const POST = new Set(['PostToolUse', 'PostToolUseFailure']);
+const PERMISSION_TYPES = new Set(['permission_prompt', 'worker_permission_prompt']);
 
 function applyToSession(b, live, id, event) {
   const name = event.hook_event_name;
@@ -137,8 +148,14 @@ function applyToSession(b, live, id, event) {
   let open = prevOpen;
   let dropped = live !== null && live.dropped;
 
-  // Late events of a turn that already ended must not flip the activity back (QA issue 10).
-  const finished = live !== null && (prev.activity === 'done' || prev.activity === 'waiting');
+  // Late events of a turn that already ended must not flip the activity back (QA issue 10). A turn has ended
+  // after Stop (done), or when Claude waits with no tool open; an idle_prompt while a tool is still open (an
+  // unanswered permission prompt) has not ended it, so that tool's Post still means working.
+  const finished = live !== null
+    && (prev.activity === 'done' || (prev.activity === 'waiting' && prevOpen.length === 0));
+  // a permission request needs a running turn: after the turn ended it is a late hook
+  if (finished && (name === 'PermissionRequest'
+    || (name === 'Notification' && PERMISSION_TYPES.has(event.notification_type)))) return b;
   if (finished && (POST.has(name) || name === 'PermissionDenied')) {
     if (!POST.has(name) || toolUseId === null || !prevOpen.includes(toolUseId)) return b;
     state = state === prev ? prev : { ...state, activity: prev.activity, view: prev.view };
