@@ -61,14 +61,14 @@ body[data-view="no-link"] #band {
 /* "+N more Claude sessions": never squeezed; #where shrinks or hides first */
 #others {
   flex: none;
-  margin-left: 0.5em;
+  margin-left: 24px; /* a clear gap after the state word (QA r4-10) */
   font-weight: 700;
   font-size: var(--detail-font);
   white-space: nowrap;
 }
 /* NEEDS PERMISSION plus "+9" is about 20 px wider than the band's padding allows: view.js sets .tight */
 #band.tight { padding: 0 10px; gap: 6px; }
-#band.tight #others { margin-left: 4px; }
+#band.tight #others { margin-left: 24px; }
 /* push-to-talk mark and position "2/3": never squeezed, #where gives way first */
 #voice {
   flex: none;
@@ -219,6 +219,10 @@ span:empty { display: none; }
 #nav .row[data-selected="true"] .body { background: #fff; color: #000; }
 #nav .chip { display: block; flex: none; width: 22px; height: 22px; box-sizing: border-box; border: 2px solid currentColor; }
 #nav .label { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; }
+#nav .label.proj { display: flex; align-items: baseline; }
+#nav .label.proj .base { flex: none; max-width: calc(100% - 16px); overflow: hidden; font-weight: 700; }
+#nav .label.proj .dir { flex: 1 1 0; min-width: 0; margin-left: 16px; overflow: hidden; white-space: nowrap; color: var(--grey); }
+#nav .row[data-selected="true"] .label.proj .dir { color: #444; }
 #nav .word { flex: none; font-weight: 700; white-space: nowrap; }
 #nav .row-mic { --band: #000; flex: none; width: 1.1em; height: 1.1em; display: block; }
 #nav .row[data-selected="true"] .row-mic { --band: #fff; }

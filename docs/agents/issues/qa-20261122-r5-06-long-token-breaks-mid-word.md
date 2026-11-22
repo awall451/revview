@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-22, work/core-small-14: long tokens break after / - _ . = : first; not yet re-run by QA)
 id: qa-20261122-r5-06
 title: A long path token in a command breaks mid-word ("director / y-name")
 severity: cosmetic

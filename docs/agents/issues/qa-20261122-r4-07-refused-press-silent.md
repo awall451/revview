@@ -1,5 +1,5 @@
 ---
-status: open
+status: closed (2026-11-22, work/core-small-14: "Too early: press again" note on a refused early press; not yet re-run by QA)
 id: qa-20261122-r4-07
 title: A press that is refused (prompt shown under 1.5 s, after a switch, after the list closed) gives no sign; the driver cannot tell "too early" from "did not register"
 severity: minor

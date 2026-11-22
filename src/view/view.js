@@ -67,7 +67,7 @@ const svg = (inner, cls) => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden
 
 // Push-to-talk is not going to the shown session: the note for the bottom row (or in place of note2).
 const VOICE_NOTES = {
-  none: 'Push-to-talk goes nowhere: no session chosen',
+  none: 'No session chosen: press up to open the list',
   'not-owned': 'Buttons do nothing here: not a revview session',
   'no-session': 'Push-to-talk does nothing: no revview session',
 };
@@ -273,13 +273,23 @@ export function render(input) {
 
   // the "more sessions" hint never shrinks; it is placed before #where, which gives way first
   // two digits do not fit next to NEEDS PERMISSION: from 10 on it reads "9+" (data-full has the real number)
-  set(el.others, others > 9 ? '9+' : others ? `+${others}` : '');
-  el.others.dataset.full = others ? `${others} more Claude session${others === 1 ? '' : 's'}` : '';
-  el.others.classList.toggle('has-mark', others > 0 && elsewhere > 0);
-  if (others && elsewhere) {
+  // With the position ("2/3") shown, "+N" would say the same twice: the hint is then only the NUMBER of other
+  // sessions that need permission, after the triangle ("▲1"; nothing when none does). Without a position: "+N" (QA r4-05).
+  const showPos = voice !== null && pos !== null && others > 0;
+  const cap = (n) => (n > 9 ? '9+' : `${n}`);
+  if (showPos) {
+    set(el.others, elsewhere ? cap(elsewhere) : '');
+    el.others.dataset.full = elsewhere ? `${elsewhere} other Claude session${elsewhere === 1 ? ' needs' : 's need'} permission` : '';
+  } else {
+    set(el.others, others ? (others > 9 ? '9+' : `+${others}`) : '');
+    el.others.dataset.full = others ? `${others} more Claude session${others === 1 ? '' : 's'}` : '';
+  }
+  const mark = others > 0 && elsewhere > 0;
+  el.others.classList.toggle('has-mark', mark);
+  if (mark) {
     // a small filled triangle (the permission shape) before the number: some of the others need permission
     el.others.insertAdjacentHTML('afterbegin', svg(TRIANGLE, 'mark'));
-    el.others.dataset.full += `, ${elsewhere} ${elsewhere === 1 ? 'needs' : 'need'} permission`;
+    if (!showPos) el.others.dataset.full += `, ${elsewhere} ${elsewhere === 1 ? 'needs' : 'need'} permission`;
   }
   // push-to-talk mark and position: never shrinks, #where gives way first
   el.voice.hidden = voice === null;
@@ -378,6 +388,28 @@ function navRow(r, i, nav, isEmpty) {
       mic.innerHTML = svg(off ? MIC_OFF : MIC, 'mic');
       body.append(mic);
     }
+  } else if ((nav.kind === 'new' || nav.kind === 'projects') && !isEmpty && str(r.label) !== '') {
+    // project row: the last folder name first (bold), the rest of the path after it, dimmer (QA r5-07, r4-10)
+    const full = str(r.label);
+    const label = text(`row${i}-label`, 'label proj', '');
+    label.dataset.full = full;
+    const cut = full.length > 1 && full.endsWith('/') ? full.slice(0, -1) : full;
+    const at = cut.lastIndexOf('/');
+    const base = document.createElement('span');
+    base.className = 'base';
+    base.id = `row${i}-base`;
+    base.textContent = at < 0 ? cut : cut.slice(at + 1) || cut;
+    label.append(base);
+    if (at >= 0 && cut.slice(0, at) !== '') {
+      const dir = document.createElement('span');
+      dir.className = 'dir';
+      dir.id = `row${i}-dir`;
+      dir.textContent = cut.slice(0, at);
+      label.append(dir);
+    }
+    body.append(label);
+    // a folder that does not exist says so in the row (choosing it is refused, see the note)
+    if (r.missing === true) body.append(text(`row${i}-word`, 'word', 'MISSING'));
   } else {
     body.append(text(`row${i}-label`, 'label', str(r.label)));
   }
@@ -385,6 +417,25 @@ function navRow(r, i, nav, isEmpty) {
 }
 
 function fitLabel(node) {
+  if (node.classList.contains('proj')) {
+    // the base name is never cut first: the path after it gives way (end cut); only a base that alone is too long is cut in its middle
+    const base = node.querySelector('.base');
+    const dir = node.querySelector('.dir');
+    if (base.scrollWidth > base.clientWidth) {
+      const full = base.textContent;
+      base.textContent = middleEllipsis(full, (c) => {
+        base.textContent = c;
+        return base.scrollWidth <= base.clientWidth;
+      });
+    }
+    if (dir && dir.scrollWidth > dir.clientWidth) {
+      dir.textContent = fitPrefix(dir.textContent, (c) => {
+        dir.textContent = c;
+        return dir.scrollWidth <= dir.clientWidth;
+      });
+    }
+    return;
+  }
   if (node.scrollWidth <= node.clientWidth) return;
   node.textContent = middleEllipsis(node.dataset.full, (c) => {
     node.textContent = c;

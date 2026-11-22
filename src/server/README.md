@@ -140,7 +140,7 @@ else `config/speech.json`) is loaded at start. A bad config is logged and the se
 
 `--sessions` makes the session runner on the private tmux socket (`-L revview`); at boot `--start <dir>` (repeatable, implies `--sessions`) starts `claude` there and the last one started is selected
 (through `select(id)`); else exactly one existing revview session is selected (it is on the board at once as a quiet placeholder). The boot log says 'selected' only when the board did select it, else 'wanted'. `--projects <file>`
-(default env `REVVIEW_PROJECTS`) is the New session project list (`src/sessions/README.md`, applied once at start as `RevviewProjects`).
+(default env `REVVIEW_PROJECTS`) is the New session project list (`src/sessions/README.md`, applied at start as `RevviewProjects`, with `missing` = the paths that are not directories; checked again on every owned refresh, and re-applied only when that set changes).
 With a runner, `RevviewOwned` (the ids of `runner.list()`) is applied at start, after every session start and every `ownedPollMs`
 (default 5000; an unref'd timer; a failing `list()` is logged and the last value kept). The tmux server is never killed by the live server (sessions outlive a restart).
 

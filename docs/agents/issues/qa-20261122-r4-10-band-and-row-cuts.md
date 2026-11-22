@@ -1,5 +1,5 @@
 ---
-status: open
+status: closed (2026-11-22, work/core-small-14: gap before the band hint, project rows folder first; cut rules left on purpose, see DECISIONS core small run; not yet re-run by QA)
 id: qa-20261122-r4-10
 title: Crowded worst band and inconsistent name cutting (band end-cut, list middle-cut, project rows sometimes lose their folder)
 severity: cosmetic

@@ -1,5 +1,5 @@
 ---
-status: open (2026-11-22, not done in work/qa5-fixes: the failed-turn message wrap touches the layout)
+status: closed (2026-11-22, work/core-small-14: the failed-turn message wraps over the free rows; not yet re-run by QA)
 id: qa-20261122-r5b-02
 title: Failed turn: the error message is cut to one line with an ellipsis although the rows below are empty, so the decisive part ("ECONNREFUSED") is lost
 severity: polish

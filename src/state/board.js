@@ -54,6 +54,7 @@ function isValidBoard(b) {
       && (b.nav.id === undefined || typeof b.nav.id === 'string')))
     && (b.note === undefined || b.note === null || typeof b.note === 'string')
     && Array.isArray(b.projects) && b.projects.every((x) => typeof x === 'string')
+    && (b.projectsMissing === undefined || (Array.isArray(b.projectsMissing) && b.projectsMissing.every((x) => typeof x === 'string')))
     && Object.keys(b.sessions).every((k) => isValidSession(b.sessions[k]));
 }
 
@@ -172,7 +173,8 @@ export function reduceBoard(board, event) {
   const b = isValidBoard(board) ? board : initialBoard();
   if (!isObj(event) || typeof event.hook_event_name !== 'string') return b;
   let next = reduceInner(b, event);
-  if (event.hook_event_name === 'RevviewNav' && typeof next.note === 'string') next = { ...next, note: null };
+  // a button gesture clears the board note; so does the answer that a "Too early: press again" note asked for
+  if ((event.hook_event_name === 'RevviewNav' || event.hook_event_name === 'RevviewAnswered') && typeof next.note === 'string') next = { ...next, note: null };
   // the selected session ended and others remain: the selection falls to another one, and the bar says so
   const wasSel = selectedOf(b);
   if (wasSel !== null && next !== b && !has(next.sessions, wasSel) && Object.keys(next.sessions).length > 0
@@ -415,9 +417,12 @@ function reduceInner(b, event) {
     case 'RevviewProjects': {
       const paths = event.paths;
       if (!Array.isArray(paths) || paths.length > 32 || !paths.every((x) => typeof x === 'string' && x.length <= 4096)) return b;
-      if (sameList(paths, b.projects)) return b;
-      const rowsChanged = b.nav !== null && (b.nav.kind === 'new' || b.nav.kind === 'projects');
-      return { ...b, projects: [...paths], nav: rowsChanged ? null : b.nav };
+      const missing = event.missing === undefined ? [] : event.missing;
+      if (!Array.isArray(missing) || missing.length > 32 || !missing.every((x) => typeof x === 'string' && paths.includes(x))) return b;
+      const samePaths = sameList(paths, b.projects);
+      if (samePaths && sameList(missing, b.projectsMissing ?? [])) return b;
+      const rowsChanged = !samePaths && b.nav !== null && (b.nav.kind === 'new' || b.nav.kind === 'projects');
+      return { ...b, projects: [...paths], projectsMissing: [...missing], nav: rowsChanged ? null : b.nav };
     }
     case 'RevviewNote': {
       const note = event.note;
@@ -686,7 +691,8 @@ function navView(b) {
       `Projects: ${b.projects.length} in the config file`,
     ].map((label) => ({ label }));
   } else {
-    rows = b.projects.map((label) => ({ label }));
+    const gone = kind === 'new' ? b.projectsMissing ?? [] : [];
+    rows = b.projects.map((label) => (gone.includes(label) ? { label, missing: true } : { label }));
   }
   return { kind, row: clampRow(b.nav.row, rows.length), rows };
 }

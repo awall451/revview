@@ -138,7 +138,7 @@ returns the same board. Refused over HTTP like `RevviewInterrupted`.
 **Driver-chosen selection (WB4).** New board fields: `selected` (live session id or null), `want` (a session revview
 started that is not on the board yet: the first event that creates it sets `selected = want`, `want = null`),
 `owned` (ids revview owns; null = the server runs without sessions), `nav` (null or `{kind, row, id}`, kind `list|menu|new|projects|settings`; in the list `id` is the highlighted session and the highlight follows it; if it ends the list closes with the note 'Highlighted session ended: list closed'; an open new/projects view closes when the projects list changes),
-`projects` (config-file paths, display only), `note` (null or a fixed text from `RevviewNote`); each session has `born` (the board tick that created it, kept on updates).
+`projects` (config-file paths, display only), `projectsMissing` (optional, absent until set: subset of them whose folder does not exist), `note` (null or a fixed text from `RevviewNote`); each session has `born` (the board tick that created it, kept on updates).
 The shown session is `selected` when live; only when it is null do the heuristics above decide. Other sessions' events never move
 `selected`; when the selected session ends it falls to `homeKey`; the cap never drops `selected` or `want`'s session.
 Exports: `sessionOrder(board)` (sessions other than `''`, by `born` then id), `homeKey(board)` (needs permission 4 > waiting 3 > done 2 >
@@ -147,7 +147,7 @@ unlike the cap's priority), `selectedKey(board)`.
 
 Internal events (the server refuses them over HTTP): `RevviewSelect {session_id}` (known -> `selected`, unknown -> `want`),
 `RevviewOwned {ids}` (<= 64 ids of <= 200 chars, deduplicated; `names` are display text only: control chars rejected, trimmed to 64) puts each owned id that is not on the board and not in `ended` there as a quiet placeholder (`state` unknown, note 'No events from this session yet', in owned order), removed when no longer owned while still quiet; its first hook event makes it a normal session (a placeholder counts as the one live session for id-less events, and `RevviewSelect` selects it at once; the cap drops sessions not in `owned` before owned ones),
-`RevviewNote {text}` (one of a fixed set of texts; cleared by the next `RevviewNav` button gesture or a selection change), `RevviewProjects {paths}` (<= 32 strings of <= 4096),
+`RevviewNote {text}` (one of a fixed set of texts; cleared by the next `RevviewNav` button gesture, a `RevviewAnswered` or a selection change; "Too early: press again" is set by the actions when a press is refused for being under 1.5 s), `RevviewProjects {paths, missing?}` (<= 32 strings of <= 4096; `missing` optional, a subset of `paths` that the server found not to be directories; the New session rows then carry `missing: true`; a change of `missing` alone does not close an open view),
 `RevviewNav {button, gesture}` (does not touch `tick` or sessions): normal view left/right tap step through the order (wrapping),
 back hold = home, up/down/press tap open the list on the shown session, menu tap opens the menu; inside a view up/down move the row
 (clamped), press chooses/opens, back tap goes up one level, back hold = home and close, menu tap toggles, button `timeout`

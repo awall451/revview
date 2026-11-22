@@ -67,7 +67,7 @@ Design: `docs/BUTTONS.md`; recordings `fixtures/buttons/`. Phases:
 
 ## QA issues
 
-Open after `stage2-qa5` (in `docs/agents/issues/`): r5-06 (a long path breaks mid-word), r5-07 (New session list does not mark a missing folder), r5b-02 (failed-turn message cut to one line), r5-03 partly (the note does not say how to choose a session), r4-05, r4-07, r4-10. Closed on the branch: r5-01..05, r5b-01, r5b-03, r3-05, r3-07, r3-08.
+Closed on work/core-small-14 (cycle 14, awaiting gate): r5-06, r5-07, r5b-02, r5-03, r4-05, r4-07, r4-10. Were open after `stage2-qa5`: r5-06 (a long path breaks mid-word), r5-07 (New session list does not mark a missing folder), r5b-02 (failed-turn message cut to one line), r5-03 partly (the note does not say how to choose a session), r4-05, r4-07, r4-10. Closed on the branch: r5-01..05, r5b-01, r5b-03, r3-05, r3-07, r3-08.
 
 Known limits: a prompt tied to a call whose PostToolUse was lost still shows NEEDS PERMISSION until Stop/idle_prompt/a driver prompt; a late hook from a really dead owned Claude shows its session again; a posted SessionEnd hides a live owned window for up to one 5 s poll; a duplicate Post whose Pre was never seen is not caught; sessions not started by revview that die without SessionEnd stay on the bar; QA noted, unproven: if `/clear` changes the session id inside the same tmux window, the buttons may lose that window.
 

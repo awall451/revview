@@ -1138,3 +1138,14 @@ Owner steps: `pi/README.md`. Bench items P1-P14 in `docs/BENCH-TEST.md`, all unt
   the IP, `stop()` cancels a running probe, default timeout `DEFAULT_CONNECT_TIMEOUT_MS` (3000) tested. The flaky
   `close() kills a running stand-in` test asserted the stand-in's `sleep` child was dead the instant `close()`
   returned; close() only waits for the stand-in itself, so the test now polls (reproduced 1 in 20 idle, 8 in 20 under load).
+
+## core small run (cycle 14)
+
+- **Cap and missing.** `capSessions` gets `[...owned, ...missing]` (both the `RevviewOwned` call and the hook-path call), so a window missing from one listing is not evicted at the cap.
+- **Late hook of an ended owned session: pinned, not changed.** It shows the session again (live, not quiet); `tests/unit/board-owned-gone.test.js` names it a known limit. A repeated identical PreToolUse already cleared the answered mark; now pinned by a test.
+- **Failed-turn message** wraps over the free rows (6, or 5 with the grey voice note) and is cut with an ellipsis only beyond them. **Long tokens** (over 24 characters) may break after `/ - _ . = :` (ZERO WIDTH SPACE in the shown text only); short tokens keep the r3-09 rule (a flag moves whole).
+- **Missing project folder (r5-07):** `RevviewProjects` carries an optional `missing` subset; the server re-checks on the owned poll; New session rows show MISSING. Project rows lead with the folder name (bold), the rest of the path grey.
+- **r5-03:** the note reads "No session chosen: press up to open the list".
+- **r4-05:** with a position `i/N` the band drops `+N` and shows the number of other sessions needing permission after the triangle (`9+` from 10); without a position `+N` stays. Not proven on the panel (bench V8).
+- **r4-10:** a 24 px gap before the band hint. Cut rules are NOT unified: the band cuts at the end (little room, the start identifies the repo), the list cuts in the middle (the tail tells similar names apart). Left as is on purpose.
+- **r4-07:** only the too-early refusal (prompt shown under 1.5 s) shows "Too early: press again" in the grey note row; other refusals stay silent. A successful answer clears the board note.

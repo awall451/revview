@@ -89,7 +89,18 @@ export async function startLiveServer({
   const registry = createPermissionRegistry({ clock, waitMs: permissionWaitMs, minShownMs });
   let closed = false;
   // owned = the sessions revview itself started (the runner's windows); null without a runner (the old look)
+  // project folders that do not exist are marked in the New session rows; re-checked on the owned poll (no timer of its own)
+  let missingKey = null;
+  const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
+  function applyProjects() {
+    const missing = projects.filter((p) => !isDir(p));
+    const k = JSON.stringify(missing);
+    if (k === missingKey) return;
+    missingKey = k;
+    apply({ hook_event_name: 'RevviewProjects', paths: projects, missing }, true);
+  }
   async function refreshOwned() {
+    applyProjects();
     if (!sessions) return;
     try {
       const list = await sessions.list();
@@ -445,7 +456,7 @@ export async function startLiveServer({
   });
   ownPort = server.address().port;
 
-  apply({ hook_event_name: 'RevviewProjects', paths: projects }, true);
+  applyProjects();
   if (boot) apply({ hook_event_name: 'RevviewStarting' }, true);
   let monitor = null;
   if (netmon) {

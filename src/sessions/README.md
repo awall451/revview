@@ -41,7 +41,7 @@ gesture.
   `projects[row]` (the controller's own validated list; refused if missing or different from the board's row label),
   the list closes, `runner.start({ cwd })` runs, then owned is refreshed (the new window goes on the board as a quiet
   placeholder) and the internal `RevviewSelect` selects it at once. A refused or failed start leaves the selection alone and sets
-  a fixed board note ('project folder missing', 'see the server log' or 'no such project'), never the error text.
+  a fixed board note ('project folder missing', 'see the server log' or 'no such project'), never the error text. A press/deny refused as `not-shown-long-enough` (under 1.5 s) sets the note 'Too early: press again'; no other refusal says anything.
 - **Normal view:**
   - cancel tap = Escape, cancel long-hold = one Ctrl+C (refused for 5000 ms after one was sent: two Ctrl+C in that
     window exit Claude), push-to-talk tap = Space (tap mode only), all to `selectedKey(board)` (none: refused

@@ -81,6 +81,8 @@ export function createActions({
     if (res?.ok === true) {
       apply({ hook_event_name: 'RevviewAnswered', session_id: shown.session, agent: shown.agent, since: shown.since, decision: kind });
     }
+    // only the too-early refusal says so on the bar (QA r4-07); every other refusal stays silent
+    if (res?.ok !== true && res?.reason === 'not-shown-long-enough') note('Too early: press again');
     return out(kind, res?.ok === true, res?.ok === true ? undefined : res?.reason ?? 'refused');
   }
 

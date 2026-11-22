@@ -1,5 +1,5 @@
 ---
-status: open
+status: closed (2026-11-22, work/core-small-14: with a position the band shows the permission count, no +N; not yet re-run by QA)
 id: qa-20261122-r4-05
 title: The band shows two numbers ("+3" and "3/4"); with the triangle, "+7" does not say how many need permission
 severity: minor

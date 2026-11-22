@@ -27,7 +27,7 @@ const rect = (page, sel) => page.locator(sel).evaluate((e) => {
 });
 
 const NOTE = {
-  none: 'Push-to-talk goes nowhere: no session chosen',
+  none: 'No session chosen: press up to open the list',
   'not-owned': 'Buttons do nothing here: not a revview session',
   'no-session': 'Push-to-talk does nothing: no revview session',
 };
@@ -161,9 +161,9 @@ test('starting shows one note row only', async ({ openView, page }) => {
 // ---- band: a prompt in another session ----
 test('elsewhere: the hint gets the permission triangle and a longer data-full', async ({ openView, page }, testInfo) => {
   await openView(wb4State('elsewhere'));
-  await expect(page.locator('#others')).toHaveText('+2');
+  await expect(page.locator('#others')).toHaveText('1'); // the position is shown: the number of others that need permission (QA r4-05)
   await expect(page.locator('#others svg')).toHaveCount(1);
-  await expect(page.locator('#others')).toHaveAttribute('data-full', '2 more Claude sessions, 1 needs permission');
+  await expect(page.locator('#others')).toHaveAttribute('data-full', '1 other Claude session needs permission');
   const tri = await rect(page, '#others svg');
   const others = await rect(page, '#others');
   expect(tri.left).toBeGreaterThanOrEqual(others.left - 0.5);
@@ -173,6 +173,22 @@ test('elsewhere: the hint gets the permission triangle and a longer data-full', 
   // no prompt elsewhere: no triangle
   await openView(wb4State('mic-position'));
   await expect(page.locator('#others svg')).toHaveCount(0);
+});
+
+test('r4-05: with the position shown the hint is the number of others that need permission, else +N', async ({ openView, page }) => {
+  const base = wb4State('elsewhere');
+  await openView({ ...base, others: 4, elsewhere: 3 });
+  await expect(page.locator('#others')).toHaveText('3');
+  await expect(page.locator('#others')).toHaveAttribute('data-full', '3 other Claude sessions need permission');
+  await expect(page.locator('#others svg')).toHaveCount(1);
+  await expect(page.locator('#position')).toBeVisible();
+  await openView({ ...base, others: 4, elsewhere: 0 }); // nobody else asks: no hint at all, the position says the count
+  await expect(page.locator('#others')).toHaveText('');
+  await expect(page.locator('#others svg')).toHaveCount(0);
+  await openView({ ...base, others: 4, elsewhere: 3, position: null }); // no position: +N with the triangle as before
+  await expect(page.locator('#others')).toHaveText('+4');
+  await expect(page.locator('#others svg')).toHaveCount(1);
+  await expect(page.locator('#others')).toHaveAttribute('data-full', '4 more Claude sessions, 3 need permission');
 });
 
 // ---- the answer revview gave: said in words on the tool row (QA r4-04) ----
@@ -263,13 +279,13 @@ for (const [id, file] of [['worst-band', 'wb4-worst-band'], ['worst-band-permiss
   test(`${id}: hint, mic, position and NO BUTTONS tag do not overlap or leave the band`, async ({ openView, page }, testInfo) => {
     await openView(wb4State(id));
     await expect(page.locator('#buttons-tag')).toBeVisible();
-    await expect(page.locator('#others')).toHaveText('9+');
+    await expect(page.locator('#others')).toHaveText('1'); // the position is shown: only the number of others that need permission
     await expect(page.locator('#position')).toHaveText('12/13');
     const word = await rect(page, '#state-word');
     const others = await rect(page, '#others');
     const voice = await rect(page, '#voice');
     const tag = await rect(page, '#buttons-tag');
-    expect(word.right).toBeLessThanOrEqual(others.left + 0.5);
+    expect(others.left - word.right).toBeGreaterThanOrEqual(24); // a clear gap between the state word and the hint (QA r4-10)
     expect(others.right).toBeLessThanOrEqual(voice.left + 0.5);
     expect(voice.right).toBeLessThanOrEqual(tag.left + 0.5);
     expect(tag.right).toBeLessThanOrEqual(1280);
@@ -441,4 +457,45 @@ test('a broken nav is ignored: the normal lower area stays', async ({ openView, 
     await expect(page.locator('#nav')).toBeHidden();
     await expect(page.locator('#lower')).toBeVisible();
   }
+});
+
+test('r4-07: "Too early: press again" shows in the grey note row on NEEDS PERMISSION', async ({ openView, page }, testInfo) => {
+  await openView({ ...wb4State('worst-band-permission'), note: 'Too early: press again' });
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'permission');
+  await expect(page.locator('#voice-note')).toBeVisible();
+  await expect(page.locator('#voice-note')).toHaveText('Too early: press again');
+  await common(page, 'permission-too-early', testInfo);
+});
+
+test('r5-03: the no-session-chosen note says how to choose and fits one row', async ({ openView, page }) => {
+  await openView(wb4State('none'));
+  const note = page.locator('#voice-note');
+  await expect(note).toHaveText('No session chosen: press up to open the list');
+  expect((await rect(page, '#voice-note')).height).toBeLessThanOrEqual(40);
+  expect(await note.evaluate((e) => e.scrollWidth <= e.clientWidth)).toBe(true);
+});
+
+// ---- QA r5-07 / r4-10: project rows lead with the folder name; a missing folder says so ----
+test('project rows: base name first (bold), path dimmer, MISSING word, one row, base never cut first', async ({ openView, page }, testInfo) => {
+  const base = wb4State('new-session');
+  const rows = base.nav.rows.map((r, i) => (i === 1 ? { ...r, missing: true } : r));
+  rows.push({ label: `/home/user/${'x'.repeat(40)}/${'long-folder-name-'.repeat(6)}end` });
+  await openView({ ...base, nav: { ...base.nav, rows, row: 0 } });
+  const info = await page.locator('#nav .label.proj').evaluateAll((ls) => ls.map((l) => ({
+    base: l.querySelector('.base').textContent,
+    baseFull: l.querySelector('.base').scrollWidth <= l.querySelector('.base').clientWidth,
+    weight: getComputedStyle(l.querySelector('.base')).fontWeight,
+    dirColor: getComputedStyle(l.querySelector(".dir")).color,
+    baseColor: getComputedStyle(l.querySelector(".base")).color,
+    fits: l.scrollWidth <= l.clientWidth,
+    h: l.getBoundingClientRect().height,
+  })));
+  expect(info[0].base).toBe('checkout-flow');
+  expect(info[1].base).toBe('revview');
+  expect(info.every((i) => i.fits && i.baseFull && Number(i.weight) >= 700 && i.dirColor !== i.baseColor && i.h <= 40)).toBe(true);
+  expect(info[4].base).toMatch(/^long-folder-name-.*end$/);
+  await expect(page.locator('.row .word')).toHaveText(['MISSING']);
+  await expect(page.locator('#row1-word')).toHaveText('MISSING');
+  await common(page, 'new-session-missing', testInfo);
+  await shot(page, 'wb4-new-session-missing');
 });
