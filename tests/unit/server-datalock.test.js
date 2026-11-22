@@ -103,13 +103,23 @@ test('New session by the wheel is refused while locked and works after the unloc
   assert.deepEqual(runner.started, ['/p/one']);
 });
 
-test('without dataLock a POSTed RevviewDataLock is applied as before; unlocked at once', async (t) => {
+test('without dataLock (and no dev bridge) a POSTed RevviewDataLock or RevviewStarting is refused with 403', async (t) => {
   const live = await startLiveServer({ port: 0 });
   t.after(() => live.close());
   assert.equal(live.dataLocked(), false);
   await live.whenUnlocked();
-  const r = await post(live, { hook_event_name: 'RevviewDataLock', locked: true });
-  assert.equal(r.status, 204);
+  for (const body of [{ hook_event_name: 'RevviewDataLock', locked: true }, { hook_event_name: 'RevviewStarting' }]) {
+    assert.equal((await post(live, body)).status, 403);
+  }
+  assert.equal(live.state().locked, false);
+  assert.notEqual(live.state().view, 'insert-key');
+  assert.notEqual(live.state().view, 'starting');
+});
+
+test('with the dev bridge (emulator, tests) a POSTed RevviewDataLock is still applied when there is no --data-lock', async (t) => {
+  const live = await startLiveServer({ port: 0, devBridge: true });
+  t.after(() => live.close());
+  assert.equal((await post(live, { hook_event_name: 'RevviewDataLock', locked: true })).status, 204);
   assert.equal(live.state().locked, true);
   await post(live, { hook_event_name: 'RevviewDataLock', locked: false });
   assert.equal(live.state().locked, false);

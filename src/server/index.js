@@ -320,6 +320,12 @@ export async function startLiveServer({
         dataMonitor?.check();
         return res.writeHead(204).end();
       }
+      // the server makes both states itself (--boot, --data-lock): outside the dev bridge nothing may post them
+      // (a posted RevviewStarting with no session would stay on screen, a posted RevviewDataLock without --data-lock
+      // would show INSERT KEY while New session still starts)
+      if (!devBridge && (event.hook_event_name === 'RevviewStarting' || event.hook_event_name === 'RevviewDataLock')) {
+        return text(res, 403, `${event.hook_event_name} is not accepted over HTTP (dev bridge only)`);
+      }
       if (!apply(event)) return text(res, 500, 'state core failed; event ignored');
       try {
         readAloud?.onEvent(event, board, selectedKey(board));

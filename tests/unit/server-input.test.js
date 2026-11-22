@@ -222,6 +222,16 @@ test('a POSTed RevviewStarting after the boot never drops presses, not even for 
   });
 });
 
+test('after the boot is done a press while the view is starting is not dropped (the rule keys on the booting flag, not on the phase)', async () => {
+  await withServer({ devBridge: true, boot: true }, async (s) => {
+    s.bootDone();
+    await postEvent(s, { hook_event_name: 'RevviewStarting' });
+    assert.equal(s.state().view, 'starting');
+    await postEvent(s, { hook_event_name: 'RevviewButton', button: 'up', gesture: 'tap' });
+    assert.deepEqual((await buttons(s)).gestures.map((x) => x.dropped), [false]);
+  });
+});
+
 test('GET /buttons headers and origin check', async () => {
   await withServer({}, async (s) => {
     const r = await fetch(`${s.url}/buttons`);
