@@ -1,0 +1,18 @@
+{
+  "view": "unknown",
+  "activity": "unknown",
+  "offline": false,
+  "locked": false,
+  "repo": null,
+  "branch": null,
+  "tool": null,
+  "file": null,
+  "diff": {
+    "added": 0,
+    "removed": 0
+  },
+  "command": null,
+  "output": null,
+  "others": 0,
+  "diffIncomplete": false
+}

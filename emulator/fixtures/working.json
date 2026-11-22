@@ -12,5 +12,7 @@
     "removed": 1
   },
   "command": "git -c color.ui=always diff --stat && printf '\\033[32m2 pas…",
-  "output": "2 passed in 0.01s"
+  "output": "2 passed in 0.01s",
+  "others": 0,
+  "diffIncomplete": false
 }

@@ -12,5 +12,7 @@
     "removed": 0
   },
   "command": null,
-  "output": null
+  "output": null,
+  "others": 0,
+  "diffIncomplete": false
 }

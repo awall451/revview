@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { initialState, replay } from '../../src/state/index.js';
+import { initialBoard, replayView } from '../../src/state/index.js';
 
 // Regenerate expected files with REVVIEW_UPDATE_EXPECTED=1 (see src/state/README.md).
 const DIR = new URL('../../fixtures/sessions/', import.meta.url);
@@ -21,7 +21,7 @@ for (const name of names) {
   test(`replay of ${name}.jsonl matches ${name}.expected.json`, () => {
     const text = fs.readFileSync(new URL(`${name}.jsonl`, DIR), 'utf8');
     const events = text.split('\n').filter((l) => l.trim() !== '').map((l) => JSON.parse(l));
-    const states = replay(events, initialState());
+    const states = replayView(events, initialBoard());
     assert.equal(states.length, events.length);
     const actual = events.map((ev, i) => ({ event: label(ev), state: states[i] }));
     const expectedUrl = new URL(`${name}.expected.json`, DIR);

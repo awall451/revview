@@ -7,8 +7,8 @@ const isStr = (x) => typeof x === 'string' && x !== '';
 
 export function initialState() {
   return {
-    view: 'starting',
-    activity: 'starting',
+    view: 'unknown',
+    activity: 'unknown',
     offline: false,
     locked: false,
     repo: null,

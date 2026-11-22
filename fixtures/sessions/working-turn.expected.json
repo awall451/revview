@@ -15,7 +15,9 @@
         "removed": 0
       },
       "command": null,
-      "output": null
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
     }
   },
   {
@@ -34,7 +36,9 @@
         "removed": 0
       },
       "command": null,
-      "output": null
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
     }
   },
   {
@@ -53,7 +57,9 @@
         "removed": 0
       },
       "command": null,
-      "output": null
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
     }
   },
   {
@@ -72,7 +78,9 @@
         "removed": 0
       },
       "command": null,
-      "output": null
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
     }
   },
   {
@@ -91,7 +99,9 @@
         "removed": 0
       },
       "command": null,
-      "output": null
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
     }
   },
   {
@@ -110,7 +120,9 @@
         "removed": 1
       },
       "command": null,
-      "output": null
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
     }
   },
   {
@@ -129,7 +141,9 @@
         "removed": 1
       },
       "command": null,
-      "output": null
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
     }
   },
   {
@@ -148,7 +162,9 @@
         "removed": 1
       },
       "command": null,
-      "output": null
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
     }
   },
   {
@@ -167,7 +183,9 @@
         "removed": 1
       },
       "command": "git -c color.ui=always diff --stat && printf '\\033[32m2 pas…",
-      "output": null
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
     }
   },
   {
@@ -186,7 +204,9 @@
         "removed": 1
       },
       "command": "git -c color.ui=always diff --stat && printf '\\033[32m2 pas…",
-      "output": "2 passed in 0.01s"
+      "output": "2 passed in 0.01s",
+      "others": 0,
+      "diffIncomplete": false
     }
   },
   {
@@ -205,26 +225,30 @@
         "removed": 1
       },
       "command": "git -c color.ui=always diff --stat && printf '\\033[32m2 pas…",
-      "output": "2 passed in 0.01s"
+      "output": "2 passed in 0.01s",
+      "others": 0,
+      "diffIncomplete": false
     }
   },
   {
     "event": "SessionEnd",
     "state": {
-      "view": "done",
-      "activity": "done",
+      "view": "ended",
+      "activity": "ended",
       "offline": false,
       "locked": false,
       "repo": "repo",
       "branch": null,
-      "tool": "Bash",
+      "tool": null,
       "file": null,
       "diff": {
-        "added": 4,
-        "removed": 1
+        "added": 0,
+        "removed": 0
       },
-      "command": "git -c color.ui=always diff --stat && printf '\\033[32m2 pas…",
-      "output": "2 passed in 0.01s"
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
     }
   }
 ]

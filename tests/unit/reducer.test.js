@@ -22,12 +22,12 @@ function deepFreeze(o) {
 
 test('initialState', () => {
   assert.deepEqual(initialState(), {
-    view: 'starting', activity: 'starting', offline: false, locked: false, repo: null, branch: null,
+    view: 'unknown', activity: 'unknown', offline: false, locked: false, repo: null, branch: null,
     tool: null, file: null, diff: { added: 0, removed: 0 }, command: null, output: null,
   });
   assert.notEqual(initialState(), initialState());
   assert.ok(isState(initialState().view));
-  assert.equal(STATES.length, 7);
+  assert.equal(STATES.length, 9);
 });
 
 test('SessionStart -> waiting, sets repo, keeps per-turn data', () => {
@@ -185,7 +185,7 @@ test('PostToolUseFailure: working, Bash output from error, no diff', () => {
   assert.deepEqual(s.diff, { added: 0, removed: 0 });
   const t = reduce(null, e('PostToolUseFailure', { tool_name: 'Edit', tool_input: EDIT_INPUT, tool_response: EDIT_RESPONSE, error: 'x' }));
   assert.deepEqual(t.diff, { added: 0, removed: 0 });
-  assert.equal(reduce(null, e('PostToolUseFailure', {})).activity, 'starting');
+  assert.equal(reduce(null, e('PostToolUseFailure', {})).activity, 'unknown');
 });
 
 test('unknown tool names are accepted without diff', () => {
