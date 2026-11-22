@@ -1,6 +1,6 @@
 # STATE
 
-Updated 2026-11-22 (one-shot cycle: wheel buttons 5 read aloud merged, ab44fc2, 862 tests).
+Updated 2026-11-22 (one-shot cycle: schedule diagnosis, no product change; before it WB5 read aloud merged, ab44fc2, 862 tests).
 
 ## Roadmap (the charter's four stages)
 
@@ -30,6 +30,8 @@ Updated 2026-11-22 (one-shot cycle: wheel buttons 5 read aloud merged, ab44fc2, 
 ## In flight
 
 Nothing. No ready branch (other than this notes branch), no worktree, nothing held.
+
+Schedule (one-shot 20261122T174730Z-o-27fe95, answered): scheduled slots were skipped by the daily cap, which the owner's one-shots also use up; the cause is in the kit, see JOURNAL.md and ESCALATIONS.md 2026-11-22. Nothing for the team to build. Normal cycles have not run since 06:45Z on 2026-11-22, so the Next list below is untouched.
 
 ## Owner decisions
 
@@ -63,7 +65,7 @@ Known limits from the round 3 fixes: a prompt tied to a call whose PostToolUse w
 
 ## Small follow-ups
 
-- (g) Publish is refused since 09:09: the console's secret scan flags `tests/unit/input-keymap.test.js` in commit 0e34fc3 (rule generic-api-key, a false positive in a test literal). The commit is on main and cannot be rewritten by the team: ask the owner in a normal cycle (allow-list it, or say how to proceed). Not handled in the WB3 one-shot (out of the job).
+- (g) Publish is refused since 09:09: the console's secret scan flags `tests/unit/input-keymap.test.js` in commit 0e34fc3 (rule generic-api-key, a false positive in a test literal). The commit is on main and cannot be rewritten by the team: ask the owner in a normal cycle (allow-list it, or say how to proceed). Not handled in the WB3 one-shot (out of the job). Update 2026-11-22: a publish went through at 16:54Z (main 5521cf5), so this refusal seems resolved; confirm with owner-publish status in a normal cycle and then delete this item.
 
 - (c) Developer page: the diagonal calibration assumes resolution in CSS px.
 - (d) `tests/unit.sh` and `tests/emulator.sh` are no longer run by the check; remove them or keep them as developer shortcuts. Optional hardening for a later, separately approved change: fail unit/emulator when zero tests passed; a `timeout` around the runners.

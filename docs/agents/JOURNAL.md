@@ -147,3 +147,19 @@ Engine: Piper first, espeak-ng as fallback, as the standing default said; chosen
 Not proven: any sound at all (no engine, no audio device), voice quality, start delay, mic bleed, Piper. If node is hard-killed a speech process can finish its sentence (written in DECISIONS).
 
 Left for a normal cycle: replies to 20261122T064434Z-o-942fed and the WB3 message (both `planned`, all of WB1-6 are now merged), the publish refusal (follow-up (g); no publish was requested this cycle because it would be refused again).
+
+## 2026-11-22: one-shot cycle (the schedule "is messing up and seems to have a bug")
+
+Owner message 20261122T174730Z-o-27fe95: "start a one-shot. Our schedule is messing up and seems to have a bug". The repo has nothing called a schedule (no code, no doc), so the lead took it as the team's own cycle schedule (the kit's `/etc/agent-kit/schedule`, kit 0.16.0) and read, without changing anything: the schedule, `/var/lib/agent-kit/schedule.log`, `schedule.used`, the cycle ledger and the scripts `agent-kit-schedule` and `lead-cycle`. The kit is read-only for the team: nothing was fixed, the findings went to the owner in the reply and to ESCALATIONS.md. No product change, `tools/check` untouched.
+
+Found (all times UTC; the schedule's zone is America/New_York = UTC-5):
+
+1. Why slots did not run: the 12:00 and 12:45 slots (17:00Z, 17:45Z) are logged "skipped: daily cap (11/8)". The 11 counted cycles of 2026-11-22 are 4 normal cycles, 1 planning cycle and 6 owner one-shots (WB design, WB2 review, WB3-WB6). One-shots and planning cycles run in spite of the cap but still count toward it (written so in `lead-cycle`), so the owner's own jobs used up the room the scheduled slots needed. A skipped slot is never queued. The owner raised the cap to 15 at 17:46Z (`caps.env`).
+2. A real mismatch: the cap counts per UTC day (`date +%F` on a VM in UTC, in both `lead-cycle` and `agent-kit-schedule tick`), the slots are per New York day. Three of the 11 (02:14Z, 03:34Z, 04:39Z) ran on the evening of Nov 21 local time. The count resets at 19:00 local, so the evening slots 19:00-22:00 count toward the next day's cap.
+3. A slot used without a log line: `daily@01:00 2026-11-22` is in `schedule.used` but not in the log. `agent-kit-schedule set` marks every slot of the last 10 minutes as used without firing and without a log line (`tick --mark-only`), so a slot can vanish silently when the schedule is saved just after its time (the schedule was saved around 06:00-06:10Z).
+4. Other things that eat slots by design: a slot that falls while a cycle or a one-shot runs is skipped (a job set for a time waits and starts right after: 08:04Z and 12:54Z did). With slots 45-60 minutes apart and cycles that took up to 114 minutes, this will happen often.
+5. Since 06:45Z no normal cycle has run (all six cycles after it were one-shots), so everything "left for a normal cycle" is still waiting: see STATE.md Next.
+
+Forecast given to the owner: with cap 15 and 12 counted after this cycle, today's 13:30, 15:00 and 16:00 slots can run, 17:00 and 18:00 would hit the cap again, and the count resets at 19:00 local. This cycle had to end before 18:30Z or the 13:30 slot would be skipped ("a one-shot job is in progress").
+
+Process note: when an owner message names something the product does not have, look at the kit's readable state (`/var/lib/agent-kit/schedule.log`, the ledger) before asking; do not read `/etc/agent-kit/auth.env`.

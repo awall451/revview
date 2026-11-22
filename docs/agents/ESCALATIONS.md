@@ -26,3 +26,12 @@ Beyond stage 3:
 - Read-aloud on demand. (The spoken summary on Stop is stage 2 and inside.)
 
 Ask: approve widening the scope to these, or keep to stage 3.
+
+## 2026-11-22: the cycle schedule skips slots (kit behaviour, the team cannot change it)
+
+Asked by the owner (message 20261122T174730Z-o-27fe95). Details in JOURNAL.md, same date. For the owner or the kit's maintainer to decide:
+
+- The daily cap counts owner-started one-shots and planning cycles, and scheduled slots are skipped once it is reached ("skipped: daily cap (11/8)" at 12:00 and 12:45 New York time on 2026-11-22). Either keep the cap well above slots + expected jobs, or have the kit not count owner-started cycles against scheduled slots.
+- The cap's day is the UTC day; the schedule's day is the `tz` day. In New York the count resets at 19:00 local.
+- Saving the schedule marks slots of the last 10 minutes as used with no log line (`daily@01:00` on 2026-11-22).
+- Slots closer together than a cycle lasts (cycles here took 12-114 minutes) are skipped while the earlier cycle runs.
