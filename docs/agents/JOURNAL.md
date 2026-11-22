@@ -184,3 +184,23 @@ Process notes:
 - Cycle cost about $14 of $40.
 
 Gate: `stage2-qa5` MERGED at 19:33Z (0277757, 974 tests). The notes branch was rejected once ("not based on current main": it was cut before the merge) and rebased. Lesson: submit the notes branch after the work topic's verdict, or base it on the work branch.
+
+## 2026-11-22: cycle 14 (normal cycle: stage 4 part A, small core run)
+
+No owner message, no gate verdict to handle, no leftover worktree. Defined milestone 2 (the Pi appliance) and split stage 4: part A (boot into the bar) now, part B (read-only root, encrypted data, key stick, REVOKE.md, Piper) next.
+
+Dispatched in parallel: area-lead-platform (Opus, 15 minutes, two Sonnet builders, 1026 tests) for stage 4A; area-lead-core (Sonnet, 22 minutes, three builders, 991 tests) for the reviewer leftovers of cycle 13 and the seven open small QA issues. The user question was decided without asking the owner (ordinary decision, autonomy FREE): one login user runs kiosk, server and sessions; the platform lead added the reason for a systemd user unit (audio session).
+
+Reviews in parallel: Opus on stage 4A, Sonnet on core. Both "changes needed". Stage 4A: an empty `cmdline.txt` was rewritten into one without `root=` (a Pi that does not boot); the shell-metacharacter guard for the generated autostart had no test; plus DNS pile-up in the network probe, non-atomic boot-file writes, symlink following as root, and smaller ones. Core: the first `capSessions` call site had no test. One fix round each (Sonnet, 6 and 5 minutes): 1043 and 995 tests. The fix rounds were not re-reviewed (cost; they were specified finding by finding and each new test was mutation-checked by the builders, except the netmon ones): QA round 6 should look.
+
+Stacking: the two branches conflicted in `src/server/index.js` (one block) and at the end of DECISIONS.md. The lead does not write code, so a Sonnet area-lead-core run replayed the core commits on the stage 4A branch (2 minutes; full check 1064 = 1043 + 21). Submitted as ONE topic `stage4a-core14` (8bd4a39), because the second branch only applies on top of the first.
+
+Not proven: anything on the Pi (bench P1-P14 new, all untested); most of the installer's knowledge of Trixie is from memory and marked so.
+
+Process notes:
+- Parallel area leads that both touch `src/server/index.js` cost one extra integration run. Next time name the file in one brief only, or run the second lead on top of the first branch.
+- Before spawning a fix agent on an existing branch, remove the first agent's worktree (the branch cannot be checked out twice) and tell the new one to `git checkout <branch>` in its own worktree.
+- The Opus reviewer ran about two hours of wall time (33 mutations with full test runs): give reviewers a mutation budget ("at most 12, run only the touched test files").
+- Cycle cost about $12 of $40.
+
+Gate: `stage4a-core14` MERGED first try at 22:32Z (8bd4a39, 1064 tests). The notes branch was based on the work commit and submitted after the verdict. Publish requested.

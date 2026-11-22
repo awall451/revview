@@ -1,6 +1,6 @@
 # STATE
 
-Updated 2026-11-22 (cycle 13, a normal cycle: QA round 5, stage 2 hook wiring, core hardening; all merged as ONE topic `stage2-qa5`, gate main 0277757, 974 tests). Milestone 1 is CLOSED; stage 2 (hook wiring) is BUILT, unproven on the Pi.
+Updated 2026-11-22 (cycle 14, a normal cycle: stage 4 part A (Pi set-up) and a small core run, MERGED together as ONE topic `stage4a-core14`, gate main 8bd4a39, 1064 tests, was 974). Milestone 1 CLOSED; stage 2 BUILT; stage 4 part A BUILT; all of it unproven on the Pi. Current milestone: 2 (the Pi appliance).
 
 ## Roadmap (the charter's four stages)
 
@@ -29,16 +29,25 @@ Updated 2026-11-22 (cycle 13, a normal cycle: QA round 5, stage 2 hook wiring, c
 
 ## In flight
 
-- Nothing. `stage2-qa5` MERGED at 19:33Z as 0277757 (16 commits: core hardening, stage 2 hook wiring, QA round 5 fixes + reviewer fix round; 974 tests, was 862; `tools/check` untouched, no new dependency). Ready and work branches deleted. A publish was requested.
+- Nothing. `stage4a-core14` MERGED at 22:32Z as 8bd4a39 (7 commits, 47 files, +2652 -156; `tools/check` untouched, no new dependency). Ready and work branches deleted. A publish was requested.
+- `ready/lead-notes-14` (these notes): next cycle delete it once merged.
 - No worktree left. No held change.
 
-What `stage2-qa5` contains (details in DECISIONS.md "core hardening", "stage 2 hook wiring", and the entries after them; `hooks/README.md`):
-- STAGE 2 HOOK WIRING: `hooks/event.mjs` (posts every consumed hook event to `/event`, never `PermissionRequest` or `Revview*`; plus `RevviewContext` with git toplevel and branch; 1 s deadline, always exit 0, silent), `hooks/settings.json` (11 events + PermissionRequest 600 s; replaces `settings-snippet.json`), `hooks/install.mjs` (idempotent merge into a Claude Code settings file, only entries marked `# revview-hook`, `--remove`). Real Claude Code 2.1.330 recordings in `fixtures/sessions/hook-wiring/` (bar follows repo/branch/Write/Edit; first real PostToolUseFailure and StopFailure). `RevviewStarting`, `RevviewNetwork`, `RevviewDataLock` are NOT sent by hooks: they belong to stage 4 (boot, network monitor, key stick), written in DECISIONS. `speakOnStop` documented only. `pi/install.sh` does not install the hooks yet (stage 4 must first decide which user runs the sessions). Bench H1-H7 untested. Not provoked: PermissionDenied, worker_permission_prompt. Headless `claude -p` never delivered StopFailure (interactive did).
-- STATE CORE: id-less events never reach a quiet owned placeholder; SessionEnd ignored for placeholders; duplicate PostToolUse ignored (r3-07, last 64 closed ids); late Post after Stop + idle_prompt stays WAITING (r3-08); Allowed/Denied mark for any tool, also offline (r5-01, r5-02); a failed turn = WAITING FOR ME + bold "Turn failed: <error>" (r3-05); an owned session whose tmux window is missing from TWO consecutive listings ends (a dead Claude leaves the bar in about 5-10 s; no timer; one transient empty listing does nothing; the id is not remembered as ended); "<repo> ended" note; restart note; WebFetch/WebSearch/MCP prompt targets readable ("github: create_issue"); bidi/zero-width stripped.
-- SPEECH: real espeak-ng 1.51 smoke test (wav output, no audio device, NO SOUND HEARD): shipped command line works, stop kills the process group, `[[ ]]` is phoneme input (stripped), `< >` harmless without `-m`. WebFetch spoken with host, WebSearch with query.
-- Reviews: Sonnet on core hardening (approve); Opus inside the hook-wiring run (2 blocking fixed); Opus on the QA fixes (1 blocking: one empty tmux listing ended every session for good; fixed with the two-listing rule); Sonnet on the fix round (approve).
+## Milestone 2: the Pi appliance (charter stage 4)
 
-Schedule (one-shot 20261122T174730Z-o-27fe95, answered): scheduled slots were skipped by the daily cap, which the owner's one-shots also use up; the cause is in the kit, see JOURNAL.md and ESCALATIONS.md 2026-11-22. Nothing for the team to build. Normal cycles have not run since 06:45Z on 2026-11-22, so the Next list below is untouched.
+Checkable outcomes:
+- A (BUILT, cycle 14): `sudo bash pi/install.sh --user NAME [--rotate 90|270] [--output HDMI-A-1] [--dry-run] [--root DIR] /opt/revview` takes a fresh Trixie to "boots into the bar": packages, one login user for kiosk + server + Claude sessions, server as a systemd USER unit with linger (`--input --sessions --boot --netmon`), kiosk (`pi/kiosk.sh`, respawn with back-off, pause markers), rotation (cmdline, wlr-randr, touch udev), quiet boot, lightdm autologin, hooks install. All file edits are in `pi/setup.mjs`, tested against a fake root. `pi/README.md` is the owner's step list; bench P1-P14 untested.
+- B (NEXT): read-only root (overlay) and power-cut behaviour; LUKS data partition unlocked from a key stick (`~/.claude`, `~/.claude.json`, repos, push credentials ONLY: `~/.config/labwc` and `~/.config/revview` stay on the root so the bar shows while locked); the unlock step sends `RevviewDataLock` and only then the key-on session may start (today `--boot` starts the `REVVIEW_START` session at server start: move it behind the unlock); `docs/REVOKE.md`; Piper install; installer files must be written with the overlay off.
+- C: QA round 6 on main (the core changes of cycle 14, `--boot`, `--netmon`, the installer against a fake root as the owner would use it, README walk-through), fixes.
+- D: the bar says STARTING, not UNKNOWN "No events from this session yet", between the key-on session's window appearing and its first hook (needs a guard so a lost first hook cannot stick); bench items D1, D3, R14, H4 rewritten for the user unit (today only a note above P1).
+- Done when the owner's step list from flash to bar is complete, with every hardware step a bench item.
+
+What `stage4a-core14` contains (DECISIONS.md "stage 4A" with "Review fixes (stage 4A)", and "core small run (cycle 14)"):
+- STAGE 4A: see A above. Decisions: one login user (the WB6 `revview` system user and system unit are gone; the installer removes the old unit); a user unit because a system unit has no XDG_RUNTIME_DIR / PipeWire and the Claude sessions inherit the server's environment; unit file in `/etc/systemd/user/` (outside the home); repo at `/opt/revview`; node only checked (22+), never installed; Chromium opens `src/view/boot.html?port=8138` (NO LINK until the server answers), profile in `$XDG_RUNTIME_DIR` (nothing written to the SD card); `--boot`: the server applies `RevviewStarting` itself, then starts one session in `REVVIEW_START` (`/etc/revview/server.env`) only when tmux has no revview window; `--netmon`: online = a default route on any interface (`/proc/net/route`) + TCP connect to `api.anthropic.com:443` (`REVVIEW_NETMON_HOST`) within 3 s, every 10 s (5 s offline), OFFLINE after 2 failures, clear after 1 success, one probe at a time, cancellable DNS. Safety: paths must match `^/[A-Za-z0-9._/-]+$`; a `cmdline.txt` without `root=` is left untouched (exit 1); atomic writes; symlinked targets refused; one backup `<file>.revview-backup`.
+- FROM MEMORY, unproven: Chromium flags, package names, lightdm `autologin-user`, that a user labwc autostart replaces the system one, the linger file layout and `%h` in `PATH=`, the Imager / Claude installer / NodeSource steps in the README, the sample boot files in `tests/unit/fixtures/pi/`, `rotate=270` for a flipped mount.
+- CORE: a once-missing owned session survives the cap (both call sites); late hook of an ended owned session pinned as a known limit; failed-turn message wraps over the free rows (r5b-02); tokens over 24 characters break after `/ - _ . = :` (zero-width space in the shown text only; r5-06); MISSING mark on project rows (`RevviewProjects.missing`, re-checked on the owned poll; r5-07); note "No session chosen: press up to open the list" (r5-03); band shows a triangle + count of OTHER sessions needing permission, `9+` (r4-05); "Too early: press again" only for the pure under-1.5-s refusal (new reason `too-early`), cleared when the shown prompt changes (r4-07); 24 px gap before the band hint (r4-10). The allow rule itself is unchanged.
+- Also fixed: flaky test `server-speech.test.js` "close() kills a running stand-in" (1 of 20 failed unloaded, 8 of 20 under load; the test asserted the child's child dead at once; it now polls).
+- Reviews: Opus on stage 4A (changes needed: 2 blocking, 8 smaller; 30 of 33 mutations caught) and Sonnet on core (changes needed: 1 blocking test gap); one fix round each (Sonnet); the fix rounds were NOT re-reviewed, only re-checked (QA round 6 should look at them).
 
 ## Owner decisions
 
@@ -60,14 +69,14 @@ Design: `docs/BUTTONS.md`; recordings `fixtures/buttons/`. Phases:
 
 ## Next
 
-1. (done in cycle 13: `stage2-qa5` merged, publish requested.) Start with item 2.
-2. Stage 4, the Pi image (area-lead-platform, Opus; nothing can run here: lint, test what can be tested, bench items). Decide first, in DECISIONS.md (or `owner-inbox ask` with a default): WHICH USER runs the server and the Claude sessions (the `revview` system user in `pi/revview.service` has no Claude sign-in; the hooks must be installed for that same user with `hooks/install.mjs`). Then: kiosk start on boot (Chromium on the 1280x400 panel), rotation, quiet boot, power-cut behaviour (read-only root or equivalent), who sends `RevviewStarting` / `RevviewNetwork` / `RevviewDataLock`, Piper install, hooks install in `pi/install.sh`.
-3. Small core run (area-lead-core, Sonnet), reviewer leftovers of cycle 13: pass `[...owned, ...missing]` to `capSessions` (board.js ~410; a once-missing session can be evicted at the cap); pin in a test what a late hook of an ended owned session does (tests/unit/board-owned-gone.test.js ~31); a test that a repeated identical PreToolUse clears the answered mark; r5b-02 (failed-turn message wraps into the free rows); r5-06, r5-07; r4-05, r4-07, r4-10; hold-mode push-to-talk is still not built.
-4. QA round 6 after stage 4's testable parts or after item 3 (every 3rd cycle).
+1. (done in cycle 14: `stage4a-core14` merged, publish requested.) Start with items 2 and 3 in parallel.
+2. Milestone 2 part B (area-lead-platform, Opus): see the milestone. Two or three decisions to write first: overlay root by raspi-config's overlayfs or own initramfs hook; how the key stick is recognised (label / UUID, key file path); what the bar shows and what works while locked.
+3. QA round 6 on main (milestone 2 part C), in parallel with part B. It is due: last QA was cycle 13.
+4. Milestone 2 part D (area-lead-core, Sonnet): STARTING until the first hook of the key-on session; bench items rewritten for the user unit; reviewer leftovers of cycle 14 if QA confirms them. Hold-mode push-to-talk is still not built (tap mode is the charter's and the default).
 
 ## QA issues
 
-Closed on work/core-small-14 (cycle 14, awaiting gate): r5-06, r5-07, r5b-02, r5-03, r4-05, r4-07, r4-10. Were open after `stage2-qa5`: r5-06 (a long path breaks mid-word), r5-07 (New session list does not mark a missing folder), r5b-02 (failed-turn message cut to one line), r5-03 partly (the note does not say how to choose a session), r4-05, r4-07, r4-10. Closed on the branch: r5-01..05, r5b-01, r5b-03, r3-05, r3-07, r3-08.
+No open QA issue after `stage4a-core14` (closed there, not yet re-run by QA: r5-06, r5-07, r5b-02, r5-03, r4-05, r4-07, r4-10). Closed earlier: r5-01..05, r5b-01, r5b-03, r3-05, r3-07, r3-08.
 
 Known limits: a prompt tied to a call whose PostToolUse was lost still shows NEEDS PERMISSION until Stop/idle_prompt/a driver prompt; a late hook from a really dead owned Claude shows its session again; a posted SessionEnd hides a live owned window for up to one 5 s poll; a duplicate Post whose Pre was never seen is not caught; sessions not started by revview that die without SessionEnd stay on the bar; QA noted, unproven: if `/clear` changes the session id inside the same tmux window, the buttons may lose that window.
 
