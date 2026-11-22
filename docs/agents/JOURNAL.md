@@ -107,3 +107,19 @@ Facts worth remembering: the uuid given with `--session-id` is the `session_id` 
 Not proven: voice in tmux, anything on the Pi (bench S1-S6 untested); the 540 s no-answer case for a subagent prompt.
 
 Process notes: again the independent reviewer found what the builders did not (shell injection through tmux formats): keep it for WB4's selection path. Agents cannot remove their own worktree (sandbox): the lead removes it from the main checkout after checking it is clean. Do not run `pgrep -af claude` in the lead's shell: it prints the whole cycle prompt. The publish refusal (secret-scan false positive in commit 0e34fc3) is noted in STATE.md follow-up (g), not handled here.
+
+## 2026-11-22: one-shot cycle (wheel buttons 4: chosen session, bar, list, menu, home)
+
+Owner message 20261122T061830Z-o-003972 (backlog 0475c7, owner issue 20261122T061816Z-i-2ec1f0). One topic, `wb4-selected`, merged first try as 9fe31a4 (794 tests, was 666). `tools/check` untouched, no new dependency.
+
+Dispatched: area-lead-core (Opus, Sonnet builders, about 29 minutes) built the driver-owned selection in the board, removed the runner's second "chosen", the bar marks, list, menu, home, projects file, 13 screenshots, Playwright flows by dev keys (763 tests). Then in parallel: reviewer (Opus, fresh context; approve, 28 mutations, 4 non-blocking findings) and QA round 4 on the branch (real tmux with a stand-in claude, 58 screenshots; 4 major, 5 minor, 2 cosmetic). A second area-lead-core run (Opus, four Sonnet builders, about 19 minutes) on `work/wb4-fixes` fixed the 4 majors (restart hid running sessions; list cursor was a row number; New session gave no feedback; deny looked like allow), the reviewer's two findings and r4-06/08/09/11. A Sonnet reviewer on the fix diff only: approve, 11 of 13 mutations caught, two non-blocking findings (STATE.md, WB4 entry). r4-05/07/10 stay open.
+
+Decisions made by the team (DECISIONS.md "wheel buttons 4"): home order follows BUTTONS.md (done before working), not the old board ranking; press with a prompt shown is only ever an allow attempt; Projects and Settings are read-only; internal events are refused over HTTP even with the dev bridge.
+
+Not proven: anything on the Pi or pods (bench V1-V10 untested); the fix round against real tmux; Claude Code's folder-trust question for a new session.
+
+Process notes:
+- QA on the unmerged branch in parallel with the reviewer worked: the reviewer checked the rules, QA found what the rules do not cover (restart, feedback). QA needs its own tmux socket directory and port range; say so in the brief.
+- A second area lead cannot use the first one's worktree: branch `work/<topic>-fixes` from the first branch in its own worktree and submit the stack as one topic.
+- The reviewer's long run (53 minutes for 3200 lines with 28 mutations) was the slowest step; for a fix round a Sonnet reviewer on the fix diff alone took 4 minutes.
+- QA's untracked issue files in the main checkout were committed by the fixing lead on its branch; the lead deleted the untracked copies before resetting main.
