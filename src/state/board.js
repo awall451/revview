@@ -253,10 +253,15 @@ const runningAgent = (event, agent) => Array.isArray(event.background_tasks) && 
 // Pending permission prompts after `event` (arrays keep their reference when nothing changes).
 function pendingAfter(pending, event, agent, toolUseId) {
   const name = event.hook_event_name;
+  // An entry not tied to a call is cleared by any later tool event of the same agent (generic entries: of the
+  // main thread): an agent with an open dialog neither starts nor finishes other calls. A tied entry may be one
+  // of several parallel calls, so only its own Post/Denied clears it.
+  const sameAgent = (p) => p.tuid === null && (p.agent === agent || (p.agent === null && agent === ''));
   if (POST.has(name) || name === 'PermissionDenied') {
-    return withoutPending(pending, (p) => (toolUseId !== null && p.tuid === toolUseId)
-      || (p.tuid === null && p.agent === agent && p.tool === event.tool_name)
-      || (p.agent === null && agent === ''));
+    return withoutPending(pending, (p) => (toolUseId !== null && p.tuid === toolUseId) || sameAgent(p));
+  }
+  if (name === 'PreToolUse' && toolUseId !== null && isStr(event.tool_name)) {
+    return withoutPending(pending, (p) => sameAgent(p));
   }
   if (name === 'SubagentStop') return isStr(event.agent_id) ? withoutPending(pending, (p) => p.agent === event.agent_id) : pending;
   if (name === 'Stop') {
@@ -324,7 +329,12 @@ function applyToSession(b, live, id, event) {
   }
   if (name === 'Notification' && PERMISSION_TYPES.has(event.notification_type)) {
     if (pending.length > 0 || finished) return b;
-    pending = [{ agent: null, tuid: null, tool: prev.tool, file: prev.file, command: prev.command, output: prev.output, outputLines: prev.outputLines, since: b.tick + 1 }];
+    // the notification carries no tool: describe the open call (if any) only, never the last finished one
+    const open1 = prevOpen.length > 0;
+    pending = [{
+      agent: null, tuid: null, tool: open1 ? prev.tool : null, file: open1 ? prev.file : null,
+      command: open1 && prev.tool === 'Bash' ? prev.command : null, output: null, outputLines: [], since: b.tick + 1,
+    }];
     return commit(prev, prevOpen, prevDropped);
   }
 
@@ -364,7 +374,8 @@ export function boardView(board) {
   const buttons = buttonsView(b);
   const shownKey = b.focus !== null && has(b.sessions, b.focus) ? b.focus : pickFocus(b, null);
   const shown = shownKey === null ? null : b.sessions[shownKey];
-  const overlay = (activity) => (b.locked ? 'insert-key' : b.offline ? 'offline' : activity);
+  // needing the driver outranks OFFLINE; `offline` stays true in the flat state as a secondary mark
+  const overlay = (activity) => (b.locked ? 'insert-key' : b.offline && activity !== 'permission' ? 'offline' : activity);
   if (shown === null) {
     return {
       view: overlay(b.phase),

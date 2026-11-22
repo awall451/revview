@@ -25,7 +25,7 @@ Pure logic that turns Claude Code hook events into the view state (no DOM, no I/
 
 | field | meaning |
 | --- | --- |
-| `view` | what the screen shows: `locked ? 'insert-key' : offline ? 'offline' : activity` |
+| `view` | what the screen shows: `locked ? 'insert-key' : offline && activity !== 'permission' ? 'offline' : activity` (needing the driver outranks OFFLINE; `offline` stays true as a secondary mark) |
 | `activity` | `unknown` (initial), `starting`, `working`, `waiting`, `permission` or `done` (derived from Claude events) |
 | `offline`, `locked` | overlays from the synthetic events below |
 | `repo` | last path segment of `cwd`; set by `SessionStart` and `RevviewContext`, otherwise only filled from a Claude event's `cwd` while still null |
@@ -41,7 +41,7 @@ Pure logic that turns Claude Code hook events into the view state (no DOM, no I/
 | `SessionStart` | activity `waiting`; `source: "compact"` (after an auto compaction mid-turn or `/compact`, recorded) is ignored |
 | `UserPromptSubmit` | `working`; a driver prompt (`isDriverPrompt`) starts a new turn: diff 0/0, tool/file/command/output null, outputLines []. A prompt Claude Code injects itself (`<task-notification>` when a background subagent ends, recorded; or a `source` other than `user`) only sets `working` |
 | `PreToolUse` (needs `tool_name`) | `working`; tool, file (`file_path`/`notebook_path`); Bash: command, output null, outputLines [] |
-| `PermissionRequest` | `permission`; tool/file/command as PreToolUse |
+| `PermissionRequest` | `permission`; tool, file from the request; command = the request's own Bash command (cleaned as PreToolUse), else null; output null, outputLines [] always (a call waiting for permission has produced nothing) |
 | `PostToolUse` (needs `tool_name`) | `working`; tool, file; diff += `countDiff` (the only place diff is counted); Bash: command, output and outputLines |
 | `PostToolUseFailure` | `working`; Bash: output and outputLines from `error`; no diff |
 | `PermissionDenied` | `working` |
@@ -76,11 +76,10 @@ permission prompts, `pre` = the open PreToolUse calls per agent (at most 32); `f
   `PermissionRequest` (no `tool_use_id` in Claude Code 2.1.330) is tied to a `tuid` only when exactly one open
   PreToolUse of that agent has the same tool (and the same input, if the request carries one), else the `tuid` stays empty; it is appended unless the same agent+tuid is already pending. Only the main
   thread's request is "late" after Stop; a subagent's never is. A `permission_prompt` Notification adds a
-  generic entry (`agent: null`) only when nothing is pending and the turn is not finished. The session's
+  generic entry (`agent: null`) only when nothing is pending and the turn is not finished; it carries no tool, so the entry takes tool and file from the session state only while a call is open (command only if that tool is Bash), else all three are null. An entry's output is always null and outputLines [] (it describes the requested call only: a request's own tool/file/Bash command). The session's
   `state.activity` is NOT changed by them: the effective activity is `permission` while `pending` is not empty
   (and tool/file/command/output/outputLines come from `pending[0]`). Answered (entry removed) by `PostToolUse`,
-  `PostToolUseFailure`, `PermissionDenied` with the same `tool_use_id` (or, without a tuid, the same agent and
-  tool; a main-thread Post also clears generic entries); `SubagentStop` clears that agent (and its `pre`);
+  `PostToolUseFailure`, `PermissionDenied` with the same `tool_use_id`. An entry NOT tied to a call (`tuid` null: its Post came first or was lost, or the call was ambiguous) is cleared by any later tool event of the SAME agent key (`PreToolUse` with a `tool_use_id`, `PostToolUse`, `PostToolUseFailure`, `PermissionDenied`, any tool); generic entries count as main-thread. A tied entry may be one of several parallel calls, so other calls do not clear it, and a sibling agent's or the main thread's tool events never clear a subagent's entry (nor a subagent's a main-thread one); `SubagentStop` clears that agent (and its `pre`);
   `Stop` clears the main-thread and generic entries, and a subagent's unless `background_tasks` lists it as running (a missing list means none runs, as in the reducer); an `idle_prompt` Notification clears main-thread and generic entries (Claude Code sends it only when no dialog is open: an Esc'd prompt); a driver prompt clears main-thread and generic entries (an Esc'd prompt
   sends nothing else); an injected `<task-notification>` prompt clears nothing.
 

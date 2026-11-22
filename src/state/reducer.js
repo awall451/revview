@@ -25,7 +25,8 @@ export function initialState() {
 const TURN_RESET = { tool: null, file: null, command: null, output: null, outputLines: [], diff: { added: 0, removed: 0 } };
 
 function computeView(s) {
-  return s.locked ? 'insert-key' : s.offline ? 'offline' : s.activity;
+  // needing the driver outranks OFFLINE (the page shows offline as a secondary mark)
+  return s.locked ? 'insert-key' : s.offline && s.activity !== 'permission' ? 'offline' : s.activity;
 }
 
 function repoFromCwd(cwd) {
@@ -92,8 +93,14 @@ function patchFor(event) {
       if ('command' in patch) setOutput(patch, []);
       return patch;
     }
-    case 'PermissionRequest':
-      return isStr(event.tool_name) ? toolPatch(event, 'permission') : null;
+    case 'PermissionRequest': {
+      // the prompt describes the requested call only: a call waiting for permission has produced nothing
+      if (!isStr(event.tool_name)) return null;
+      const patch = toolPatch(event, 'permission');
+      if (!('command' in patch)) patch.command = null;
+      setOutput(patch, []);
+      return patch;
+    }
     case 'PostToolUse': {
       if (!isStr(event.tool_name)) return null;
       const patch = toolPatch(event, 'working');
