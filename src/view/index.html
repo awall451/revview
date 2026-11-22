@@ -3,26 +3,28 @@
 <head>
 <meta charset="utf-8">
 <title>Revview</title>
+<!-- The markup below is the NO LINK look view.js renders before the first message: the first paint is never an empty band (QA 10). -->
 <link rel="stylesheet" href="view.css">
 <script type="module" src="view.js"></script>
 </head>
-<body>
+<body data-view="no-link">
 <div id="band">
-  <svg id="shape" viewBox="0 0 24 24" aria-hidden="true"></svg>
-  <span id="state-word"></span>
+  <svg id="shape" viewBox="0 0 24 24" aria-hidden="true" data-shape="no-link"><path d="M10.5 5.5H8a6.5 6.5 0 0 0 0 13h2.5" fill="none" stroke="currentColor" stroke-width="3"/><path d="M13.5 5.5H16a6.5 6.5 0 0 1 0 13h-2.5" fill="none" stroke="currentColor" stroke-width="3"/></svg>
+  <span id="state-word">NO LINK</span>
   <span id="others"></span>
   <span id="where"></span>
 </div>
 <div class="row" id="line2">
   <span id="tool"></span>
   <span id="file"></span>
-  <span id="note1"></span>
+  <span id="note1">Display lost the revview server</span>
   <span id="diff"><span id="diff-approx"></span><span id="diff-added"></span><span id="diff-removed"></span></span>
 </div>
 <div class="row" id="line3">
-  <span id="note2"></span>
+  <span id="note2">Claude may still be running</span>
   <span id="sep" hidden>→</span>
   <span id="output"></span>
+  <span id="session" hidden></span>
 </div>
 <!-- #cmdbox is moved by view.js: into line 2 for Bash, else to the start of line 3 -->
 <span id="cmdbox" hidden><span id="prompt">$</span><span id="command"></span></span>

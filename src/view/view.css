@@ -103,6 +103,8 @@ span:empty { display: none; }
 #note1, #note2 { flex: 1 1 0; }
 #output { flex: 1 1 0; }
 #sep { flex: none; color: var(--grey); }
+/* the repo at the right end of line 3, when the band had no room for it (QA 03) */
+#session { flex: 0 1 auto; max-width: 30%; margin-left: auto; font-weight: 700; }
 #diff {
   flex: none;
   margin-left: auto;
@@ -116,7 +118,7 @@ span:empty { display: none; }
 
 #cmdbox {
   flex: 0 1 auto;
-  max-width: 40%;
+  max-width: none;
   min-width: 0;
   display: flex;
   gap: 0.4em;
@@ -124,6 +126,7 @@ span:empty { display: none; }
   font-size: var(--mono-font);
   overflow: hidden;
 }
+#cmdbox.capped { max-width: 40%; } /* only with an output line next to it */
 #cmdbox.wide { flex: 1 1 0; max-width: none; }
 #cmdbox #prompt { flex: none; color: var(--grey); }
 #command { flex: 0 1 auto; min-width: 0; }

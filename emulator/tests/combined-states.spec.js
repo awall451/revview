@@ -64,7 +64,11 @@ for (const view of ['unknown', 'ended', 'no-link']) {
     if (view === 'no-link') await expect(page.locator('#where')).toBeHidden();
     else {
       expect(await page.locator('#where').evaluate((e) => e.scrollWidth - e.clientWidth)).toBeLessThanOrEqual(0);
-      expect(await page.locator('#where').textContent()).toMatch(/2026$/);
+      if (view === 'ended') {
+        // CLAUDE EXITED + hint leave room for the repo only: no branch piece fits, so the repo alone (QA 13)
+        expect(await page.locator('#where').textContent()).toBe('revview');
+        expect(await page.locator('#where').getAttribute('data-full')).toMatch(/^revview · .*2026$/);
+      } else expect(await page.locator('#where').textContent()).toMatch(/2026$/);
     }
     await expectFits(page);
     await checkContrastAndFloor(page, `combined/${view}`, testInfo);

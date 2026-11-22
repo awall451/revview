@@ -396,3 +396,25 @@ Decisions:
 Not solved here: after an Esc'd main-thread prompt the bar stays at NEEDS PERMISSION until the driver's next
 prompt (Claude Code sends no hook for the rejection); a DONE session stays shown over a working one for the
 ~60 s until its `idle_prompt`; the bar still does not say which repo a `+N` session is in (issue 03, view).
+
+## View and server polish (QA round 2026-11-22: 03 08 09 10 11 12 13 14)
+
+- **Which session (03).** The band has no room for `repo` next to WAITING FOR ME or NEEDS PERMISSION plus `+N`.
+  When `others > 0` and the band hides it, the repo (not the branch) shows bold at the right end of line 3
+  (`#session`, at most 30%). The driver needs "which session", not its branch; line 3's output gives way to it.
+- **Reload while the server is down (08).** A page cannot stop Chromium's error page. The live page registers a
+  small network-first service worker (`src/view/sw.js`, served by the server at `/sw.js`) that answers the page
+  and its scripts from its cache when the server does not answer. Rejected: a second always-on static server
+  (more moving parts), a kiosk-side watchdog (not in this repo yet). Not fixable: the first load of a fresh
+  profile. The kiosk must still start on `boot.html`; BENCH-TEST H8 is the proof and is untested.
+- **First paint (10).** `index.html` contains the NO LINK look itself, so the page never paints an empty band
+  before `view.js` runs. (Static fixture pages also start NO LINK for a moment; they are for tests and the
+  developer page.)
+- **Lower bound of zero (11, view half).** `diffIncomplete` with nothing counted shows `+? −?` (unknown), not
+  `≥ +0 −0`. With some count the `≥` form stays. The state half (an id-less lost event marks every session) is a
+  state-core question and stays open.
+- **`+N` from ten on (12)** reads `9+`; the exact number is in `data-full`.
+- **Branch stub (13).** When no cut of the branch fits, the repo alone is shown unless at least two letters of
+  the branch stay readable after the end cut.
+- **OFFLINE note (14).** `Claude exited` / `Claude: not known` for the ended and unknown activities.
+- **Command width (09).** The 40% cap on line 3's command applies only when there is an output line.

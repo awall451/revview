@@ -3,20 +3,25 @@
 The glance view: one static HTML/CSS/JS page shown by Chromium kiosk at 1280x400. No build step, no
 framework. It renders a reducer state (see `src/state/README.md`).
 
-Files: `index.html`, `boot.html` (kiosk start page, see Boot page), `view.css`, `view.js` (ES module), `type.js` (type sizes), `fit.js` (text fitting),
+Files: `index.html`, `boot.html` (kiosk start page, see Boot page), `view.css`, `view.js` (ES module), `sw.js` (service worker, see Reload while the server is down), `type.js` (type sizes), `fit.js` (text fitting),
 `panel.js` (panel size and mm/px conversion; the emulator's `emulator/panel.js` re-exports it).
 
 ## What it shows
 
 - **Band** (top): a shape, the state word, and `repo · branch` (branch left out when null). `repo · branch`
-  is hidden when both are null, or when it would be squeezed to a stub (under about 8 characters).
+  is hidden when both are null, or when it would be squeezed to a stub (under about 8 characters). When no
+  piece of the branch fits, the repo alone is shown (never a bare `repo ·…`; the CSS end cut still applies to a
+  repo that is too long). With other sessions (`+N`) and no room in the band (long state words), the repo moves
+  to `#session`, bold at the right end of line 3 (at most 30% wide, `data-full` = repo), so the driver can tell
+  which session needs them; not for the note views (offline, ended, ...).
 - **Line 2**: the tool and the file (the file is shortened in the middle when it does not fit), and the diff
   as `+N −N` (U+2212) at the right, shown only when added or removed is above 0. Very large counts are
   abbreviated.
-- **Line 3**: the last command (after a `$`) and the last line of output.
+- **Line 3**: the last command (after a `$`) and the last line of output. The command is cut at 40% of the
+  line only when an output line shares the row (class `capped` on `#cmdbox`); alone it may use the whole line.
 - **Bash**: the tool name and file are left out; the command takes line 2 and the output stays on line 3.
 - **starting**, **offline**, **insert-key** show short notes instead of tool, file and command:
-  starting "Not ready for voice yet"; offline "Claude: <activity>" and "No network: voice input will not
+  starting "Not ready for voice yet"; offline "Claude: <activity>" (`Claude exited` when the last activity was ended, `Claude: not known` when unknown) and "No network: voice input will not
   work"; insert-key "Data locked" and "Insert the key stick to unlock". Starting and insert-key show no diff.
 - **unknown**, **ended**, **no-link** show fixed notes too: unknown "Not known until Claude's next step" /
   "Push-to-talk may still work"; ended "No Claude Code session running" / "Voice input goes nowhere" (repo and
@@ -25,10 +30,12 @@ Files: `index.html`, `boot.html` (kiosk start page, see Boot page), `view.css`, 
 - **More sessions**: `#others` in the band, before `#where`, shows `+N` when `others` (number of other live
   Claude sessions) is a positive integer; `data-full` is `N more Claude session(s)`. It never shrinks (`#where`
   gives way first; next to NEEDS PERMISSION the band's padding is tightened, class `tight`). Not shown in
-  no-link, unknown, starting, insert-key. Two digits would not fit next to NEEDS PERMISSION; the state core keeps at most 8 sessions (`MAX_SESSIONS`), so N is at most 7.
+  no-link, unknown, starting, insert-key. From 10 on it reads `9+` (two digits next to NEEDS PERMISSION ran off the panel; the state core may exceed its
+  session cap with pending permissions); `data-full` always has the real number.
 - **Diff lower bound**: when `diffIncomplete` is `true` (an event of the turn was too large to read) the diff
   shows a white bold `≥` (`#diff-approx`) before `+A −R`, and `#diff` `data-full` is `at least +A −R`. With no
-  counted lines it still shows `≥ +0 −0`.
+  counted lines (a lower bound of zero says nothing) it shows `+? −?` without `≥` and `data-full` is
+  `diff unknown (an event was too large to read)`.
 - Anything that is not a valid state shows "NO STATE".
 
 Colour is never the only cue; each state has its own shape:
@@ -60,9 +67,10 @@ height holds whatever font the browser picks. Mm are converted at the panel's 12
   `html[data-link]` is `static`. Needs an HTTP server (ES modules and `fetch` do not work from `file://`):
   `node emulator/serve.js`, then `http://127.0.0.1:8137/src/view/?fixture=working`.
 - Live: with neither `?fixture` nor `?state`, the page opens an `EventSource` on `/events` of the server
-  that served it (`src/server/README.md`) and renders every `{seq, state}` message. Before the first message
-  it shows `starting`. If the link is down (also before the first message) it shows `no-link` (never the
-  stale state, never `starting`) and reconnects (re-created after 1 s if the browser gave up); the next message
+  that served it (`src/server/README.md`) and renders every `{seq, state}` message. `index.html` already contains the
+  NO LINK look (data-view, shape, word, notes), so the very first paint is never an empty grey band. Before the
+  first message and whenever the link is down it shows `no-link` (never the stale state, never `starting`;
+  only a `RevviewStarting` event makes `starting`) and reconnects (re-created after 1 s if the browser gave up); the next message
   replaces it.
 
 ## Boot page
@@ -76,6 +84,19 @@ is sent for a no-cors GET, so the server's Origin check accepts it; the promise 
 answers). On success it does `location.replace('http://127.0.0.1:<port>/')`: the live view. `port` is digits
 only (1 to 65535), default 8138. Its shape markup and sizes are copies of `view.js`'s; the boot test compares
 them.
+
+## Reload while the server is down
+
+Chromium shows its own white error page when a document load fails; a page cannot prevent that. What helps is
+`sw.js`, a service worker the live page registers. After one successful load it holds the page and its
+scripts, serves them network-first, and answers a navigation or script request from the cache when the server
+does not answer, so a reload while the server is away starts the page (NO LINK) and it reconnects by itself.
+Not fixable from the page: the very first load of a browser profile (nothing cached yet), a profile whose site
+data was cleared, and Chromium's session restore if it restores a URL before the service worker is active. The
+kiosk should therefore always start Chromium on `boot.html` (not on the live URL), keep session restore off
+(a fresh profile per boot also clears the worker's cache: then only `boot.html` protects the first load) and use
+`--disable-session-crashed-bubble`. Neither the service worker nor these flags are proven on the Pi
+(BENCH-TEST H8).
 
 ## Attributes (for tests)
 

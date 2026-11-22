@@ -194,13 +194,13 @@ test('#diff-approx marks a lower bound; +A and −R stay as they are', async ({ 
   await expect(page.locator('#diff')).toBeHidden();
 });
 
-test('diffIncomplete with no counted lines still shows "≥ +0 −0" where a diff is shown', async ({ openView, page }) => {
+test('diffIncomplete with no counted lines shows "+? −?" (QA 11) where a diff is shown', async ({ openView, page }) => {
   for (const view of ['working', 'waiting', 'permission', 'done', 'offline']) {
     await openView({ ...loadFixture('working'), view, diff: { added: 0, removed: 0 }, diffIncomplete: true });
-    await expect(page.locator('#diff-approx')).toBeVisible();
-    await expect(page.locator('#diff-added')).toHaveText('+0');
-    await expect(page.locator('#diff-removed')).toHaveText('−0');
-    await expect(page.locator('#diff')).toHaveAttribute('data-full', 'at least +0 −0');
+    await expect(page.locator('#diff-approx')).toBeHidden();
+    await expect(page.locator('#diff-added')).toHaveText('+?');
+    await expect(page.locator('#diff-removed')).toHaveText('−?');
+    await expect(page.locator('#diff')).toHaveAttribute('data-full', 'diff unknown (an event was too large to read)');
   }
   for (const view of ['starting', 'insert-key', 'unknown', 'ended', 'no-link']) {
     await openView({ ...loadFixture('working'), view, diff: { added: 0, removed: 0 }, diffIncomplete: true });
@@ -244,6 +244,8 @@ test('new looks: notes, repo and diff', async ({ openView, page }) => {
   await openView({ view: 'ended', repo: 'myrepo', branch: 'main', diff: { added: 1, removed: 1 } });
   await expect(page.locator('#note1')).toHaveText('No Claude Code session running');
   await expect(page.locator('#note2')).toHaveText('Voice input goes nowhere');
-  await expect(page.locator('#where')).toHaveText('myrepo · main');
+  // CLAUDE EXITED leaves room for the repo only: "myrepo ·…" would be a stub, so the repo alone (QA 13)
+  await expect(page.locator('#where')).toHaveText('myrepo');
+  await expect(page.locator('#where')).toHaveAttribute('data-full', 'myrepo · main');
   await expect(page.locator('#diff')).toBeHidden();
 });

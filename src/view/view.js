@@ -1,3 +1,4 @@
+/* global navigator */
 // The glance view: renders a reducer state (see src/state/README.md) as a state band and two lines.
 import { mmToPx } from './panel.js';
 import { TYPE_MM } from './type.js';
@@ -46,10 +47,18 @@ const NOTES = {
 const NO_DIFF = new Set(['starting', 'insert-key', 'unknown', 'ended', 'no-link']);
 const NO_OTHERS = new Set(['starting', 'insert-key', 'unknown', 'no-link']);
 
+// First note of OFFLINE: what Claude is doing, worded for each activity (QA 14: "Claude: claude exited").
+function offlineNote(activity) {
+  const a = str(activity);
+  if (a === 'ended') return 'Claude exited';
+  if (a === 'unknown' || a === '' || a === 'no-link' || a === 'none') return 'Claude: not known';
+  return `Claude: ${(Object.hasOwn(LABELS, a) ? LABELS[a] : a).toLowerCase()}`;
+}
+
 const $ = (id) => document.getElementById(id);
 const str = (v) => (typeof v === 'string' ? v : '');
 const ids = ['band', 'shape', 'state-word', 'others', 'where', 'tool', 'file', 'note1', 'note2', 'diff', 'diff-approx', 'diff-added',
-  'diff-removed', 'cmdbox', 'sep', 'command', 'output', 'line2', 'line3'];
+  'diff-removed', 'session', 'cmdbox', 'sep', 'command', 'output', 'line2', 'line3'];
 const el = Object.fromEntries(ids.map((id) => [id, $(id)]));
 
 // ---- type sizes: cap height in mm -> font-size px, using the real font's cap-height ratio ----
@@ -113,7 +122,7 @@ export function render(input) {
 
   const where = view === 'no-link' ? '' : [str(s.repo), str(s.branch)].filter(Boolean).join(' · ');
   const others = Number.isInteger(s.others) && s.others > 0 && !NO_OTHERS.has(view) ? s.others : 0;
-  const activity = (Object.hasOwn(LABELS, str(s.activity)) ? LABELS[s.activity] : str(s.activity)).toLowerCase();
+  const activity = offlineNote(s.activity);
   const added = s.diff && typeof s.diff === 'object' ? s.diff.added : 0;
   const removed = s.diff && typeof s.diff === 'object' ? s.diff.removed : 0;
   const approx = s.diffIncomplete === true;
@@ -124,10 +133,11 @@ export function render(input) {
     if (Object.hasOwn(NOTES, view)) {
       set(el.note1, NOTES[view][0]);
       set(el.note2, NOTES[view][1]);
-    } else { set(el.note1, `Claude: ${activity}`); set(el.note2, 'No network: voice input will not work'); }
+    } else { set(el.note1, activity); set(el.note2, 'No network: voice input will not work'); }
   } else if (bash) {
     el.line2.insertBefore(el.cmdbox, el.diff);
     el.cmdbox.classList.add('wide');
+    el.cmdbox.classList.remove('capped');
     set(el.command, str(s.command));
     el.cmdbox.hidden = !s.command;
     set(el.output, str(s.output));
@@ -139,21 +149,26 @@ export function render(input) {
     set(el.command, str(s.command));
     el.cmdbox.hidden = !s.command;
     set(el.output, str(s.output));
+    // the 40% cap only matters when an output line shares the row (QA 09)
+    el.cmdbox.classList.toggle('capped', !!s.output);
     el.sep.hidden = !(s.command && s.output);
   }
   if (showDiff) {
-    el['diff-approx'].textContent = approx ? '≥' : '';
-    el['diff-added'].textContent = `+${formatCount(added)}`;
-    el['diff-removed'].textContent = `−${formatCount(removed)}`;
+    // a lower bound of zero says nothing ("at least nothing"): show it as unknown, never as +0 −0 (QA 11)
+    const unknown = approx && !(added > 0) && !(removed > 0);
+    el['diff-approx'].textContent = approx && !unknown ? '≥' : '';
+    el['diff-added'].textContent = unknown ? '+?' : `+${formatCount(added)}`;
+    el['diff-removed'].textContent = unknown ? '−?' : `−${formatCount(removed)}`;
     const full = `+${Number.isFinite(added) ? added : 0} −${Number.isFinite(removed) ? removed : 0}`;
-    el.diff.dataset.full = approx ? `at least ${full}` : full;
+    el.diff.dataset.full = unknown ? 'diff unknown (an event was too large to read)' : approx ? `at least ${full}` : full;
     el.diff.hidden = false;
   } else {
     el.diff.dataset.full = '';
   }
 
   // the "more sessions" hint never shrinks; it is placed before #where, which gives way first
-  set(el.others, others ? `+${others}` : '');
+  // two digits do not fit next to NEEDS PERMISSION: from 10 on it reads "9+" (data-full has the real number)
+  set(el.others, others > 9 ? '9+' : others ? `+${others}` : '');
   el.others.dataset.full = others ? `${others} more Claude session${others === 1 ? '' : 's'}` : '';
   // with the longest word (NEEDS PERMISSION) the hint does not fit inside the band's padding: tighten it
   el.band.classList.remove('tight');
@@ -170,13 +185,27 @@ export function render(input) {
         w.textContent = c;
         return w.scrollWidth <= w.clientWidth;
       });
-      w.textContent = cut ?? where;
+      if (cut !== null) w.textContent = cut;
+      else {
+        // no cut of the branch fits. Keep the full text (the CSS end cut shows a few letters of the branch)
+        // only when at least 2 of them stay readable; otherwise the repo alone, never a bare "repo ·…" (QA 13)
+        w.textContent = `${str(s.repo)} · ${Array.from(str(s.branch)).slice(0, 2).join('')}…`;
+        w.textContent = !str(s.repo) || w.scrollWidth <= w.clientWidth ? where : str(s.repo);
+      }
     }
     const charPx = 0.6 * parseFloat(getComputedStyle(el.where).fontSize);
     // a stub like "rev…" says nothing: show it only with room for about 8 characters
     if (el.where.scrollWidth > el.where.clientWidth && el.where.clientWidth < 8 * charPx) el.where.hidden = true;
   } else {
     el.where.hidden = true;
+  }
+  // QA 03: with other sessions open, the repo must still say which one needs the driver. When the band has
+  // no room for it (long state word + hint), it goes to the right end of line 3.
+  el.session.hidden = true;
+  set(el.session, '');
+  if (others && el.where.hidden && str(s.repo) && !note) {
+    set(el.session, str(s.repo));
+    el.session.hidden = false;
   }
   document.documentElement.dataset.rendered = view;
 }
@@ -227,6 +256,8 @@ function live() {
   // nothing is known until the first message: NO LINK, never STARTING (only RevviewStarting makes that)
   render({ view: 'no-link' });
   connect();
+  // lets a reload of this page survive a server that is away (QA 08); the page works without it
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
 window.revviewRender = render;

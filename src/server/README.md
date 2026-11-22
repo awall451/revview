@@ -53,6 +53,7 @@ server started.
 ## Other paths
 
 - `GET /state`: `{"seq":n,"state":{...}}` (debugging, tests); `state` is `boardView(board)`, the same object as in SSE.
+- `GET /sw.js`: the view's service worker (a static file, scope `/`). It only answers page and script requests from its cache when the server does not answer (see `src/view/README.md`); `/event`, `/events` and `/state` are never touched.
 - `GET`/`HEAD` of any other path: static file from the view dir (`/` is `index.html`), `cache-control: no-store`,
   404 if missing, path traversal refused (403/404).
 - Any other method on a known path: 405. Unknown API paths: 404.

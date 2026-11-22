@@ -15,3 +15,10 @@ evidence: |
   (f-11). Recomputed by hand: f-03 shows `≥ +123k −0` after a 123456-line Write plus a lost 50000-line Write, true
   total +173456: the lower bound is correct and rounds down (`formatCount`).
 ---
+
+## Status (work/view-polish-2)
+
+View half FIXED: a lower bound of zero now shows `+? −?` (no `≥`, data-full "diff unknown (an event was too large to read)");
+tests in emulator/tests/polish2.spec.js. STILL OPEN, state core (`src/state`, not touched on this branch): an id-less lost
+event (`RevviewDropped` without session_id) marks every session's diff incomplete, including sessions that received nothing.
+Either mark only the shown/last-active session or say so in DECISIONS.

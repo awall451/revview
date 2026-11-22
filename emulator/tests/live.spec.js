@@ -310,7 +310,9 @@ test.describe('live', () => {
       const big = `{"session_id":"${id}","hook_event_name":"PostToolUse","tool_name":"Edit","tool_response":{"x":"${'a'.repeat(1100000)}"}}`;
       expect((await post(server, big)).status).toBe(413);
       await expectSeq(page, k + 2);
-      await expect(page.locator('#diff-approx')).toHaveText('≥');
+      // nothing was counted before the lost event, so the lower bound is zero: shown as unknown (QA 11)
+      await expect(page.locator('#diff-approx')).toHaveText('');
+      await expect(page.locator('#diff')).toHaveAttribute('data-full', 'diff unknown (an event was too large to read)');
     });
   });
 });

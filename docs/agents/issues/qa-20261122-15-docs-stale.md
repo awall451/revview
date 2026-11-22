@@ -16,3 +16,8 @@ evidence: |
   - docs/agents/STATE.md: "Updated 2026-11-21", "QA issues (round 1 ...) all OPEN", "Open points: SessionEnd is
     ignored", while 0f38005 closes them. Round-1 issue 15 (STATE.md stale) is back.
 ---
+
+## Status (work/view-polish-2)
+
+FIXED on this branch: BENCH-TEST 20-22 (NO LINK / UNKNOWN instead of STARTING), src/view/README.md (the `starting` /
+`no-link` contradiction, N <= 7, `+? −?`, `9+`). STILL OPEN: docs/agents/STATE.md (the lead's file, not touched here).
