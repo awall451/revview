@@ -1,5 +1,5 @@
 ---
-status: open
+status: closed
 id: qa-20261122-r3-08
 title: A late PostToolUse after Stop and idle_prompt flips WAITING FOR ME back to WORKING when the call was still open
 severity: cosmetic
@@ -23,3 +23,7 @@ tool open" and counts as not finished. The late Post is then taken as new work.
 The state README says a turn has ended when it is `done`. After a Stop, a later idle_prompt should not reopen the
 turn, so a late Post must keep WAITING FOR ME (it may still update the output, as it does at `done`). The "tool
 open" exception is meant for an idle_prompt during an unanswered prompt, not after a Stop.
+
+## Resolution
+
+Fixed in `src/state/board.js` (branch work/core-hardening), tests in `tests/unit/board-hardening.test.js`; see docs/DECISIONS.md "core hardening".

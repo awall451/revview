@@ -64,10 +64,10 @@ offline/locked overlays and shows again when they clear.
 
 ## Board (`board.js`)
 
-`reduceBoard` keeps many sessions (key = `session_id`; an event without a usable one goes to the only live session if there is exactly one, else to the anonymous `''` session, which `others` never counts; subagent events carry
+`reduceBoard` keeps many sessions (key = `session_id`; an event without a usable one goes to the only live non-quiet session if there is exactly one (a quiet placeholder is never a target), else to the anonymous `''` session, which `others` never counts; subagent events carry
 the parent's `session_id`, so they never make a second session). Pure, never throws, returns the SAME reference
 when nothing changes. Board: `{phase, offline, locked, context: {repo, branch}, sessions, ended, tick, focus, spokenTo, buttons}`; `buttons` = `null` (not known yet) | `true` | `false`, set only by `RevviewInput`;
-`sessions[id] = {state, open, touched, dropped, pending, pre}` (`state` from `reduce`, `open` = tool_use_ids
+`sessions[id] = {state, open, touched, dropped, pending, pre}` (plus optional `closed` = the last 64 tool_use_ids a Post closed, so a duplicate Post is ignored, and `stopped` = the turn got its Stop and no new work since; `state` from `reduce`, `open` = tool_use_ids
 with a PreToolUse and no Post yet, `touched` = board tick of the last applied event, `pending` = unanswered
 permission prompts, `pre` = the open PreToolUse calls per agent (at most 32); `focus` = id of the session the bar shows, or null; `spokenTo` = id of the session the driver last spoke to (a real driver prompt only), or null).
 
@@ -91,12 +91,13 @@ permission prompts, `pre` = the open PreToolUse calls per agent (at most 32); `f
   does not know marks nothing. Reset by a driver `UserPromptSubmit` (not by an injected one).
 - `SessionEnd` of a session the board never saw only remembers its id in `ended` (not `''`); the phase is not
   touched (an `unknown`/`starting` board stays so: one end proves nothing about the others).
+- `SessionEnd` of an id still in `owned`: a quiet placeholder ignores it; a live session is removed but the id is not put in `ended` (docs/DECISIONS.md, core hardening).
 - `SessionEnd`: removes the session and remembers its id in `ended` (last `MAX_ENDED = 256`; an older id can be resurrected by a late event, see DECISIONS "not solved"; the anonymous `''` session is
   never remembered). With no session left, phase is `ended` and `board.context` keeps its repo/branch. Later
   events of an ended id are ignored, except `SessionStart`, which recreates the session.
 - Ignored events (the reducer returns the same state) never create a session.
-- Late events: a session's turn has ended when it is `done`, or `waiting` with no tool open (an idle_prompt
-  during an unanswered permission prompt has not ended it). Then `PermissionDenied` and Post* events never
+- Late events: a session's turn has ended when it is `done`, or `waiting` with no tool open, or `waiting` after a Stop (`stopped`); an idle_prompt
+  during an unanswered permission prompt, with no Stop, has not ended it. A Post whose id an earlier Post closed is a duplicate and is ignored. Then `PermissionDenied` and Post* events never
   change its activity: a Post* whose `tool_use_id` is in `open` (it was running when `Stop` came) still
   updates output, diff and tool but keeps activity and view; any other is ignored. `PermissionRequest` and
   permission Notifications are ignored too (a permission needs a running turn). `PreToolUse` after `Stop` is

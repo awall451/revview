@@ -1,5 +1,5 @@
 ---
-status: open
+status: closed
 id: qa-20261122-r3-07
 title: A duplicated PostToolUse (same tool_use_id) during a turn doubles the diff and shows it as exact
 severity: cosmetic
@@ -24,3 +24,7 @@ differently: it is treated as a late event and marks the diff `≥`.
 A Post whose `tool_use_id` was already closed by an earlier Post adds nothing, or at most marks the diff
 uncertain. It should never count twice and be shown as exact. A duplicate delivery is possible if the hook
 command is configured in two settings files, or if a hook script retries a POST.
+
+## Resolution
+
+Fixed in `src/state/board.js` (branch work/core-hardening), tests in `tests/unit/board-hardening.test.js`; see docs/DECISIONS.md "core hardening".

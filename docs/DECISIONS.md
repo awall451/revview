@@ -867,3 +867,39 @@ Nothing was heard: there is no audio device and no speech engine in this VM, so 
   when the SELECTED session stops, not while background subagents keep it working.
 - **Not done, possible follow-ups.** No "speaking" mark on the view. No Settings row for the engine: Settings still
   does not show it. Neither engine, nor the audio path, was heard; see the bench.
+
+## 2026-11-22: core hardening (WB4 follow-ups, real espeak-ng, QA r3-07 and r3-08)
+
+Code: `src/state/board.js`, `tests/unit/board-hardening.test.js`, `tests/unit/speech-real-engine.test.js`.
+
+- **Id-less events and placeholders.** `targetOf` no longer routes an event without a session id to a quiet
+  placeholder (an UNKNOWN session known only from `RevviewOwned`). With exactly one non-quiet live session it goes
+  there; otherwise to the anonymous `''` session, as with no session at all. A local process can no longer show a
+  forged NEEDS PERMISSION on an owned session that has said nothing. (It can still show one on the anonymous
+  session, as before: that is the hand-posted case and has no session to forge.)
+- **SessionEnd of an owned id. Chosen: both halves.** The window is still there (`b.owned` lists the id), so the
+  Claude in it may start again. (a) A `SessionEnd` for a quiet placeholder is ignored. (b) A `SessionEnd` for a live
+  session whose id is still owned removes it but is NOT remembered in `ended`; the next `RevviewOwned` brings the
+  placeholder back, and a late hook of that id is not dropped. Ids that are not owned keep the old rule
+  (remembered in `ended`). Cost: a late event of a really finished owned session can show it again until revview
+  drops the window from the owned list. One existing test (placeholders: "not for ended") was changed to say this:
+  an ended id whose window is no longer owned still gets no placeholder; one still owned does.
+- **r3-07, duplicate Post.** Each session keeps the last 64 `tool_use_id`s closed by a Post (`closed`). A Post whose id
+  is closed and not open is a duplicate delivery and changes nothing (before or after Stop). A new Pre of the same id
+  forgets the closing. It does not cover a Post whose Pre was never seen (no way to know it is a duplicate).
+- **r3-08, Stop then idle_prompt.** A session remembers `stopped` (set by Stop; kept while the state is done or
+  waiting; cleared by anything that makes it work again, for example a driver prompt). A turn counts as ended when
+  `done`, or `waiting` with no tool open, or `waiting` and `stopped`. So a late Post after Stop + idle_prompt keeps
+  WAITING FOR ME and still updates output. An idle_prompt during an unanswered prompt, with no Stop, still lets the
+  Post mean working. No new guess about Claude Code: the README rule ("a turn has ended when it is done") is
+  applied to the waiting that follows it.
+- **Real espeak-ng (1.51 here), measured with `-w` files and a pipe nobody reads; NO SOUND WAS HEARD (no audio
+  device).** The shipped line `espeak-ng -v en-us -s 165` with the text on stdin works as shipped: it writes a valid
+  wav (RIFF), longer text gives a longer wav, exit code 0. Without a sound card it still exits 0 and prints ALSA
+  errors on stderr (ignored). Stop (SIGTERM to the process group) ended a blocked espeak-ng and its pipe partner and
+  nothing was left. `[[ ]]` IS phoneme input (`[[h@l'oU]]` was read as phonemes, shorter than the same text as
+  letters): the reviewer's guess is confirmed, and text.js already removes it. `< >` are NOT markup without `-m`:
+  `<break time="30s"/>` was spoken as words, not as a 30 s pause: the guess is refuted for the shipped line;
+  scrubbing `< >` stays as a cheap safeguard in case someone adds `-m`. Still untested: the sound, Piper, the Pi,
+  the `audio` group, the delay. The tests assert on the real engine only when it is on PATH (their names say so) and
+  pass otherwise.

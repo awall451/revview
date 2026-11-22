@@ -2,7 +2,7 @@
 
 Reads the selected session's permission prompt or closing message aloud through a program on the Pi. Built for
 the read-aloud wheel button (`docs/BUTTONS.md` section 5, DECISIONS "wheel buttons 5"). Node standard library only.
-**Untested with a real engine or sound:** there is no audio device and no engine in the development VM.
+**Never heard:** the development VM has espeak-ng 1.51 (the shipped command line was run for real into wav files and pipes) but no audio device, so no sound was ever played. Piper, the Pi and the `audio` group are untested.
 
 ## Files
 
@@ -47,4 +47,9 @@ the shipped file is from memory and untested.
 `tests/unit/speech-text.test.js`, `speech-config.test.js`, `speech-speaker.test.js`. The speaker test runs the stand-in
 `tests/unit/fixtures/speech/fake-engine.sh`, which records its arguments, its stdin and its pids in a temp
 folder and then sleeps, so tests can check the text arrives only on stdin and that no process is left after a stop.
-Not covered, bench R1-R14: any real engine, the sound, the volume, the start delay, the `audio` group.
+`speech-real-engine.test.js` runs the shipped espeak-ng command line against the real program when it is on PATH
+(the test names say so; without it each test only notes that and passes, so the passed count does not depend on the
+machine). It uses `-w` files and an unread pipe, never the sound card. Measured with it: text on stdin works, exit 0
+(ALSA errors on stderr without a card, ignored); stop ends a blocked espeak-ng and its pipe partner; `[[ ]]` is
+phoneme input (confirmed, so text.js removes it); `< >` are not markup without `-m` (spoken as words), scrubbed anyway.
+Not covered, bench R1-R14: the sound, Piper, the volume, the start delay, the `audio` group, anything on the Pi.
