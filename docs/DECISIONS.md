@@ -958,6 +958,9 @@ Code: `src/state/board.js`, `tests/unit/board-hardening.test.js`, `tests/unit/sp
   lead, so it is left to them. Sessions started by hand outside revview still stay until a new session pushes them out
   or `RevviewStarting` clears the board; a power cut restarts the server with an empty board anyway. A timer
   ("no event for N minutes") was rejected: a long silent tool call (a build, a test run) would vanish while it works.
+- **Install marker.** Every command in `hooks/settings.json` ends with the bash comment ` # revview-hook`; `install.mjs`
+  replaces only entries with that marker (plus, once, the old snippet form for this repo), so other tools' hooks named
+  `hooks/event.mjs` are never touched (reviewer finding). A real session was re-run with the marker form: same events.
 - **Install on the Pi**: as the user that runs the Claude sessions (stage 4 still has to decide that user, see
   `pi/README.md`). One settings file only: the same hook installed twice (user and project settings) would post every
   event twice.
