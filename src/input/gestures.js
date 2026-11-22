@@ -39,7 +39,8 @@ export function createGestureDetector({ bindings, timing, clock, emit }) {
     if (code in MODIFIER_KIND) { downMods.add(code); return; }
     const now = clock.now();
     const last = lastRelease.get(code);
-    if (last !== undefined && now - last < debounceMs) {
+    const dt = now - last; // a clock that went backwards gives dt < 0: not a bounce
+    if (last !== undefined && dt >= 0 && dt < debounceMs) {
       downKeys.set(code, { binding: null });
       return;
     }
@@ -64,20 +65,21 @@ export function createGestureDetector({ bindings, timing, clock, emit }) {
     }
   }
 
-  function release(code) {
+  function release(code, at) {
     if (code in MODIFIER_KIND) { downMods.delete(code); return; }
     const s = downKeys.get(code);
     if (!s) return;
     if (!s.binding) { downKeys.delete(code); return; } // ignored press (bounce or unbound)
     if (s.relTimer !== null) return; // already provisional
-    const now = clock.now();
+    const now = at ?? clock.now();
     // Contact bounce: a release this soon after the press is provisional. If the key is pressed again
     // within debounceMs of the press it was bounce and the press continues (hold timers keep running);
     // otherwise it resolves as the real release when the window ends. A tap-on-press button already fired.
-    if ((s.binding.hold || s.binding.longHold) && now - s.at < debounceMs) {
+    if ((s.binding.hold || s.binding.longHold) && at === undefined && now - s.at < debounceMs) {
+      s.relAt = now; // the real release time, recorded as lastRelease when the window closes
       s.relTimer = clock.setTimeout(() => {
         s.relTimer = null;
-        if (downKeys.get(code) === s) release(code);
+        if (downKeys.get(code) === s) release(code, s.relAt);
       }, s.at + debounceMs - now);
       return;
     }

@@ -397,3 +397,63 @@ test('a genuine press shorter than debounceMs on a hold button resolves as a tap
   clock.advance(500);
   assert.deepEqual(out.map((e) => e.gesture), ['tap', 'hold']);
 });
+
+test('release at exactly holdMs with no timer run first: hold fires from the release (>= holdMs is not a tap)', () => {
+  const { clock, out, d } = setup();
+  d.key(K.F14, 1);
+  clock.setNow(400); // the hold timer is due but has not run
+  d.key(K.F14, 0);
+  assert.deepEqual(out.map((e) => e.gesture), ['hold']);
+  clock.advance(2000);
+  assert.deepEqual(out.map((e) => e.gesture), ['hold']);
+});
+
+test('release at exactly holdMs - 1 is a tap', () => {
+  const { clock, out, d } = setup();
+  d.key(K.F14, 1);
+  clock.setNow(399);
+  d.key(K.F14, 0);
+  assert.deepEqual(out.map((e) => e.gesture), ['tap']);
+});
+
+test('release at exactly longHoldMs with no timer run first: hold and long-hold fire (>= longHoldMs)', () => {
+  const { clock, out, d } = setup();
+  d.key(K.F22, 1);
+  clock.setNow(1000);
+  d.key(K.F22, 0);
+  assert.deepEqual(out.map((e) => e.gesture), ['hold', 'long-hold']);
+  clock.advance(2000);
+  assert.equal(out.length, 2);
+});
+
+test('release at longHoldMs - 1 gives hold only', () => {
+  const { clock, out, d } = setup();
+  d.key(K.F22, 1);
+  clock.setNow(999);
+  d.key(K.F22, 0);
+  assert.deepEqual(out.map((e) => e.gesture), ['hold']);
+});
+
+test('a short press of a hold button records the real release time: a re-press soon after the window is not ignored', () => {
+  const { clock, out, d } = setup();
+  clock.advance(100);
+  d.key(K.F14, 1);
+  clock.advance(5);
+  d.key(K.F14, 0); // real release at 105; window closes at 130
+  clock.advance(25);
+  assert.deepEqual(out.map((e) => e.gesture), ['tap']);
+  clock.advance(10); // now 140: 35 ms after the release, outside the debounce; 10 ms after the window close
+  d.key(K.F14, 1);
+  clock.advance(500);
+  assert.deepEqual(out.map((e) => e.gesture), ['tap', 'hold']);
+});
+
+test('a clock that goes backwards does not lock the key out', () => {
+  const { clock, out, d } = setup();
+  clock.setNow(5000);
+  d.key(K.F13, 1);
+  d.key(K.F13, 0);
+  clock.setNow(100); // went backwards
+  d.key(K.F13, 1);
+  assert.deepEqual(out.map((e) => e.button), ['ptt', 'ptt']);
+});

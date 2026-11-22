@@ -7,7 +7,7 @@ import { open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setImmediate } from 'node:timers';
-import { createDeviceReader } from '../../src/input/reader.js';
+import { createDeviceReader, openStream } from '../../src/input/reader.js';
 import { encodeEvent, EV_KEY, EV_SYN, SYN_REPORT, SYN_DROPPED } from '../../src/input/evdev.js';
 
 // Event bytes are constructed by encodeEvent, not recorded from a device.
@@ -368,4 +368,53 @@ test('fake: open/grab failures back off (doubling to 30 s), reset on ready, not-
   await fail();
   assert.equal(delays.at(-1), 1000, 'start() resets');
   reader.stop();
+});
+
+test('after SYN_DROPPED the key events up to the next SYN_REPORT are skipped, then keys flow again', async () => {
+  const { reader, calls, state } = fixture();
+  state.present = true;
+  reader.start();
+  await flush();
+  const s = state.streams[0];
+  s.emit('ready');
+  s.emit('data', Buffer.concat([syn(SYN_DROPPED), key(183, 1), key(184, 0), syn(), key(185, 1), syn()]));
+  assert.deepEqual(calls.filter((c) => c[0] === 'key' || c[0] === 'sync'), [['sync', 'dropped'], ['key', 185, 1]]);
+  reader.stop();
+});
+
+function fakeSpawn() {
+  const made = [];
+  const spawn = (cmd, args, opts) => {
+    const c = new EventEmitter();
+    c.cmd = cmd; c.args = args; c.opts = opts; c.signals = [];
+    c.stdout = new EventEmitter();
+    c.stderr = new EventEmitter();
+    c.stderr.setEncoding = () => {};
+    c.kill = (sig) => { c.signals.push(sig); return true; };
+    made.push(c);
+    return c;
+  };
+  return { spawn, made };
+}
+
+test('openStream: the grab helper gets the server pid and is killed on close()', () => {
+  const { spawn, made } = fakeSpawn();
+  const s = openStream('/dev/input/event9', { grab: true, spawn, parentPid: 4242 });
+  assert.equal(made.length, 1);
+  assert.equal(made[0].cmd, 'python3');
+  assert.match(made[0].args[0], /grab\.py$/);
+  assert.deepEqual(made[0].args.slice(1), ['/dev/input/event9', '4242']);
+  s.close();
+  assert.deepEqual(made[0].signals, ['SIGTERM']);
+});
+
+test('reader.stop() closes the stream, which kills the grab helper', async () => {
+  const { spawn, made } = fakeSpawn();
+  const { reader, state } = fixture({ openStream: (p, o) => openStream(p, { ...o, spawn }) });
+  state.present = true;
+  reader.start();
+  await flush();
+  assert.equal(made.length, 1);
+  reader.stop();
+  assert.deepEqual(made[0].signals, ['SIGTERM']);
 });

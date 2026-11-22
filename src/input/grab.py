@@ -1,6 +1,6 @@
 """Exclusive-grab an evdev node and copy its raw input_event bytes to stdout.
 
-Usage: python3 grab.py <device path>
+Usage: python3 grab.py <device path> [parent pid]
 Exit: 0 quiet stop (signal, closed pipe), 1 device read error or EOF, 2 grab failed, 3 open failed.
 Standard library only. Node core cannot call ioctl, so this is the whole helper.
 """
@@ -18,7 +18,9 @@ CHUNK = 24 * 64
 
 def main():
     path = sys.argv[1]
-    ppid = os.getppid()  # at startup; a different value later means the parent died
+    # The server passes its own pid: if it died before this ran, getppid() is already 1 (or a subreaper),
+    # so compare against the given pid, not against whatever getppid() returns at startup.
+    ppid = int(sys.argv[2]) if len(sys.argv) > 2 else os.getppid()
     signal.signal(signal.SIGTERM, lambda *_: os._exit(0))
     signal.signal(signal.SIGINT, lambda *_: os._exit(0))
     try:

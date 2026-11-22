@@ -5,13 +5,13 @@ import { spawn } from 'node:child_process';
 import { createReadStream } from 'node:fs';
 import { readFile, access } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { createEventParser, EVENT_SIZE, EV_KEY, EV_SYN, SYN_DROPPED } from './evdev.js';
+import { createEventParser, EVENT_SIZE, EV_KEY, EV_SYN, SYN_DROPPED, SYN_REPORT } from './evdev.js';
 import { parseProcDevices, matchDevice } from './devices.js';
 
 const GRAB_PY = fileURLToPath(new URL('./grab.py', import.meta.url));
 
 // Real stream. grab: the python helper holds EVIOCGRAB; otherwise a plain file or FIFO (a fake device).
-export function openStream(path, { grab }) {
+export function openStream(path, { grab, spawn: spawnFn = spawn, parentPid = process.pid }) {
   const em = new EventEmitter();
   let child = null;
   let rs = null;
@@ -22,7 +22,7 @@ export function openStream(path, { grab }) {
     em.emit('end', err);
   };
   if (grab) {
-    child = spawn('python3', [GRAB_PY, path], { stdio: ['ignore', 'pipe', 'pipe'] });
+    child = spawnFn('python3', [GRAB_PY, path, String(parentPid)], { stdio: ['ignore', 'pipe', 'pipe'] });
     let errText = '';
     let ready = false;
     child.stderr.setEncoding('utf8');
@@ -142,11 +142,13 @@ export function createDeviceReader({
       delay = retryMs;
       setPresence(true);
     });
+    let dropping = false; // after SYN_DROPPED the events up to the next SYN_REPORT are stale: skip them
     s.on('data', (buf) => {
       if (!live()) return;
       for (const ev of parser.push(buf)) {
-        if (ev.type === EV_KEY) safe(onKey, ev.code, ev.value);
-        else if (ev.type === EV_SYN && ev.code === SYN_DROPPED) safe(onSync, 'dropped');
+        if (ev.type === EV_KEY) { if (!dropping) safe(onKey, ev.code, ev.value); }
+        else if (ev.type === EV_SYN && ev.code === SYN_DROPPED) { dropping = true; safe(onSync, 'dropped'); }
+        else if (ev.type === EV_SYN && ev.code === SYN_REPORT) dropping = false;
       }
     });
     s.on('end', (err) => {

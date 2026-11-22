@@ -29,7 +29,8 @@ codes are not verified: bench items 27 and W1.
 - Otherwise: released before `holdMs` is a `tap`; `hold` fires at `holdMs` while held; `long-hold` at
   `longHoldMs`. A release after `holdMs` gives no tap (a long-hold-only button released between the two gives
   nothing).
-- `reset()` when the device is lost (or the kernel reports `SYN_DROPPED`): a key still down gives no gesture.
+- `reset()` when the device is lost (or the kernel reports `SYN_DROPPED`): a key still down gives no gesture. After `SYN_DROPPED` the reader also skips the key events up to the next `SYN_REPORT` (they are stale).
+- After a provisional (bounce-window) release the real release time is what the next press is debounced against. A clock that goes backwards never makes a press count as bounce.
 - Times are arrival times on a monotonic clock, not the kernel's event timestamps.
 
 ## struct input_event
@@ -49,5 +50,5 @@ at `/?devkeys=1`: the same detector, for the emulator. See `src/server/README.md
 
 `tests/unit/input-*.test.js` and `server-input.test.js`: fake clock traces (synthetic, not from a device),
 constructed byte streams, a synthetic `/proc` sample (`tests/unit/fixtures/input/`), a FIFO as the fake device.
-`grab.py` is tested only where the grab fails (a regular file: ENOTTY; a missing path). The real grab, key
+`grab.py` gets the server's pid as its second argument (a fake `spawn` test checks that, and that closing the reader kills the helper); it exits when that pid is gone, which is bench-only (W5). It is tested only where the grab fails (a regular file: ENOTTY; a missing path). The real grab, key
 codes and reconnect are bench items 27-33 and W1-W3 in `docs/BENCH-TEST.md`.
