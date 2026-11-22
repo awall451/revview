@@ -74,3 +74,15 @@ the outline until it matches. Check the 100 mm ruler with a real ruler.
 ## Worst cases
 
 `worst-case/<id>.json` are hand-written CONTENT objects (repo, branch, tool, file, command, output, diff) that stress the renderer: far over the state core's limits, unbroken tokens, CJK and emoji, exactly at the limits in the widest letter, and a 999999999 diff. They are NOT reducer output and live outside `fixtures/` (every file there needs a screenshot). `worst-case.js` exports `WORST_CASE_IDS` and `loadWorstCase(id)`; the layout and screenshot specs merge each over every fixture state (`out/shots/worst-<id>.png`, `worst-<id>-permission.png`).
+
+## WB4 looks (`emulator/wb4/`, `tests/wb4.spec.js`)
+
+The bar's session looks. Every state is produced by the real board: `emulator/wb4/recipes.js` copies the recordings in
+`fixtures/sessions/*.jsonl` once per session (own `session_id` and cwd) and adds the internal events (RevviewOwned,
+RevviewSelect, RevviewNav, RevviewProjects, RevviewInput); `wb4State(id)` is `replayView(...).at(-1)`. The one merge is
+`wb4/worst-band.json` (`others: 12`, position 12/13), because the board holds at most 8 sessions. `tests/unit/emulator-wb4.test.js`
+checks each recipe yields the fields its look shows; `tests/wb4.spec.js` renders each (texts, cap heights in RANGE_MM, no
+overlap or overflow, inverted row with its bar, scroll marks, the old look without any mic) and writes the screenshots:
+`wb4-mic-position`, `wb4-not-target`, `wb4-no-session`, `wb4-none`, `wb4-elsewhere`, `wb4-list`, `wb4-list-long`
+(8 sessions, scrolled), `wb4-menu`, `wb4-projects`, `wb4-new-session`, `wb4-settings`, `wb4-worst-band`,
+`wb4-worst-band-permission` (all 1280x400 in `out/shots/`).

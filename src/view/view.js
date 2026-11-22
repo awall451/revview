@@ -56,10 +56,35 @@ function offlineNote(activity) {
   return `Claude: ${(Object.hasOwn(LABELS, a) ? LABELS[a] : a).toLowerCase()}`;
 }
 
+// The push-to-talk mark: a microphone (viewBox 0 0 24 24, currentColor). The crossed-out one has a diagonal bar with a
+// gap cut in the band's colour, so it differs in shape and not only in colour.
+const MIC = '<rect x="8.5" y="1.5" width="7" height="13" rx="3.5" fill="currentColor"/><path d="M4.5 11a7.5 7.5 0 0 0 15 0M12 18.5v4M7.5 22.5h9" fill="none" stroke="currentColor" stroke-width="2.4"/>';
+const MIC_OFF = `${MIC}<path d="M3 3 21 21" style="stroke:var(--band)" stroke-width="8" fill="none"/><path d="M2 2 22 22" stroke="currentColor" stroke-width="3.2" fill="none"/>`;
+const TRIANGLE = '<path d="M12 1.5 23.5 22.5H.5Z" fill="currentColor"/>';
+const CHEVRON_UP = '<path d="M3 17 12 7l9 10" fill="none" stroke="currentColor" stroke-width="4"/>';
+const CHEVRON_DOWN = '<path d="M3 7l9 10 9-10" fill="none" stroke="currentColor" stroke-width="4"/>';
+const svg = (inner, cls) => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${inner}</svg>`;
+
+// Push-to-talk is not going to the shown session: the note for the bottom row (or in place of note2).
+const VOICE_NOTES = {
+  none: 'Push-to-talk goes nowhere: no session chosen',
+  'not-owned': 'Push-to-talk goes nowhere: not a revview session',
+  'no-session': 'Push-to-talk does nothing: no revview session',
+};
+const MIC_STATES = { here: 1, none: 1, 'not-owned': 1, 'no-session': 1 };
+
+// The list window: the title row and up to 6 rows fit the 7 rows below the band.
+const NAV_ROWS = 6;
+const NAV_TITLES = { list: 'SESSIONS', menu: 'MENU', new: 'NEW SESSION: CHOOSE A PROJECT', projects: 'PROJECTS', settings: 'SETTINGS (READ ONLY)' };
+const NAV_EMPTY = { list: 'No sessions', new: 'No projects: add paths to the projects file', projects: 'No projects: add paths to the projects file' };
+// chip colours: the band colour of the state (view.css has the same values per body[data-view])
+const CHIP = { working: '#5eb1ff', waiting: '#c8a2ff', permission: '#ffb020', done: '#4fdc7a', unknown: '#5ce1e6' };
+
 const $ = (id) => document.getElementById(id);
 const str = (v) => (typeof v === 'string' ? v : '');
 const ids = ['band', 'shape', 'state-word', 'others', 'where', 'buttons-tag', 'tool', 'file', 'note1', 'note2', 'diff', 'diff-approx', 'diff-added',
-  'diff-removed', 'session', 'cmdbox', 'command', 'out1', 'out2', 'out3', 'offline-note'];
+  'diff-removed', 'session', 'cmdbox', 'command', 'out1', 'out2', 'out3', 'offline-note', 'voice', 'voice-mark', 'position', 'voice-note',
+  'lower', 'nav'];
 const el = Object.fromEntries(ids.map((id) => [id, $(id)]));
 
 // ---- type sizes: cap height in mm -> font-size px, using the real font's cap-height ratio ----
@@ -144,13 +169,18 @@ export function render(input) {
   document.body.dataset.view = view;
 
   // everything below starts empty; only what applies is filled in
-  for (const k of ['tool', 'file', 'note1', 'note2', 'command', 'out1', 'out2', 'out3', 'offline-note']) set(el[k], '');
+  for (const k of ['tool', 'file', 'note1', 'note2', 'command', 'out1', 'out2', 'out3', 'offline-note', 'voice-note']) set(el[k], '');
   el.cmdbox.hidden = true;
   el.diff.hidden = true;
 
   const where = view === 'no-link' ? '' : [str(s.repo), str(s.branch)].filter(Boolean).join(' · ');
   const others = Number.isInteger(s.others) && s.others > 0 && !NO_OTHERS.has(view) ? s.others : 0;
   const activity = offlineNote(s.activity);
+  // null (a server without sessions) or anything unknown: nothing new is drawn
+  const voice = Object.hasOwn(MIC_STATES, s.voice) ? s.voice : null;
+  const voiceNote = voice !== null && Object.hasOwn(VOICE_NOTES, voice) ? VOICE_NOTES[voice] : '';
+  const pos = s.position && Number.isInteger(s.position.index) && Number.isInteger(s.position.count) && s.position.index > 0 && s.position.count > 0 ? s.position : null;
+  const elsewhere = Number.isInteger(s.elsewhere) && s.elsewhere > 0 ? s.elsewhere : 0;
   const added = s.diff && typeof s.diff === 'object' ? s.diff.added : 0;
   const removed = s.diff && typeof s.diff === 'object' ? s.diff.removed : 0;
   const approx = s.diffIncomplete === true;
@@ -161,8 +191,12 @@ export function render(input) {
   if (note) {
     if (Object.hasOwn(NOTES, view)) {
       set(el.note1, NOTES[view][0]);
-      set(el.note2, NOTES[view][1]);
-    } else { set(el.note1, activity); set(el.note2, 'No network: voice input will not work'); }
+      set(el.note2, voiceNote || NOTES[view][1]);
+    } else {
+      set(el.note1, activity);
+      set(el.note2, 'No network: voice input will not work');
+      if (voiceNote) set(el['voice-note'], voiceNote);
+    }
   } else {
     set(el.tool, str(s.tool));
     file = str(s.file);
@@ -170,6 +204,7 @@ export function render(input) {
     outRows = outputLines(s).reverse().map((line, i) => set(el[`out${3 - i}`], line)).length;
     // NEEDS PERMISSION while offline: a secondary row at the bottom (it takes one of the command's rows)
     if (view === 'permission' && s.offline === true) { set(el['offline-note'], 'No network: voice input will not work'); outRows += 1; }
+    if (voiceNote) { set(el['voice-note'], voiceNote); outRows += 1; }
   }
   if (showDiff) {
     // a lower bound of zero says nothing ("at least nothing"): show it as unknown, never as +0 −0 (QA 11)
@@ -188,13 +223,33 @@ export function render(input) {
   // two digits do not fit next to NEEDS PERMISSION: from 10 on it reads "9+" (data-full has the real number)
   set(el.others, others > 9 ? '9+' : others ? `+${others}` : '');
   el.others.dataset.full = others ? `${others} more Claude session${others === 1 ? '' : 's'}` : '';
+  el.others.classList.toggle('has-mark', others > 0 && elsewhere > 0);
+  if (others && elsewhere) {
+    // a small filled triangle (the permission shape) before the number: some of the others need permission
+    el.others.insertAdjacentHTML('afterbegin', svg(TRIANGLE, 'mark'));
+    el.others.dataset.full += `, ${elsewhere} ${elsewhere === 1 ? 'needs' : 'need'} permission`;
+  }
+  // push-to-talk mark and position: never shrinks, #where gives way first
+  el.voice.hidden = voice === null;
+  if (voice !== null) {
+    el['voice-mark'].innerHTML = voice === 'here' ? MIC : MIC_OFF;
+    el['voice-mark'].dataset.mark = voice === 'here' ? 'mic' : 'mic-off';
+    set(el.position, pos ? `${pos.index}/${pos.count}` : '');
+    el.voice.dataset.voice = voice;
+    el.voice.dataset.full = voice === 'here'
+      ? `Push-to-talk goes to this session${pos ? ` (${pos.index} of ${pos.count})` : ''}`
+      : voiceNote;
+  } else {
+    el.voice.dataset.full = '';
+  }
   // with the longest word (NEEDS PERMISSION) the hint does not fit inside the band's padding: tighten it
   // the "NO BUTTONS" tag (only when the wheel buttons are known to be missing; not while starting, not on NO LINK)
   // sits at the band's right end; it never shrinks, so the room it takes is not available to the hint
   el['buttons-tag'].hidden = !(s.buttons === 'missing' && view !== 'starting' && view !== 'no-link');
   el.band.classList.remove('tight');
   const tagPx = el['buttons-tag'].hidden ? 0 : el['buttons-tag'].offsetWidth + 24;
-  if (others && el.others.getBoundingClientRect().right > el.band.clientWidth - 24 - tagPx) el.band.classList.add('tight');
+  const lastFixed = voice !== null ? el.voice : el.others;
+  if ((others || voice !== null) && lastFixed.getBoundingClientRect().right > el.band.clientWidth - 24 - tagPx) el.band.classList.add('tight');
 
   // fitting needs layout, so it comes after the fields are in place
   if (!el.cmdbox.hidden) fitCommand(str(s.command), outRows);
@@ -230,7 +285,92 @@ export function render(input) {
     set(el.session, str(s.repo));
     el.session.hidden = false;
   }
+  renderNav(s.nav);
   document.documentElement.dataset.rendered = view;
+}
+
+// ---- list and menu: the lower area is replaced by a title row and up to 6 rows ----
+function navRow(r, i, nav, isEmpty) {
+  const row = document.createElement('div');
+  row.className = 'row';
+  if (!isEmpty && i === nav.row) row.dataset.selected = 'true';
+  const bar = document.createElement('span');
+  bar.className = 'bar';
+  const body = document.createElement('div');
+  body.className = 'body';
+  row.append(bar, body);
+  const text = (id, cls, t) => {
+    const n = document.createElement('span');
+    n.id = id;
+    n.className = cls;
+    n.textContent = t;
+    n.dataset.full = t;
+    return n;
+  };
+  if (nav.kind === 'list' && !isEmpty) {
+    const label = str(r.label) === '' ? '(no repo)' : str(r.label);
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.dataset.state = str(r.state);
+    chip.style.background = CHIP[r.state] ?? CHIP.unknown;
+    body.append(chip, text(`row${i}-label`, 'label', label), text(`row${i}-word`, 'word', str(r.word)));
+    if (r.target === true) {
+      const mic = document.createElement('span');
+      mic.className = 'row-mic';
+      mic.dataset.mark = 'mic';
+      mic.innerHTML = svg(MIC, 'mic');
+      body.append(mic);
+    }
+  } else {
+    body.append(text(`row${i}-label`, 'label', str(r.label)));
+  }
+  return row;
+}
+
+function fitLabel(node) {
+  if (node.scrollWidth <= node.clientWidth) return;
+  node.textContent = middleEllipsis(node.dataset.full, (c) => {
+    node.textContent = c;
+    return node.scrollWidth <= node.clientWidth;
+  });
+}
+
+function renderNav(input) {
+  const ok = input && typeof input === 'object' && Object.hasOwn(NAV_TITLES, input.kind) && Array.isArray(input.rows)
+    && input.rows.every((r) => r && typeof r === 'object');
+  el.nav.hidden = !ok;
+  el.lower.hidden = ok;
+  el.nav.replaceChildren();
+  delete el.nav.dataset.kind;
+  if (!ok) return;
+  const isEmpty = input.rows.length === 0;
+  const rows = isEmpty ? [{ label: NAV_EMPTY[input.kind] ?? '' }] : input.rows;
+  const row = Math.min(Number.isInteger(input.row) ? Math.max(0, input.row) : 0, rows.length - 1);
+  const nav = { kind: input.kind, row };
+  // the highlighted row stays in the window; two rows of context above it when the list is longer than the window
+  const start = Math.min(Math.max(0, row - 2), Math.max(0, rows.length - NAV_ROWS));
+  const end = Math.min(rows.length, start + NAV_ROWS);
+  el.nav.dataset.kind = input.kind;
+  const title = document.createElement('div');
+  title.className = 'title';
+  const t = document.createElement('span');
+  t.id = 'nav-title';
+  t.textContent = NAV_TITLES[input.kind];
+  t.dataset.full = NAV_TITLES[input.kind];
+  title.append(t);
+  // more above / below: a chevron (a shape, not a colour)
+  for (const [id, inner, on, n] of [['more-above', CHEVRON_UP, start > 0, start], ['more-below', CHEVRON_DOWN, end < rows.length, rows.length - end]]) {
+    const m = document.createElement('span');
+    m.id = id;
+    m.className = 'more';
+    m.hidden = !on;
+    m.dataset.full = `${n} more ${id === 'more-above' ? 'above' : 'below'}`;
+    m.innerHTML = svg(inner, 'chev');
+    title.append(m);
+  }
+  el.nav.append(title);
+  for (let i = start; i < end; i += 1) el.nav.append(navRow(rows[i], i, nav, isEmpty));
+  for (const node of el.nav.querySelectorAll('.label')) fitLabel(node);
 }
 
 // ---- input ----

@@ -140,3 +140,21 @@ name (`src/compo…/Button.tsx`, or `…/Button.tsx`); only if the file name alo
 its own middle, about a third from the front and two thirds from the back, so the extension stays
 (`Very…Button.tsx`). Code points are never split. Other fields are clipped with an ellipsis at the end.
 `data-full` always holds the whole text.
+
+## Sessions: mic mark, notes, list and menu (WB4)
+
+New state keys from the board (`voice`, `position`, `elsewhere`, `nav`; see `src/state/`). With `voice: null` (a
+server without sessions) none of the below is drawn and the old look is unchanged.
+
+| Look | When | What |
+|---|---|---|
+| Mic mark + position | `voice: 'here'` | `#voice`: an inline-SVG microphone (1.1 em, `currentColor`) and `#position` ("2/3"). Never shrinks; `#where` gives way first. `data-full`: "Push-to-talk goes to this session (2 of 3)". |
+| Shown is not the target | `voice: 'none'`, `'not-owned'`, `'no-session'` | The same slot with a crossed-out mic (a different shape, not only a colour), the position if any, and a grey bottom row `#voice-note` (40 px, one of the 7 rows, below `#offline-note`): "Push-to-talk goes nowhere: no session chosen", "... not a revview session", "Push-to-talk does nothing: no revview session". In the note views (starting, insert-key, unknown, ended, no-link) it replaces `note2`; in OFFLINE `note2` stays and both rows show. |
+| Prompt elsewhere | `elsewhere > 0` | A small filled triangle (the permission shape) before the `+N` hint; `data-full`: "N more Claude sessions, K need permission". |
+| List and menu | `nav` not null | The band is the normal band. `#nav` replaces `#lower` (316 px, same 7 rows): a title row (SESSIONS, MENU, NEW SESSION: CHOOSE A PROJECT, PROJECTS, SETTINGS (READ ONLY)) and up to 6 rows of 40 px. Session row: state chip (22 px square in the state colour, outlined), label (empty: "(no repo)"; cut in the middle with `middleEllipsis`), the short state word at the right, the mic mark on the target. The highlighted row (`nav.row`) is inverted (black on white) with a solid 14 px bar at the left edge (x 0..14, then a 10 px gap). More than 6 rows: the window keeps two rows of context above the highlight and scrolls; a chevron up/down at the right end of the title row (`#more-above`, `#more-below`) says there is more. Empty: one row "No sessions" or "No projects: add paths to the projects file". |
+
+The tight band (`#band.tight`) now also counts `#voice` as the last fixed item. Worst band (NEEDS PERMISSION, `9+`,
+triangle, not-owned mic, 12/13, NO BUTTONS): everything fits in 1280 px; the repo is cut to a stub (`a-very-long-repos…`
+moves to row A) and the branch is hidden. An invalid `nav` (unknown kind, rows not a list) is ignored and the normal lower
+area stays. Ids for tests: `#voice`, `#voice-mark` (`data-mark` mic or mic-off), `#position`, `#voice-note`, `#nav`,
+`#nav-title`, `#row<i>-label`, `#row<i>-word`, `.row[data-selected]`.
