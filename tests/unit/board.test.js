@@ -26,7 +26,7 @@ test('fresh board is unknown; RevviewStarting -> starting and clears sessions; S
 test('initialBoard shape', () => {
   assert.deepEqual(initialBoard(), {
     phase: 'unknown', offline: false, locked: false, context: { repo: null, branch: null },
-    sessions: {}, ended: [], tick: 0,
+    sessions: {}, ended: [], tick: 0, focus: null,
   });
 });
 
@@ -203,7 +203,9 @@ test('an event without session_id goes to the only live session; the anonymous b
   // two live sessions: an id-less event cannot be placed, it goes to '' and is not an "other"
   const two = run([ev('SessionStart', A), ev('SessionStart', B), ev('Stop')]);
   assert.equal(boardView(two).others, 1);
-  assert.equal(boardView(run([ev('SessionStart', A), ev('SessionStart', B), ev('UserPromptSubmit')])).others, 1);
+  // QA round 2: a working session now takes the focus from an idle one, so the anonymous working one is shown
+  // and the two real sessions are both "others" (was 1 under the old waiting > working priority)
+  assert.equal(boardView(run([ev('SessionStart', A), ev('SessionStart', B), ev('UserPromptSubmit')])).others, 2);
   // id-less SessionEnd ends the only live session
   assert.equal(boardView(run([ev('SessionStart', A), ev('SessionEnd')])).view, 'ended');
 });
@@ -297,7 +299,8 @@ test('idle_prompt while a tool is still open (unanswered prompt) does not freeze
   const b = run([ev('SessionStart', A), ev('UserPromptSubmit', A), PRE('t1'),
     ev('Notification', { ...A, notification_type: 'permission_prompt' }),
     ev('Notification', { ...A, notification_type: 'idle_prompt' })]);
-  assert.equal(boardView(b).view, 'waiting');
+  // QA round 2: the prompt is still open (a pending permission), so the bar says permission, not waiting
+  assert.equal(boardView(b).view, 'permission');
   assert.equal(boardView(reduceBoard(b, POST('t1'))).view, 'working');
 });
 
@@ -333,4 +336,196 @@ test('a malformed board is replaced, never throws', () => {
     assert.doesNotThrow(() => reduceBoard(b, ev('SessionStart', A)));
     assert.equal(boardView(reduceBoard(b, ev('SessionStart', A))).view, 'waiting');
   }
+});
+
+// QA round 2: focus, pending permission prompts per session, branch context, unseen SessionEnd.
+const S = (id, cwd) => ({ session_id: id, cwd });
+const start = (id, cwd) => [ev('SessionStart', S(id, cwd)), ev('UserPromptSubmit', S(id, cwd))];
+const REV = '/home/user/src/revview';
+const OTHER = '/home/user/src/other-project';
+
+test('QA 01: a second, idle session does not hide the working one', () => {
+  const b = run([
+    ...start('aaaa-1111', REV),
+    ev('PreToolUse', { ...S('aaaa-1111', REV), tool_name: 'Grep', tool_input: { pattern: 'listen' }, tool_use_id: 'a-s1', agent_id: 'agent-x1' }),
+    ev('SessionStart', S('bbbb-2222', OTHER)),
+  ]);
+  const v = boardView(b);
+  assert.equal(v.view, 'working');
+  assert.equal(v.repo, 'revview');
+  assert.equal(v.others, 1);
+});
+
+test('QA 01: the session the driver just spoke to is shown, not the idle ones', () => {
+  const idle = { notification_type: 'idle_prompt' };
+  const NOTES = '/home/user/src/notes';
+  const b = run([
+    ...start('A', REV), ev('Stop', S('A', REV)), ev('Notification', { ...S('A', REV), ...idle }),
+    ...start('B', OTHER), ev('Stop', S('B', OTHER)), ev('Notification', { ...S('B', OTHER), ...idle }),
+    ev('SessionStart', S('C', NOTES)), ev('UserPromptSubmit', { ...S('C', NOTES), prompt: 'summarise' }),
+    ev('PreToolUse', { ...S('C', NOTES), tool_name: 'Write', tool_input: { file_path: `${NOTES}/summary.md`, content: 'x' }, tool_use_id: 'w1' }),
+  ]);
+  const v = boardView(b);
+  assert.equal(v.view, 'working');
+  assert.equal(v.file, 'summary.md');
+  assert.equal(v.repo, 'notes');
+  assert.equal(b.focus, 'C');
+});
+
+test('QA 04: two working sessions do not alternate on screen; focus follows the need', () => {
+  let b = run([...start('A', REV), ...start('B', OTHER)]);
+  const seen = new Set();
+  for (let i = 0; i < 3; i += 1) {
+    b = run([ev('PreToolUse', { ...S('A', REV), tool_name: 'Edit', tool_input: { file_path: `${REV}/a.js`, old_string: 'a', new_string: 'b' }, tool_use_id: `a${i}` })], b);
+    seen.add(boardView(b).repo);
+    b = run([ev('PreToolUse', { ...S('B', OTHER), tool_name: 'Bash', tool_input: { command: 'cargo build' }, tool_use_id: `b${i}` })], b);
+    seen.add(boardView(b).repo);
+  }
+  assert.deepEqual([...seen], ['other-project']);
+  // B finishes: a done focus stays until it goes idle
+  b = run([ev('Stop', S('B', OTHER))], b);
+  assert.equal(boardView(b).repo, 'other-project');
+  b = run([ev('Notification', { ...S('B', OTHER), notification_type: 'idle_prompt' })], b);
+  assert.equal(boardView(b).repo, 'revview');
+  assert.equal(boardView(b).view, 'working');
+  // A rests too: nobody is working, focus stays
+  b = run([ev('Stop', S('A', REV)), ev('Notification', { ...S('A', REV), notification_type: 'idle_prompt' })], b);
+  assert.equal(boardView(b).repo, 'revview');
+  // B is prompted again: the driver spoke to it
+  b = run([ev('UserPromptSubmit', S('B', OTHER))], b);
+  assert.equal(boardView(b).repo, 'other-project');
+});
+
+const SUB = (id, name, extra) => ev(name, { ...S('k1', REV), agent_id: id, ...extra });
+const psql = { tool_name: 'Bash', tool_input: { command: 'psql -f migrate.sql' } };
+function qa02() {
+  return run([
+    ...start('k1', REV),
+    ev('PreToolUse', { ...S('k1', REV), tool_name: 'Task', tool_use_id: 'T1' }),
+    ev('PreToolUse', { ...S('k1', REV), tool_name: 'Task', tool_use_id: 'T2' }),
+    SUB('agent-a1', 'PreToolUse', { ...psql, tool_use_id: 'b1' }),
+    SUB('agent-a1', 'PermissionRequest', psql),
+    ev('Notification', { ...S('k1', REV), notification_type: 'permission_prompt' }),
+    SUB('agent-a2', 'PreToolUse', { tool_name: 'Read', tool_input: { file_path: `${REV}/docs/DESIGN.md` }, tool_use_id: 'r1' }),
+    SUB('agent-a2', 'PreToolUse', { tool_name: 'Edit', tool_input: { file_path: `${REV}/x.js`, old_string: 'a', new_string: 'b' }, tool_use_id: 'e1' }),
+  ]);
+}
+
+test('QA 02: a subagent permission prompt stays while a parallel subagent works, until it is answered', () => {
+  const b = qa02();
+  assert.equal(b.sessions.k1.pending.length, 1);
+  assert.equal(b.sessions.k1.pending[0].tuid, 'b1');
+  assert.equal(b.sessions.k1.state.activity, 'working');
+  const v = boardView(b);
+  assert.equal(v.view, 'permission');
+  assert.equal(v.activity, 'permission');
+  assert.equal(v.command, 'psql -f migrate.sql');
+  assert.equal(v.tool, 'Bash');
+  const ok = reduceBoard(b, SUB('agent-a1', 'PostToolUse', { ...psql, tool_use_id: 'b1', tool_response: { stdout: 'done' } }));
+  assert.equal(boardView(ok).view, 'working');
+  assert.deepEqual(ok.sessions.k1.pending, []);
+});
+
+test('QA 02: the prompt is also answered by PermissionDenied or PostToolUseFailure with the tool_use_id', () => {
+  const b = qa02();
+  assert.equal(boardView(reduceBoard(b, SUB('agent-a1', 'PermissionDenied', { ...psql, tool_use_id: 'b1' }))).view, 'working');
+  assert.equal(boardView(reduceBoard(b, SUB('agent-a1', 'PostToolUseFailure', { ...psql, tool_use_id: 'b1', error: 'x' }))).view, 'working');
+  // another agent's Post does not answer it
+  assert.equal(boardView(reduceBoard(b, SUB('agent-a2', 'PostToolUse', { tool_name: 'Read', tool_use_id: 'r1' }))).view, 'permission');
+});
+
+test('QA 02: SubagentStop clears the prompt of that subagent', () => {
+  const b = qa02();
+  const e = reduceBoard(b, SUB('agent-a1', 'SubagentStop', {}));
+  assert.notEqual(e, b);
+  assert.equal(boardView(e).view, 'working');
+  assert.equal(e.sessions.k1.pre.some((p) => p.agent === 'agent-a1'), false);
+  assert.equal(reduceBoard(e, SUB('agent-a1', 'SubagentStop', {})), e);
+});
+
+test('QA 02: main Stop keeps a prompt of a subagent still listed as running, clears it otherwise', () => {
+  const b = qa02();
+  const running = reduceBoard(b, ev('Stop', { ...S('k1', REV), background_tasks: [{ id: 'agent-a1', type: 'subagent', status: 'running' }] }));
+  assert.equal(boardView(running).view, 'permission');
+  const none = reduceBoard(b, ev('Stop', { ...S('k1', REV), background_tasks: [] }));
+  assert.equal(boardView(none).view, 'done');
+  // without a background_tasks list nothing proves the subagent is gone: its prompt stays
+  const noList = reduceBoard(b, ev('Stop', S('k1', REV)));
+  assert.equal(boardView(noList).view, 'permission');
+});
+
+test('QA 02: a main-thread prompt is cleared by the next driver prompt, not by a task-notification', () => {
+  const b = run([...start('A', REV), ev('PreToolUse', { ...S('A', REV), ...BASH, tool_use_id: 't1' }),
+    ev('PermissionRequest', { ...S('A', REV), ...BASH })]);
+  assert.equal(boardView(b).view, 'permission');
+  assert.equal(b.sessions.A.pending[0].tuid, 't1');
+  const inj = reduceBoard(b, ev('UserPromptSubmit', { ...S('A', REV), prompt: '<task-notification>\n<task-id>x</task-id>' }));
+  assert.equal(boardView(inj).view, 'permission');
+  const drv = reduceBoard(b, ev('UserPromptSubmit', { ...S('A', REV), prompt: 'next' }));
+  assert.equal(boardView(drv).view, 'working');
+  assert.deepEqual(drv.sessions.A.pending, []);
+});
+
+test('QA 02: a late permission_prompt Notification while a prompt is pending changes nothing; PermissionRequest twice neither', () => {
+  const b = qa02();
+  assert.equal(reduceBoard(b, ev('Notification', { ...S('k1', REV), notification_type: 'permission_prompt' })), b);
+  assert.equal(reduceBoard(b, SUB('agent-a1', 'PermissionRequest', psql)), b);
+});
+
+test('QA 02: a subagent PermissionRequest after the main Stop is not late', () => {
+  const b = run([...start('k1', REV), SUB('agent-a1', 'PreToolUse', { ...psql, tool_use_id: 'b1' }),
+    ev('Stop', { ...S('k1', REV), background_tasks: [{ id: 'agent-a1', type: 'subagent', status: 'running' }] }),
+    SUB('agent-a1', 'PermissionRequest', psql)]);
+  assert.equal(boardView(b).view, 'permission');
+});
+
+test('a permission in session B while A is focus pre-empts; after it is answered focus stays on B', () => {
+  let b = run([...start('A', REV), ...start('B', OTHER)]);
+  b = run([ev('UserPromptSubmit', S('A', REV))], b);
+  assert.equal(b.focus, 'A');
+  b = run([ev('PreToolUse', { ...S('B', OTHER), ...BASH, tool_use_id: 'x1' }), ev('PermissionRequest', { ...S('B', OTHER), ...BASH })], b);
+  assert.equal(b.focus, 'B');
+  assert.equal(boardView(b).view, 'permission');
+  assert.equal(boardView(b).repo, 'other-project');
+  b = run([ev('PostToolUse', { ...S('B', OTHER), ...BASH, tool_use_id: 'x1' })], b);
+  assert.equal(b.focus, 'B');
+  assert.equal(boardView(b).view, 'working');
+});
+
+test('the cap does not drop the focus session when another victim exists', () => {
+  // F is the focus and the least recently touched working session; the older-need rule alone would drop it
+  const events = [ev('UserPromptSubmit', { session_id: 'F' })];
+  for (let i = 0; i < MAX_SESSIONS - 1; i += 1) events.push(ev('SessionStart', { session_id: `s${i}` })); // waiting
+  const b0 = run(events);
+  assert.equal(b0.focus, 'F');
+  assert.equal(Object.keys(b0.sessions).length, MAX_SESSIONS);
+  // a newcomer that waits: the victim is among the waiting ones (need 3) only if F is protected; F is working (need 2)
+  const b = reduceBoard(b0, ev('SessionStart', { session_id: 'new' }));
+  assert.ok('F' in b.sessions, 'focus kept');
+  assert.ok(!('s0' in b.sessions));
+});
+
+test('QA 05: the branch of an ended session in another repo is not shown', () => {
+  const o = { session_id: 'B', cwd: OTHER };
+  let b = run([
+    ev('SessionStart', S('A', REV)), ev('RevviewContext', { ...S('A', REV), branch: 'fix/refund-flow' }),
+    ev('SessionEnd', S('A', REV)), ev('RevviewStarting'), ev('SessionStart', o),
+  ]);
+  assert.equal(boardView(b).repo, 'other-project');
+  assert.equal(boardView(b).branch, null);
+  b = run([ev('UserPromptSubmit', { ...o, prompt: 'x' })], b);
+  assert.equal(boardView(b).branch, null);
+  // a session-less context for the same repo still gives the session the branch
+  b = run([ev('RevviewContext', { cwd: OTHER, branch: 'dev' })], b);
+  assert.equal(boardView(b).branch, 'dev');
+});
+
+test('QA 07: a SessionEnd of a session the board never saw does not claim that Claude exited', () => {
+  const u = run([ev('SessionEnd', S('u1', REV))]);
+  assert.equal(boardView(u).view, 'unknown');
+  assert.deepEqual(u.ended, ['u1']);
+  const s = run([ev('RevviewStarting'), ev('SessionEnd', S('zz', REV))]);
+  assert.equal(boardView(s).view, 'starting');
+  assert.equal(reduceBoard(s, ev('SessionEnd', S('zz', REV))), s);
+  assert.equal(boardView(run([ev('SessionStart', A), ev('SessionEnd', A)])).view, 'ended');
 });

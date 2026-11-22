@@ -63,9 +63,24 @@ offline/locked overlays and shows again when they clear.
 
 `reduceBoard` keeps many sessions (key = `session_id`; an event without a usable one goes to the only live session if there is exactly one, else to the anonymous `''` session, which `others` never counts; subagent events carry
 the parent's `session_id`, so they never make a second session). Pure, never throws, returns the SAME reference
-when nothing changes. Board: `{phase, offline, locked, context: {repo, branch}, sessions, ended, tick}`;
-`sessions[id] = {state, open, touched, dropped}` (`state` from `reduce`, `open` = tool_use_ids with a
-PreToolUse and no Post yet, `touched` = board tick of the last applied event).
+when nothing changes. Board: `{phase, offline, locked, context: {repo, branch}, sessions, ended, tick, focus}`;
+`sessions[id] = {state, open, touched, dropped, pending, pre}` (`state` from `reduce`, `open` = tool_use_ids
+with a PreToolUse and no Post yet, `touched` = board tick of the last applied event, `pending` = unanswered
+permission prompts, `pre` = the last PreToolUse per agent; `focus` = id of the session the bar shows, or null).
+
+- Pending prompts: `pending = [{agent, tuid, tool, file, command, output, since}]`, `pre = [{agent, tuid,
+  tool}]`; the agent key is `agent_id` if it is a non-empty string, else `''` (main thread). A
+  `PermissionRequest` (no `tool_use_id` in Claude Code 2.1.330) takes the `tuid` of the agent's last PreToolUse
+  when its tool is the same; it is appended unless the same agent+tuid is already pending. Only the main
+  thread's request is "late" after Stop; a subagent's never is. A `permission_prompt` Notification adds a
+  generic entry (`agent: null`) only when nothing is pending and the turn is not finished. The session's
+  `state.activity` is NOT changed by them: the effective activity is `permission` while `pending` is not empty
+  (and tool/file/command/output come from `pending[0]`). Answered (entry removed) by `PostToolUse`,
+  `PostToolUseFailure`, `PermissionDenied` with the same `tool_use_id` (or, without a tuid, the same agent and
+  tool; a main-thread Post also clears generic entries); `SubagentStop` clears that agent (and its `pre`);
+  `Stop` clears the main-thread and generic entries, and a subagent's only when `background_tasks` is an array
+  that does not list it as running; a driver prompt clears main-thread and generic entries (an Esc'd prompt
+  sends nothing else); an injected `<task-notification>` prompt clears nothing.
 
 - `RevviewNetwork`, `RevviewDataLock`: board overlays. `RevviewStarting`: clears all sessions and the `ended`
   list, phase `starting`. `RevviewContext`: applied to its live session if it has a `session_id` of one,
@@ -73,6 +88,8 @@ PreToolUse and no Post yet, `touched` = board tick of the last applied event).
 - `RevviewDropped` (internal, sent by the server when an event body was too large to read): marks that live
   session `dropped` (the diff may be incomplete). A late `PostToolUse` of Edit/Write/MultiEdit after `Stop` that cannot be placed (no `tool_use_id`, or one not open) also marks it, since its lines are lost, or every live session without a usable id; an id the board
   does not know marks nothing. Reset by `UserPromptSubmit`.
+- `SessionEnd` of a session the board never saw only remembers its id in `ended` (not `''`); the phase is not
+  touched (an `unknown`/`starting` board stays so: one end proves nothing about the others).
 - `SessionEnd`: removes the session and remembers its id in `ended` (last `MAX_ENDED = 256`; an older id can be resurrected by a late event, see DECISIONS "not solved"; the anonymous `''` session is
   never remembered). With no session left, phase is `ended` and `board.context` keeps its repo/branch. Later
   events of an ended id are ignored, except `SessionStart`, which recreates the session.
@@ -86,7 +103,15 @@ PreToolUse and no Post yet, `touched` = board tick of the last applied event).
 - A board that this module did not build (any session not of the shape above) is replaced by `initialBoard()`.
 - At most `MAX_SESSIONS = 8` live sessions (the band hint `+N` has room for one digit); on overflow the session that needs the driver least is dropped (unknown/starting, then done, working, waiting; the least recently touched among equals; a crashed
   Claude never sends `SessionEnd`). A session at `permission` is never dropped: if all others need permission, the newcomer is still admitted and the cap is exceeded (`+N` may have two digits).
-- Shown session: priority `permission` > `waiting` > `working` > `done` > anything else; tie -> highest `touched`.
+- Shown session = `focus` (recomputed after every change by `refocus(board, spoke)`; `spoke` = the session a
+  driver prompt was applied to). In order: no live session -> null; a pending permission pre-empts (keep the
+  focus if it has one, else the one asked first); the session the driver just spoke to; a focus that is no
+  longer live -> the best of working > done > waiting > rest, then the highest `touched`; a focus that is
+  idle/unknown/starting while another session works -> the most recently touched working one; else keep
+  (sticky: other sessions' events never move it; a `done` focus stays until its idle_prompt). The cap avoids
+  dropping the focus when another victim exists. `boardView` shows `sessions[focus]` when valid, else
+  computes the same rule without storing it.
+- `boardView` branch: `s.branch`, else `board.context.branch` only when `board.context.repo` is the repo shown.
 
 `boardView(board)` is the flat state the page renders, always with exactly these keys: `view, activity,
 offline, locked, repo, branch, tool, file, diff {added, removed}, command, output, others, diffIncomplete`.

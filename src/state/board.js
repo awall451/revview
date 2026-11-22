@@ -21,18 +21,19 @@ export function initialBoard() {
     sessions: {},
     ended: [],
     tick: 0,
+    focus: null,
   };
 }
 
 function isValidSession(s) {
   return isObj(s) && isObj(s.state) && typeof s.state.activity === 'string' && isObj(s.state.diff)
-    && Array.isArray(s.open) && Number.isInteger(s.touched) && typeof s.dropped === 'boolean';
+    && Array.isArray(s.open) && Array.isArray(s.pending) && Array.isArray(s.pre) && Number.isInteger(s.touched) && typeof s.dropped === 'boolean';
 }
 
 // Only boards this module built are used; anything else is replaced, so nothing below can throw on it.
 function isValidBoard(b) {
   return isObj(b) && typeof b.phase === 'string' && isObj(b.context) && isObj(b.sessions)
-    && Array.isArray(b.ended) && Number.isInteger(b.tick)
+    && Array.isArray(b.ended) && Number.isInteger(b.tick) && (b.focus === null || typeof b.focus === 'string')
     && Object.keys(b.sessions).every((k) => isValidSession(b.sessions[k]));
 }
 
@@ -78,25 +79,59 @@ function pushEnded(ended, id) {
 const sameList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
 const PRIORITY = { permission: 4, waiting: 3, working: 2, done: 1 };
-const need = (s) => PRIORITY[s.state.activity] ?? 0;
+// Effective activity: an unanswered permission prompt (any agent of the session) wins over the turn's activity.
+const act = (s) => (s.pending.length > 0 ? 'permission' : s.state.activity);
+const need = (s) => PRIORITY[act(s)] ?? 0;
 
 // Over the cap, drop the session that needs the driver least (unknown/starting, done, working, waiting), the
-// least recently touched among equals. A session at `permission` is never dropped: a pending prompt must not
-// vanish. If every other session needs permission the newcomer is still admitted and the cap is exceeded
-// (the hint "+N" may then have two digits); showing every prompt beats a tidy count.
-function capSessions(sessions, keepId) {
+// least recently touched among equals; the focus session goes last. A session with a pending permission prompt
+// is never dropped: a pending prompt must not vanish. If every other session needs permission the newcomer is
+// still admitted and the cap is exceeded (the hint "+N" may then have two digits); showing every prompt beats
+// a tidy count.
+function capSessions(sessions, keepId, focus) {
   let out = sessions;
   while (Object.keys(out).length > MAX_SESSIONS) {
     let victim = null;
     for (const k of Object.keys(out)) {
-      if (k === keepId || out[k].state.activity === 'permission') continue;
-      if (victim === null || need(out[k]) < need(out[victim])
-        || (need(out[k]) === need(out[victim]) && out[k].touched < out[victim].touched)) victim = k;
+      if (k === keepId || act(out[k]) === 'permission') continue;
+      if (victim === null) { victim = k; continue; }
+      const kFocus = k === focus;
+      const vFocus = victim === focus;
+      if (kFocus !== vFocus ? vFocus : (need(out[k]) < need(out[victim])
+        || (need(out[k]) === need(out[victim]) && out[k].touched < out[victim].touched))) victim = k;
     }
     if (victim === null) break;
     out = withoutSession(out, victim);
   }
   return out;
+}
+
+// Which session the bar shows. Rules in order: none live -> null; a pending permission prompt pre-empts (keep
+// the focus if it has one, else the one asked first); the session the driver just spoke to; a dead focus falls
+// back to the busiest (working > done > waiting > rest, most recently touched); a focus that is idle or
+// unknown gives way to a working session; else keep it (sticky: other sessions' events never move it).
+function pickFocus(b, spoke) {
+  const ids = Object.keys(b.sessions);
+  if (ids.length === 0) return null;
+  const sess = (k) => b.sessions[k];
+  const asking = ids.filter((k) => sess(k).pending.length > 0);
+  if (asking.length > 0) {
+    if (b.focus !== null && asking.includes(b.focus)) return b.focus;
+    return asking.reduce((best, k) => (sess(k).pending[0].since < sess(best).pending[0].since ? k : best));
+  }
+  if (spoke !== null && has(b.sessions, spoke)) return spoke;
+  const touchedMax = (list) => list.reduce((best, k) => (sess(k).touched > sess(best).touched ? k : best));
+  if (b.focus === null || !has(b.sessions, b.focus)) {
+    const rank = (k) => ({ working: 3, done: 2, waiting: 1 })[act(sess(k))] ?? 0;
+    const top = Math.max(...ids.map(rank));
+    return touchedMax(ids.filter((k) => rank(k) === top));
+  }
+  const a = act(sess(b.focus));
+  if (a !== 'working' && a !== 'done') {
+    const working = ids.filter((k) => k !== b.focus && act(sess(k)) === 'working');
+    if (working.length > 0) return touchedMax(working);
+  }
+  return b.focus;
 }
 
 function withContext(board, patch) {
@@ -107,6 +142,16 @@ function withContext(board, patch) {
 export function reduceBoard(board, event) {
   const b = isValidBoard(board) ? board : initialBoard();
   if (!isObj(event) || typeof event.hook_event_name !== 'string') return b;
+  const next = reduceInner(b, event);
+  const tid = targetOf(event, b.sessions);
+  const spoke = isDriverPrompt(event) && has(next.sessions, tid) ? tid : null;
+  // a driver prompt that changes nothing else (the session was already working) still moves the focus
+  if (next === b && spoke === null) return b;
+  const focus = pickFocus(next, spoke);
+  return focus === next.focus ? next : { ...next, focus };
+}
+
+function reduceInner(b, event) {
   const name = event.hook_event_name;
   const id = keyOf(event);
   const live = has(b.sessions, id) ? b.sessions[id] : null;
@@ -140,13 +185,16 @@ export function reduceBoard(board, event) {
       return sessions === b.sessions ? b : { ...b, sessions };
     }
     case 'SessionEnd': {
-      if (tlive === null && b.ended.includes(tid)) return b;
+      if (tlive === null) {
+        // a session the board never saw ended: it proves nothing about the phase (the others may still run)
+        return tid === '' || b.ended.includes(tid) ? b : { ...b, ended: pushEnded(b.ended, tid) };
+      }
       const sessions = withoutSession(b.sessions, tid);
       // the anonymous session ('') is never remembered as ended, so later id-less events still count
       const ended = tid === '' ? b.ended : pushEnded(b.ended, tid);
       if (Object.keys(sessions).length > 0) return { ...b, sessions, ended };
-      const repo = tlive !== null && tlive.state.repo !== null ? tlive.state.repo : b.context.repo;
-      const branch = tlive !== null && tlive.state.branch !== null ? tlive.state.branch : b.context.branch;
+      const repo = tlive.state.repo !== null ? tlive.state.repo : b.context.repo;
+      const branch = tlive.state.branch !== null ? tlive.state.branch : b.context.branch;
       return { ...b, sessions, ended, phase: 'ended', context: { repo, branch } };
     }
     default:
@@ -161,31 +209,91 @@ const DIFF_TOOLS = new Set(['Edit', 'Write', 'MultiEdit']);
 const POST = new Set(['PostToolUse', 'PostToolUseFailure']);
 const PERMISSION_TYPES = new Set(['permission_prompt', 'worker_permission_prompt']);
 
+const withoutPending = (pending, drop) => {
+  const kept = pending.filter((p) => !drop(p));
+  return kept.length === pending.length ? pending : kept;
+};
+
+const runningAgent = (event, agent) => event.background_tasks.some((t) => isObj(t) && t.id === agent && t.status === 'running');
+
+// Pending permission prompts after `event` (arrays keep their reference when nothing changes).
+function pendingAfter(pending, event, agent, toolUseId) {
+  const name = event.hook_event_name;
+  if (POST.has(name) || name === 'PermissionDenied') {
+    return withoutPending(pending, (p) => (toolUseId !== null && p.tuid === toolUseId)
+      || (p.tuid === null && p.agent === agent && p.tool === event.tool_name)
+      || (p.agent === null && agent === ''));
+  }
+  if (name === 'SubagentStop') return isStr(event.agent_id) ? withoutPending(pending, (p) => p.agent === event.agent_id) : pending;
+  if (name === 'Stop') {
+    return withoutPending(pending, (p) => p.agent === '' || p.agent === null
+      || (Array.isArray(event.background_tasks) && !runningAgent(event, p.agent)));
+  }
+  if (isDriverPrompt(event)) return withoutPending(pending, (p) => p.agent === '' || p.agent === null);
+  return pending;
+}
+
 function applyToSession(b, live, id, event) {
   const name = event.hook_event_name;
   const prev = live === null ? initialState() : live.state;
   const prevOpen = live === null ? [] : live.open;
+  const prevPending = live === null ? [] : live.pending;
+  const prevPre = live === null ? [] : live.pre;
   const toolUseId = isStr(event.tool_use_id) ? event.tool_use_id : null;
+  const agent = isStr(event.agent_id) ? event.agent_id : '';
+
+  let pending = pendingAfter(prevPending, event, agent, toolUseId);
+  let pre = prevPre;
+  if (name === 'SubagentStop' && isStr(event.agent_id)) pre = withoutPending(prevPre, (p) => p.agent === event.agent_id);
+  if (name === 'PreToolUse' && toolUseId !== null && isStr(event.tool_name)) {
+    pre = [...prevPre.filter((p) => p.agent !== agent), { agent, tuid: toolUseId, tool: event.tool_name }];
+  }
+
+  // Commits the result; the board is returned as is when nothing changed (an ignored event makes no session).
+  const commit = (state, open, dropped) => {
+    if (state === prev && sameList(open, prevOpen) && (live === null || dropped === live.dropped)
+      && pending === prevPending && pre === prevPre) return b;
+    const tick = b.tick + 1;
+    const sessions = capSessions(withSession(b.sessions, id, { state, open, touched: tick, dropped, pending, pre }), id, b.focus);
+    const ended = b.ended.includes(id) ? b.ended.filter((x) => x !== id) : b.ended;
+    return { ...b, sessions, ended, tick };
+  };
+  const prevDropped = live !== null && live.dropped;
+
+  // The turn's `finished` flag decides what a late hook is. Pending prompts are kept beside the state: the
+  // state's activity never becomes `permission` here, `act()` derives it from `pending`.
+  const finished = live !== null
+    && (prev.activity === 'done' || (prev.activity === 'waiting' && prevOpen.length === 0));
+
+  if (name === 'PermissionRequest' && isStr(event.tool_name)) {
+    if (agent === '' && finished) return b; // a main-thread request needs a running turn
+    const entry = pre.find((p) => p.agent === agent);
+    const tuid = entry !== undefined && entry.tool === event.tool_name ? entry.tuid : null;
+    if (tuid !== null && pending.some((p) => p.agent === agent && p.tuid === tuid)) return b;
+    const shown = reduce(prev, event);
+    pending = [...pending, { agent, tuid, tool: shown.tool, file: shown.file, command: shown.command, output: shown.output, since: b.tick + 1 }];
+    // the state stays as it was (only a repo the session still lacks is taken from the event)
+    const state = prev.repo === null && shown.repo !== null ? { ...prev, repo: shown.repo } : prev;
+    return commit(state, prevOpen, prevDropped);
+  }
+  if (name === 'Notification' && PERMISSION_TYPES.has(event.notification_type)) {
+    if (pending.length > 0 || finished) return b;
+    pending = [{ agent: null, tuid: null, tool: prev.tool, file: prev.file, command: prev.command, output: prev.output, since: b.tick + 1 }];
+    return commit(prev, prevOpen, prevDropped);
+  }
 
   let state = reduce(prev, event);
   let open = prevOpen;
-  let dropped = live !== null && live.dropped;
+  let dropped = prevDropped;
 
   // Late events of a turn that already ended must not flip the activity back (QA issue 10). A turn has ended
   // after Stop (done), or when Claude waits with no tool open; an idle_prompt while a tool is still open (an
   // unanswered permission prompt) has not ended it, so that tool's Post still means working.
-  const finished = live !== null
-    && (prev.activity === 'done' || (prev.activity === 'waiting' && prevOpen.length === 0));
-  // a permission request needs a running turn: after the turn ended it is a late hook
-  if (finished && (name === 'PermissionRequest'
-    || (name === 'Notification' && PERMISSION_TYPES.has(event.notification_type)))) return b;
   if (finished && (POST.has(name) || name === 'PermissionDenied')) {
     if (!POST.has(name) || toolUseId === null || !prevOpen.includes(toolUseId)) {
       // a late diff-tool result we cannot place: its lines are lost, so the diff is only a lower bound
-      if (name === 'PostToolUse' && DIFF_TOOLS.has(event.tool_name) && !live.dropped) {
-        return { ...b, sessions: withSession(b.sessions, id, { ...live, dropped: true }) };
-      }
-      return b;
+      if (name === 'PostToolUse' && DIFF_TOOLS.has(event.tool_name) && !live.dropped) return commit(prev, prevOpen, true);
+      return commit(prev, prevOpen, prevDropped);
     }
     state = state === prev ? prev : { ...state, activity: prev.activity, view: prev.view };
   }
@@ -200,30 +308,13 @@ function applyToSession(b, live, id, event) {
     dropped = false;
   }
 
-  if (state === prev && sameList(open, prevOpen) && (live === null || dropped === live.dropped)) return b;
-
-  const tick = b.tick + 1;
-  const sessions = capSessions(withSession(b.sessions, id, { state, open, touched: tick, dropped }), id);
-  const ended = b.ended.includes(id) ? b.ended.filter((x) => x !== id) : b.ended;
-  return { ...b, sessions, ended, tick };
-}
-
-function pickShown(board) {
-  let best = null;
-  for (const k of Object.keys(board.sessions)) {
-    const s = board.sessions[k];
-    const rank = PRIORITY[s.state.activity] ?? 0;
-    if (best === null || rank > best.rank || (rank === best.rank && s.touched > best.session.touched)) {
-      best = { rank, session: s };
-    }
-  }
-  return best === null ? null : best.session;
+  return commit(state, open, dropped);
 }
 
 export function boardView(board) {
   const b = isValidBoard(board) ? board : initialBoard();
-  const shown = pickShown(b);
-  const shownKey = shown === null ? null : Object.keys(b.sessions).find((k) => b.sessions[k] === shown);
+  const shownKey = b.focus !== null && has(b.sessions, b.focus) ? b.focus : pickFocus(b, null);
+  const shown = shownKey === null ? null : b.sessions[shownKey];
   const overlay = (activity) => (b.locked ? 'insert-key' : b.offline ? 'offline' : activity);
   if (shown === null) {
     return {
@@ -243,18 +334,23 @@ export function boardView(board) {
     };
   }
   const s = shown.state;
+  const ask = shown.pending.length > 0 ? shown.pending[0] : null;
+  const activity = act(shown);
+  const repo = s.repo ?? b.context.repo;
+  // the board's branch belongs to the board's repo only
+  const branch = s.branch ?? (b.context.repo !== null && b.context.repo === repo ? b.context.branch : null);
   return {
-    view: overlay(s.activity),
-    activity: s.activity,
+    view: overlay(activity),
+    activity,
     offline: b.offline,
     locked: b.locked,
-    repo: s.repo ?? b.context.repo,
-    branch: s.branch ?? b.context.branch,
-    tool: s.tool,
-    file: s.file,
+    repo,
+    branch,
+    tool: ask === null ? s.tool : ask.tool,
+    file: ask === null ? s.file : ask.file,
     diff: { added: s.diff.added, removed: s.diff.removed },
-    command: s.command,
-    output: s.output,
+    command: ask === null ? s.command : ask.command,
+    output: ask === null ? s.output : ask.output,
     others: Object.keys(b.sessions).filter((k) => k !== '').length - (shownKey === '' ? 0 : 1),
     diffIncomplete: shown.dropped,
   };
