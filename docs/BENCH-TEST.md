@@ -29,3 +29,19 @@ these are the first ones.
 | 21 | With the kiosk showing the live page, stop the server (Ctrl-C), wait 10 s, start it again | The page shows STARTING while the server is away and follows events again by itself after it is back, with no reload and no touch | untested |
 | 22 | Boot the Pi with the server started before Chromium, and once with Chromium started first | Both end with the live page following events; with Chromium first it shows STARTING until the server is up (if Chromium shows an error page instead, the kiosk start script must wait for the server) | untested |
 | 23 | On the Pi, measure the time from a curl POST to the change on the screen, and the CPU use of Chromium while idle on the page | Change well under a second; idle CPU near zero (the page has no animation or polling) | untested |
+
+## Honest states (2026-11-22)
+
+These replace what items 21 and 22 expect while the server is away: the page now shows NO LINK (black band,
+white outline, broken-link shape), not STARTING, and a restarted server shows UNKNOWN until Claude's next
+hook. Ids are `H1`... so they do not clash with numbers added elsewhere.
+
+| # | Try | Should happen | State |
+|---|---|---|---|
+| H1 | Kiosk on `file://<install>/src/view/boot.html?port=8138`, boot with Chromium started before the server | NO LINK "Waiting for the revview server" (never a white page), then the live view by itself within about a second of the server being up | untested |
+| H2 | Same, server started first | The boot page is replaced by the live view after about a second | untested |
+| H3 | With the live page showing WAITING FOR ME, stop the server, wait 10 s, start it again | NO LINK while it is away, then UNKNOWN ("Push-to-talk may still work"); push-to-talk then works and the next hook shows the real state | untested |
+| H4 | Quit Claude Code (`/exit`) | CLAUDE EXITED within about a second | untested |
+| H5 | Run a second Claude session (another terminal) while the first works | The bar shows `+1`; a permission prompt in either session shows NEEDS PERMISSION | untested |
+| H6 | At night and by day, glance at UNKNOWN, CLAUDE EXITED and NO LINK (gallery: `unknown.png`, `ended.png`, `no-link.png`, `boot.png`) | Each is recognised as itself in one glance and not mistaken for STARTING or a working state; the black NO LINK band is not taken for a switched-off screen | untested |
+| H7 | Check that Chromium on the Pi lets `boot.html` (a `file://` page) fetch `http://127.0.0.1:8138/state` (it does in the emulator's Chromium; a newer Chromium's local-network rules may differ) | H1 works; if not, note the Chromium version and console error | untested |

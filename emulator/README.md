@@ -25,8 +25,8 @@ Screenshots: one `<state>.png` per state, exactly 1280x400 px, written to `out/s
 |---|---|
 | `panel.js` | Re-exports `src/view/panel.js`, the ONE place for the panel's size: `PANEL` (1280x400 px, 190x60 mm, `pxPerMm`), `pxToMm`, `mmToPx`. Browser-safe. |
 | `mm.js` | `textSizeMm(locator)`, `boxSizeMm(locator)`: sizes in panel mm (see below). |
-| `fixtures.js` | `FIXTURE_IDS` (= `STATES` from `src/state/states.js`), `loadFixture(id)`. |
-| `fixtures/<state>.json` | One reducer state per view state. |
+| `fixtures.js` | `FIXTURE_IDS` (= `VIEWS` from `src/state/states.js`: the reducer's `STATES` plus the page-only `no-link`), `REDUCER_FIXTURE_IDS` (= `STATES`), `loadFixture(id)`. |
+| `fixtures/<state>.json` | One state per view: the board's view state (`boardView`) for each reducer state; `no-link.json` is just `{"view":"no-link"}` (drawn by the page when its link is down). |
 | `fixtures/recipes.js` | The events each fixture is produced from (recorded sessions + synthetic `Revview*` events). |
 | `serve.js` | Dependency-free static server for the repository root (`node:http`). |
 | `playwright.config.js`, `tests/` | Config and specs (`mm`, `layout`, `screenshots`, `devpage`, `live`); `live` is the end-to-end test: it starts the live server (`src/server`), POSTs the recorded sessions in `fixtures/sessions/` to it and checks what the page shows, plus the starting, late-join, reconnect and malformed-POST cases; `tests/harness.js` starts a server per worker on a free port. |
@@ -48,8 +48,9 @@ FreeSans here); the Pi's fonts may measure differently. Example: "the state word
 
 ## Fixtures
 
-Each fixture is exactly the reducer's state object (same fields, same types). None is hand-written: each is
-the reducer's output for the events in `fixtures/recipes.js`, which takes Claude events from the real
+Each reducer fixture is exactly the view state the server sends (`boardView`, same fields, same types). None
+is hand-written: each is the board's output (`replayView`) for the events in `fixtures/recipes.js` (`unknown`
+is the empty recipe: a fresh or restarted server; `ended` a whole recording up to its SessionEnd), which takes Claude events from the real
 recordings in `fixtures/sessions/*.jsonl` and adds only the synthetic `Revview*` events (context, starting,
 network, data lock). `offline` and `insert-key` are overlays: their `activity` is the Claude state
 underneath. `tests/unit/emulator-fixtures.test.js` checks each fixture equals its replay and is a valid
