@@ -135,3 +135,15 @@ Dispatched: area-lead-platform (Sonnet, no builders, about 5 minutes) wrote `pi/
 Not proven: everything (no Pi, dongle or pods). Open for stage 4: which user runs the server and so the Claude sessions (the unit uses a `revview` system user with no sign-in).
 
 Other open owner messages (WB3 reply still `planned` although WB3 merged as c609518; the publish refusal, follow-up (g)) were left for a normal cycle: out of this job.
+
+## 2026-11-22: one-shot cycle (wheel buttons 5: read aloud)
+
+Owner message 20261122T061905Z-o-9b479e (backlog ed4dd8, owner issue 20261122T061855Z-i-4692c0). One topic, `wb5-speech`, merged first try as ab44fc2 (862 tests, was 798). `tools/check` untouched, no npm dependency.
+
+Dispatched: area-lead-core (Opus, three Sonnet builders, about 11 minutes) built `src/speech/`, `config/speech.json`, the button wiring, `speakOnStop` (off), DECISIONS "wheel buttons 5", bench R1-R14. The lead read the speaker, the config and the actions diff. Reviewer (Sonnet, fresh context, 1 minute of tool time, no mutations): approve, no blocking finding; the path filter dropped ordinary words ("and/or", "Node.js"), `.env` was glued to the word before it, `[[...]]` (espeak-ng phoneme input, reviewer about 80% sure) reached the engine. A second area-lead-core run (Sonnet, 2 minutes, branch `work/wb5-speech-fixes` on top) fixed those three, strips `<` `>` too, and added the push-to-talk delay note to bench 38.
+
+Engine: Piper first, espeak-ng as fallback, as the standing default said; chosen at start from an ordered list of fixed command lines. Asked the owner for `apt:espeak-ng` (20261122T134519Z-k-4b7f18). Piper has no apt package or recipe here: its command line is from memory and nothing installs it on the Pi yet.
+
+Not proven: any sound at all (no engine, no audio device), voice quality, start delay, mic bleed, Piper. If node is hard-killed a speech process can finish its sentence (written in DECISIONS).
+
+Left for a normal cycle: replies to 20261122T064434Z-o-942fed and the WB3 message (both `planned`, all of WB1-6 are now merged), the publish refusal (follow-up (g); no publish was requested this cycle because it would be refused again).
