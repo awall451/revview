@@ -3,7 +3,7 @@
   "engines": [
     {
       "name": "piper",
-      "_comment": "FROM MEMORY AND UNTESTED: these Piper options and the raw 22050 Hz output are not checked against a real Piper. The paths are where pi/install would put the program and the voice.",
+      "_comment": "FROM MEMORY AND UNTESTED: these Piper options and the raw 22050 Hz output are not checked against a real Piper. The paths are where pi/README.md, section Piper, puts the program and the voice (documented steps, no script installs it; still from memory and untested).",
       "stages": [
         ["/opt/piper/piper", "--model", "/opt/piper/voices/en_US-lessac-medium.onnx", "--output-raw"],
         ["aplay", "-q", "-r", "22050", "-f", "S16_LE", "-t", "raw", "-"]

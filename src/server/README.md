@@ -7,7 +7,7 @@ session, see `src/state/README.md`), reduces every event with `reduceBoard` and 
 No persistence: a fresh or restarted server shows `unknown` (a restored state could not be trusted, and hooks
 posted while the server was down are lost).
 
-Run: `npm start` or `node src/server/index.js [port] [--input [path]] [--dev-bridge] [--sessions] [--start dir]... [--projects file] [--speech file] [--boot] [--netmon]` (port default **8138**, or env `REVVIEW_PORT`).
+Run: `npm start` or `node src/server/index.js [port] [--input [path]] [--dev-bridge] [--sessions] [--start dir]... [--projects file] [--speech file] [--boot] [--netmon] [--data-lock [dir]]` (port default **8138**, or env `REVVIEW_PORT`).
 `--input` reads the wheel buttons in this process (config `config/buttons.json`, or the path given); a bad config or
 unknown flag prints the message to stderr and exits with code 2 before listening. `--dev-bridge` (or `npm run start:dev`) turns on `POST /dev/key`. SIGTERM and SIGINT close the server (stopping the grab helper) and exit 0.
 It binds to **127.0.0.1 only**; there is deliberately no way to change the host from the CLI.
@@ -27,6 +27,22 @@ phone hotspot over Wi-Fi counts) plus a TCP connect to the Claude API host (`api
 `REVVIEW_NETMON_HOST` = `host` or `host:port` changes it, a bad value exits with code 2). It checks every 10 s
 (every 5 s while offline). Two failures in a row make the bar show OFFLINE; one success brings it back. Without
 a default route nothing is sent at all. Nothing depends on Ethernet. Code: `src/server/netmon.js`.
+
+## Locked data on the Pi: `--data-lock [dir]`
+
+`--data-lock [dir]` (or env `REVVIEW_DATA_MOUNT=dir`; default `/srv/revview-data`; the path must match
+`^/[A-Za-z0-9._/-]+$`, else exit 2) makes the server watch the encrypted data partition. The data counts as unlocked
+when the topmost mount on `dir` is ext4 from `/dev/mapper/revview-data`, as `/proc/self/mountinfo` says. The server
+reads it at start, every 3 s, and when poked. While locked the bar shows INSERT KEY, the key-on session (`--boot`)
+waits, and New session from the menu is refused; the bar, the buttons, the menu and read aloud keep working. When the
+data unlocks, the bar goes on to STARTING and the key-on session starts once. Code: `src/server/datalock.js`.
+`pi/data-setup.sh` writes `/etc/revview/data.env` with the variable; the unit reads it.
+
+**The poke rule.** With `--data-lock`, a posted `RevviewDataLock` does NOT set the lock: its `locked` value is
+ignored, the server re-reads the mount table and answers 204. Any local process may POST to 127.0.0.1, so a posted
+value must not be able to fake an unlock. `pi/unlock.sh` posts the poke so the bar changes at once. Without
+`--data-lock` (development, the emulator) the event is applied as before. Not checked on a Pi (`docs/BENCH-TEST.md`,
+stage 4B).
 
 ## POST /event
 

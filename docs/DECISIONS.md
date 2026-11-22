@@ -1253,3 +1253,31 @@ documentation reachable from the VM, no Pi): every such step is a bench item, `u
   to stop the user's own processes, only to keep a forged event from starting one.
 - **Behaviour without the data set-up stays as today:** no `data.env`, no `--data-lock`, `--boot` starts the key-on
   session at server start.
+
+### Built (stage 4B), and what was decided while building
+
+- Files: `pi/lib.sh`, `pi/readonly.sh`, `pi/data-setup.sh`, `pi/data.mjs`, `pi/files.mjs` (the writer of `setup.mjs`,
+  moved out unchanged), `pi/unlock.sh`, `pi/revview-unlock.service`, `pi/72-revview-key.rules`; `pi/install.sh` and
+  `pi/revview.service` changed; `src/server/datalock.js` and `src/server/index.js` (`--data-lock`). Docs:
+  `pi/README.md` (data, read-only root, Updating, Piper), `docs/REVOKE.md`, bench B1-B17. Tests:
+  `pi-readonly`, `pi-unlock`, `pi-data`, `pi-data-setup`, `datalock`, `server-datalock`, more in `pi-install`.
+- **Piper: documented steps, no script.** A download whose checksum cannot be known here is not put in a script; the
+  steps (rhasspy/piper 2023.11.14-2 aarch64 into `/opt/piper`, voice `en_US-lessac-medium` into `/opt/piper/voices`)
+  match `config/speech.json` and are FROM MEMORY. espeak-ng stays the fallback.
+- `unlock.sh` pokes the server with `locked:true` when the stick is absent and `locked:false` after an unlock or when
+  already unlocked; nothing on refusals (the server decides from the mount table anyway). The unit runs it as
+  `/bin/bash .../unlock.sh`, so it does not depend on the file's mode. cryptsetup's and e2fsck's messages go to the
+  journal (neither prints key material); cryptsetup's stdout is dropped.
+- `data-setup.sh` also refuses before any change: `--confirm` without `--format`, `/srv/revview-data` already
+  mounted, `/dev/mapper/revview-data` already open (with `--format`), and a key file already on the stick that is a
+  symlink or not 4096 bytes (an existing good one is reused, so one stick can serve again). The copy, delete and
+  symlink steps of the migration run AS the user (`runuser`), so root never walks a path the user controls. Without
+  `--format` it refuses while the data is open (the device has a child): register a new stick with the data locked
+  (REVOKE.md (c)).
+- `install.sh` skips the hooks (exit 1, the rest done) when `~/.claude` is a symlink whose target is missing (the data
+  is locked); after a data set-up the hooks are already inside the moved `~/.claude`.
+- The guarded New session re-reads the mount table at the press, so a press right after the stick is plugged in
+  works before the next 3 s poll.
+- Not verified anywhere: that util-linux `mount` records `/dev/mapper/revview-data` (and not `/dev/dm-0`) as the
+  source in `/proc/self/mountinfo`. If it shows `dm-N` on the Pi, the bar stays INSERT KEY although the data is
+  mounted (bench B-items say what to look at); the fix would be to accept the mapper's major:minor too.
