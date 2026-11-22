@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node $REVVIEW_DIR/hooks/permission-request.mjs",
+            "timeout": 600
+          }
+        ]
+      }
+    ]
+  }
+}
