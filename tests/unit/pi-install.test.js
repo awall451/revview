@@ -131,3 +131,75 @@ test('install.sh: a failed file step (cmdline.txt without root=) still finishes 
   assert.ok(fs.existsSync(path.join(r, 'home/alice/.claude/settings.json')), 'hooks still installed');
   assert.equal(fs.readFileSync(path.join(r, 'boot/firmware/cmdline.txt'), 'utf8'), '');
 }));
+
+const OVERLAY_MOUNTS = 'overlayroot / overlay rw,relatime,lowerdir=/media/root-ro,upperdir=/media/root-rw/overlay 0 0\n';
+const EXT4_MOUNTS = '/dev/mmcblk0p2 / ext4 rw,noatime 0 0\n/dev/mmcblk0p1 /boot/firmware vfat rw,relatime 0 0\n';
+const writeMounts = (r, text) => {
+  fs.mkdirSync(path.join(r, 'proc'), { recursive: true });
+  fs.writeFileSync(path.join(r, 'proc/mounts'), text);
+};
+
+test('install.sh: refused (exit 2, nothing written) when / is an overlay, also with --dry-run', withRoot((r) => {
+  writeMounts(r, OVERLAY_MOUNTS);
+  const before = snapshot(r);
+  for (const extra of [[], ['--dry-run']]) {
+    const res = run(base(r, extra));
+    assert.equal(res.code, 2, res.out + res.err);
+    assert.match(res.err, /overlay/);
+    assert.deepEqual(snapshot(r), before);
+  }
+}));
+
+test('install.sh: refused when /boot/firmware is mounted read-only, also with --dry-run', withRoot((r) => {
+  writeMounts(r, '/dev/mmcblk0p2 / ext4 rw 0 0\n/dev/mmcblk0p1 /boot/firmware vfat ro,relatime 0 0\n');
+  const before = snapshot(r);
+  for (const extra of [[], ['--dry-run']]) {
+    const res = run(base(r, extra));
+    assert.equal(res.code, 2, res.out + res.err);
+    assert.match(res.err, /\/boot\/firmware is mounted read-only/);
+    assert.deepEqual(snapshot(r), before);
+  }
+}));
+
+test('install.sh: runs with a normal ext4 root in proc/mounts', withRoot((r) => {
+  writeMounts(r, EXT4_MOUNTS);
+  const res = run(base(r));
+  assert.equal(res.code, 0, res.out + res.err);
+  assert.doesNotMatch(res.out, /read-only root is turned on/);
+}));
+
+test('install.sh: overlayroot= in cmdline.txt (overlay not active yet) is a note, not an error', withRoot((r) => {
+  const f = path.join(r, 'boot/firmware/cmdline.txt');
+  fs.writeFileSync(f, `${fs.readFileSync(f, 'utf8').trim()} overlayroot=tmpfs\n`);
+  const res = run(base(r));
+  assert.equal(res.code, 0, res.out + res.err);
+  assert.match(res.out, /the read-only root is turned on for the next boot: what this run writes is kept/);
+}));
+
+test('install.sh: ~/.claude pointing to a missing locked data dir skips the hooks, exits 1, writes the rest', withRoot((r) => {
+  fs.mkdirSync(path.join(r, 'home/alice'), { recursive: true });
+  fs.symlinkSync('/srv/revview-data/claude', path.join(r, 'home/alice/.claude'));
+  const res = run(base(r));
+  assert.equal(res.code, 1, res.out + res.err);
+  assert.match(res.out, /skipped hooks: ~\/\.claude points to the locked data partition/);
+  assert.ok(fs.existsSync(path.join(r, 'etc/systemd/user/revview.service')));
+  assert.ok(fs.existsSync(path.join(r, 'home/alice/.config/labwc/autostart')));
+  assert.equal(fs.existsSync(path.join(r, 'srv')), false, 'nothing created behind the link');
+}));
+
+test('install.sh: ~/.claude pointing to an existing data dir gets the hooks installed into it', withRoot((r) => {
+  fs.mkdirSync(path.join(r, 'srv/revview-data/claude'), { recursive: true });
+  fs.mkdirSync(path.join(r, 'home/alice'), { recursive: true });
+  fs.symlinkSync('../../srv/revview-data/claude', path.join(r, 'home/alice/.claude'));
+  const res = run(base(r));
+  assert.equal(res.code, 0, res.out + res.err);
+  assert.doesNotMatch(res.out, /skipped hooks/);
+  assert.match(fs.readFileSync(path.join(r, 'srv/revview-data/claude/settings.json'), 'utf8'), /# revview-hook/);
+}));
+
+test('revview.service: data.env, the auto-updater off, flags unchanged', () => {
+  const unit = fs.readFileSync(path.join(ROOT, 'pi/revview.service'), 'utf8').replace(/^#.*$/gm, '');
+  assert.match(unit, /^EnvironmentFile=-\/etc\/revview\/data\.env$/m);
+  assert.match(unit, /^Environment=DISABLE_AUTOUPDATER=1$/m);
+  assert.match(unit, /--input .*--sessions --boot --netmon/);
+});

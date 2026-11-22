@@ -11,8 +11,8 @@
 #   REVVIEW_DIR defaults to this repository; it should live outside the home (e.g. /opt/revview), with npm ci done.
 #             Its path must match ^/[A-Za-z0-9._/-]+$ (it goes into a shell line and a systemd unit).
 #   --root    must not merely resolve to / (a symlink): give exactly / for a real install.
-# Exit: 0 done; 2 bad arguments (nothing written); 1 a file was refused (a symlink where a file is written, or a
-#   cmdline.txt without root=): left as it was, everything else done, fix it and re-run.
+# Exit: 0 done; 2 bad arguments, or the root is read-only (overlay on) or /boot/firmware is ro (nothing written); 1 a file was refused (a symlink where a file is written, or a
+#   cmdline.txt without root=, or hooks skipped as ~/.claude is on the locked data): left as it was, everything else done, fix it and re-run.
 # What it changes (see pi/setup.mjs): /boot/firmware/cmdline.txt and config.txt (quiet boot, rotated console),
 #   /etc/lightdm/lightdm.conf (autologin), udev rules (dongle, touch rotation), /etc/systemd/user/revview.service
 #   and its enable symlink, /var/lib/systemd/linger/<user>, /etc/revview/server.env (only if missing),
@@ -55,6 +55,15 @@ given_root="$root"
 root="$(cd "$root" && pwd -P)"
 # A --root that only resolves to / (a symlink, "/." ...) would be a real install by accident: say / to mean it.
 if [ "$root" = "/" ] && [ "$given_root" != "/" ]; then die "--root $given_root resolves to /; pass exactly / for a real install"; fi
+
+# shellcheck source=/dev/null
+. "$here/lib.sh"
+# Before anything is written (also with --dry-run): not under the read-only root, and /boot/firmware is written.
+revview_refuse_if_readonly "$root" install.sh boot
+if [ -r "$root/boot/firmware/cmdline.txt" ] && grep -Eq '(^|[[:space:]])overlayroot=' "$root/boot/firmware/cmdline.txt"; then
+  echo "note: the read-only root is turned on for the next boot: what this run writes is kept"
+fi
+
 dir="$(cd "${dir:-$here/..}" && pwd)"
 case "$dir" in
   /*) ;;
@@ -149,8 +158,21 @@ setup_rc=0
 if [ "$setup_rc" -ne 0 ] && [ "$setup_rc" -ne 1 ]; then exit "$setup_rc"; fi
 if [ "$setup_rc" -eq 1 ]; then echo "install.sh: some files were refused (see the skipped lines above); fix them and run it again" >&2; fi
 
-# Claude Code hooks for that user.
-if [ "$dry" -eq 1 ]; then
+# Claude Code hooks for that user. ~/.claude may be a symlink into the locked data partition (pi/data-setup.sh):
+# while the target is missing, writing through it would fail (or make a stray directory), so skip and say so.
+hooks_locked=0
+claude_link="$root$home/.claude"
+if [ -L "$claude_link" ]; then
+  target="$(readlink "$claude_link")"
+  case "$target" in
+    /*) [ -d "$root$target" ] || hooks_locked=1 ;;
+    *) [ -d "$claude_link" ] || hooks_locked=1 ;;
+  esac
+fi
+if [ "$hooks_locked" -eq 1 ]; then
+  echo "skipped hooks: ~/.claude points to the locked data partition; insert the key stick (or run pi/unlock.sh) and run this again"
+  setup_rc=1
+elif [ "$dry" -eq 1 ]; then
   echo "would install the Claude Code hooks for $user"
 elif [ "$real" -eq 1 ]; then
   runuser -u "$user" -- env HOME="$home" "$node_bin" "$dir/hooks/install.mjs"

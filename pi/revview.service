@@ -27,6 +27,12 @@ Environment=REVVIEW_PORT=8138
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 # Optional: REVVIEW_PROJECTS, REVVIEW_START, REVVIEW_NETMON_HOST (see /etc/revview/server.env)
 EnvironmentFile=-/etc/revview/server.env
+# Written by pi/data-setup.sh only: sets REVVIEW_DATA_MOUNT (the server keeps the key-on session until the data is
+# unlocked and shows INSERT KEY) and CLAUDE_CONFIG_DIR.
+EnvironmentFile=-/etc/revview/data.env
+# Under the read-only root an update would land in RAM and vanish. Claude Code is updated with the overlay off
+# (pi/README.md, Updating). The variable name is in Claude Code 2.1.330; its effect is from memory.
+Environment=DISABLE_AUTOUPDATER=1
 ExecStart=@NODE@ @REVVIEW_DIR@/src/server/index.js --input @REVVIEW_DIR@/config/buttons.json --sessions --boot --netmon
 Restart=always
 RestartSec=2
