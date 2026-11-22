@@ -1,0 +1,35 @@
+I: Bus=0011 Vendor=0001 Product=0001 Version=ab41
+N: Name="AT Translated Set 2 keyboard"
+P: Phys=isa0060/serio0/input0
+H: Handlers=sysrq kbd leds event0
+B: EV=120013
+B: KEY=402000000 3803078f800d001 feffffdfffefffff fffffffffffffffe
+
+I: Bus=0003 Vendor=1d50 Product=615e Version=0111
+N: Name="ZMK Dongle"
+P: Phys=usb-0000:00:14.0-2/input2
+H: Handlers=mouse2 event5
+B: EV=17
+B: KEY=1f0000
+
+this line is garbage
+I: Bus=zz Vendor
+N: Name=
+
+I: Bus=0003 Vendor=1d50 Product=615e Version=0111
+N: Name="ZMK Dongle Consumer Control"
+P: Phys=usb-0000:00:14.0-2/input1
+H: Handlers=kbd event4
+B: EV=13
+B: KEY=300000
+
+I: Bus=0003 Vendor=1d50 Product=615e Version=0111
+N: Name="ZMK Dongle"
+P: Phys=usb-0000:00:14.0-2/input0
+H: Handlers=sysrq kbd leds event3
+B: EV=120013
+B: KEY=7 ff80000000000000 0 0
+
+I: Bus=0003 Vendor=046d Product=c52b Version=0111
+N: Name="Logitech USB Receiver"
+H: Handlers=kbd
