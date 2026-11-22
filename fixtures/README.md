@@ -11,8 +11,11 @@ screenshots should use them too. There were no placeholder fixtures before these
 | `working-turn` | a full turn: prompt, Read, Edit (+1 -1), Write of a new file (+3), a Bash command with ANSI-coloured output, Stop |
 | `permission-prompt` | a Bash command that needs permission: PermissionRequest, Notification `permission_prompt`, approval, Stop, Notification `idle_prompt` |
 | `idle-prompt` | a turn without a prompt, Stop, then Notification `idle_prompt` |
+| `subagent-permission` | two async subagents in one message; A's Bash needs permission (PermissionRequest with `agent_id`, no `tool_use_id`), B reads three files and runs `ls` meanwhile, the main turn Stops (`background_tasks` running), B's `<task-notification>` prompt, a late `permission_prompt` Notification, approval 45 s later, A's notification turn, Stop, `idle_prompt` |
+| `permission-interrupted` | a main-thread prompt rejected with Esc (no Post, Stop or PermissionDenied follows), the driver's next prompt starts a subagent whose Bash prompt is approved after the main Stop |
+| `compaction` | auto compaction twice in the middle of a turn (PreCompact `auto`, SessionStart `compact`, PostCompact) with `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=1`, then `/compact` at the prompt (`manual`), then one more turn |
 
-All three were **recorded on this VM with Claude Code 2.1.330** (model haiku) on 2026-11-21, in a throwaway
+The first three were **recorded on this VM with Claude Code 2.1.330** (model haiku) on 2026-11-21, in a throwaway
 repo under `/tmp`, with a hook on every event appending its stdin as a JSON line. Changed afterwards: only
 `/home/agent/` -> `/home/user/`. Nothing here is hand-written; shapes that are only known from the package
 source are listed in `docs/DECISIONS.md`.
@@ -24,3 +27,9 @@ pty for Notification events (permission and idle prompts are interactive only). 
 `CLAUDE_CONFIG_DIR` for interactive runs so onboarding and folder trust stay out of the real config.
 Copy the file here, sanitise, then `REVVIEW_UPDATE_EXPECTED=1 npm run test:unit` and review the new
 `.expected.json` before committing.
+
+The last three were recorded the same way on 2026-11-22 (Claude Code 2.1.330, model haiku; the subagents ran
+on the default subagent model), in `/tmp/rec/repo` with its own `CLAUDE_CONFIG_DIR`, driven through a pty by a
+pexpect script that sent keystrokes (Enter to approve, Esc to reject) and waited for hook events in the file.
+Nothing was changed in them (the paths are already under `/tmp`); nothing is hand-written.
+

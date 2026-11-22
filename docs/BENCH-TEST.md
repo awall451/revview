@@ -47,3 +47,17 @@ hook. Ids are `H1`... so they do not clash with numbers added elsewhere.
 | H5 | Run a second Claude session (another terminal) while the first works | The bar shows `+1`; a permission prompt in either session shows NEEDS PERMISSION | untested |
 | H6 | At night and by day, glance at UNKNOWN, CLAUDE EXITED and NO LINK (gallery: `unknown.png`, `ended.png`, `no-link.png`, `boot.png`) | Each is recognised as itself in one glance and not mistaken for STARTING or a working state; the black NO LINK band is not taken for a switched-off screen | untested |
 | H7 | Check that Chromium on the Pi lets `boot.html` (a `file://` page) fetch `http://127.0.0.1:8138/state` (it does in the emulator's Chromium; a newer Chromium's local-network rules may differ) | H1 works; if not, note the Chromium version and console error | untested |
+
+## Several sessions and subagents (2026-11-22)
+
+Payload assumptions the state core rests on that no recording covers yet (see `src/state/README.md`,
+"Payload assumptions"), plus the multi-session behaviour on the real terminal. Ids `B1`... are new.
+
+| # | Try | Should happen | State |
+|---|---|---|---|
+| B1 | In a session, let Claude run a Bash command that needs permission and choose "No" (not Esc) | NEEDS PERMISSION ends at once (WORKING or DONE); if it stays until the next prompt, note which hook fired (a recording would show it) | untested |
+| B2 | Ask Claude for two subagents in one message, one of them needing permission; press Esc on that prompt | NEEDS PERMISSION ends at the latest at the next Stop; if it stays longer, record the session | untested |
+| B3 | Same as B2 but approve after the other subagent has finished | NEEDS PERMISSION the whole time until the approval, then WORKING, DONE when all results are in | untested |
+| B4 | Two terminals: speak to the first (it works), open a second Claude in another repo and leave it at its prompt | The bar keeps showing the first one WORKING with `+1`; never WAITING FOR ME for the idle second one | untested |
+| B5 | Two terminals both working; then let the one you spoke to finish | The bar stays on the session you spoke to (repo, tool and diff do not jump); DONE, and about a minute later the other one's WORKING | untested |
+| B6 | A long task that triggers auto compaction (watch for "Compacting conversation") | WORKING the whole time, never WAITING FOR ME | untested |

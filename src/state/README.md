@@ -9,6 +9,7 @@ Pure logic that turns Claude Code hook events into the view state (no DOM, no I/
   SAME reference when nothing changes or the event is ignored. A `state` that is not a valid state object
   (null, undefined, ...) is replaced by `initialState()`.
 - `replay(events, state = initialState())` folds events and returns the array of states after each event.
+- `isDriverPrompt(event)`: true for a `UserPromptSubmit` the driver typed (not one Claude Code injected).
 - `countDiff(event)`, `lineCount(s)` (diff.js); `LIMITS`, `stripAnsi`, `lastOutputLine`, `shortenCommand`,
   `shortenPath` (format.js); `STATES`, `isState` (states.js).
 
@@ -37,15 +38,15 @@ Pure logic that turns Claude Code hook events into the view state (no DOM, no I/
 
 | event | effect |
 | --- | --- |
-| `SessionStart` | activity `waiting` |
-| `UserPromptSubmit` | `working`; new turn: diff 0/0, tool/file/command/output null |
+| `SessionStart` | activity `waiting`; `source: "compact"` (after an auto compaction mid-turn or `/compact`, recorded) is ignored |
+| `UserPromptSubmit` | `working`; a driver prompt (`isDriverPrompt`) starts a new turn: diff 0/0, tool/file/command/output null. A prompt Claude Code injects itself (`<task-notification>` when a background subagent ends, recorded; or a `source` other than `user`) only sets `working` |
 | `PreToolUse` (needs `tool_name`) | `working`; tool, file (`file_path`/`notebook_path`); Bash: command, output null |
 | `PermissionRequest` | `permission`; tool/file/command as PreToolUse |
 | `PostToolUse` (needs `tool_name`) | `working`; tool, file; diff += `countDiff` (the only place diff is counted); Bash: command and output |
 | `PostToolUseFailure` | `working`; Bash: output from `error`; no diff |
 | `PermissionDenied` | `working` |
 | `Notification` | `notification_type` `permission_prompt` / `worker_permission_prompt` -> `permission`; `idle_prompt` -> `waiting`; anything else ignored (message text is never used) |
-| `Stop` | `done` |
+| `Stop` | `done`; `working` while `background_tasks` lists a `subagent` with status `running` (async subagents, recorded) |
 | `StopFailure` | `waiting` |
 | `SubagentStop`, `SubagentStart`, `SessionEnd`, `PreCompact`, `PostCompact`, unknown | ignored |
 | `RevviewContext` `{cwd?, branch?}` (synthetic) | repo from cwd, branch (string or null) |
@@ -87,7 +88,7 @@ permission prompts, `pre` = the last PreToolUse per agent; `focus` = id of the s
   otherwise to `board.context`.
 - `RevviewDropped` (internal, sent by the server when an event body was too large to read): marks that live
   session `dropped` (the diff may be incomplete). A late `PostToolUse` of Edit/Write/MultiEdit after `Stop` that cannot be placed (no `tool_use_id`, or one not open) also marks it, since its lines are lost, or every live session without a usable id; an id the board
-  does not know marks nothing. Reset by `UserPromptSubmit`.
+  does not know marks nothing. Reset by a driver `UserPromptSubmit` (not by an injected one).
 - `SessionEnd` of a session the board never saw only remembers its id in `ended` (not `''`); the phase is not
   touched (an `unknown`/`starting` board stays so: one end proves nothing about the others).
 - `SessionEnd`: removes the session and remembers its id in `ended` (last `MAX_ENDED = 256`; an older id can be resurrected by a late event, see DECISIONS "not solved"; the anonymous `''` session is
@@ -141,3 +142,20 @@ and compares with `<name>.expected.json`. Regenerate after an intended change:
     REVVIEW_UPDATE_EXPECTED=1 npm run test:unit
 
 then review the diff of the expected files.
+
+## Payload assumptions not covered by a recording
+
+Recorded (Claude Code 2.1.330, `fixtures/sessions/`): subagent `agent_id` on PreToolUse/PermissionRequest/
+PostToolUse, no `tool_use_id` on PermissionRequest, async subagents with `Stop.background_tasks`, the injected
+`<task-notification>` prompt, an Esc'd prompt sending nothing, `SessionStart` `compact` mid-turn (auto, forced
+with `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=1`) and after `/compact`. **Assumed, not recorded** (shapes from the
+binary's schemas or not seen at all; bench items B1-B3 (behaviour: B4-B6) in `docs/BENCH-TEST.md`):
+
+- a prompt rejected with "No" (not Esc) answers with `PermissionDenied` or `PostToolUseFailure` carrying the
+  `tool_use_id` (`PermissionDenied` has `tool_use_id` in the schema; never fired in a recording);
+- `background_tasks[].id` equals the subagent's `agent_id` (true in the one recording with async subagents);
+- foreground (synchronous) subagents: never recorded (2.1.330 launched both recorded ones async even with
+  `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`); the rules do not depend on it;
+- an Esc'd prompt of a subagent: assumed to end in `SubagentStop` or a later `Stop` that no longer lists it;
+- `UserPromptSubmit.source` values other than `user` (schema only).
+

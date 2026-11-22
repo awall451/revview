@@ -344,3 +344,55 @@ inverted on purpose: a display fault must not look like any coloured Claude stat
 - The band's `repo · branch` keeps the repo whole and cuts the branch in its middle (the end survives),
   falling back to the old end-cut only when the repo alone does not fit.
 - A Bash event with an empty command clears the stale command and output.
+
+## 2026-11-22: several sessions and subagents (QA round 2: 01 02 04 05 06 07)
+
+Recorded first (Claude Code 2.1.330, `fixtures/sessions/subagent-permission`, `permission-interrupted`,
+`compaction`; how in `fixtures/README.md`). What the recordings showed and the rules rest on:
+
+- Subagents launched by the Agent tool run **async** (`tool_response.isAsync: true`; the PostToolUse of the
+  Agent call comes at once). The main turn sends `Stop` while they still run; `Stop` carries
+  `background_tasks: [{id, type: "subagent", status: "running", ...}]`. Each finished subagent makes Claude
+  Code inject a `UserPromptSubmit` whose prompt starts with `<task-notification>`, then another `Stop`.
+- Inside a subagent every hook carries `agent_id`/`agent_type`. `PermissionRequest` has **no `tool_use_id`**
+  (main thread neither); the PreToolUse just before it, of the same agent, has one, and the approval is the
+  PostToolUse of that agent with that `tool_use_id`. The `permission_prompt` Notification has no agent and can
+  come after the main Stop. A prompt rejected with **Esc sends nothing** (no Post, PermissionDenied or Stop)
+  until the driver's next prompt.
+- Auto compaction fires in the middle of a turn: `PreCompact {trigger: "auto"}`, `SessionStart {source:
+  "compact"}`, `PostCompact`, then the turn goes on; `/compact` at the prompt sends the same with `manual`.
+
+Decisions:
+
+- **06**: `SessionStart` with `source: "compact"` is ignored (the activity before it stays: WORKING mid-turn,
+  DONE after `/compact`). Only `startup`, `resume`, `clear` (and `fork`, or no source) mean "at the prompt".
+- **Async subagents**: `Stop` while `background_tasks` lists a running subagent is WORKING, not DONE (their
+  results start a new turn by themselves; a background shell such as a dev server does not count). An
+  injected `<task-notification>` prompt (or a `UserPromptSubmit.source` other than `user`) is not the driver
+  speaking: WORKING, but no new turn (diff, open tools, `≥` mark and prompts are kept) and no focus change.
+- **02, prompts are tracked per prompt, not per session**: each session keeps a list of unanswered prompts
+  (agent key = `agent_id` or the main thread, plus the `tool_use_id` of that agent's last PreToolUse of the
+  same tool). While the list is not empty the session is NEEDS PERMISSION with the prompt's tool and command,
+  whatever its other subagents do. A prompt ends only by: a PostToolUse/PostToolUseFailure/PermissionDenied
+  with its `tool_use_id`; `SubagentStop` of its agent; a main `Stop` (main-thread prompts; a subagent's only
+  when `background_tasks` no longer lists it as running); the driver's next prompt (main-thread prompts: the
+  Esc case). A subagent's PermissionRequest after the main Stop is not a late hook.
+- **01 and 04, which session is shown**: only a pending permission pre-empts. Otherwise the bar shows the
+  **focus**: the session the driver last spoke to (a driver `UserPromptSubmit`). It is sticky: events of
+  other sessions never move it, so two working sessions do not alternate. It moves only when (a) another
+  session asks for permission (the first one asked wins; answering it leaves the focus there), (b) the driver
+  speaks to another session, (c) the focus ends or is dropped (then: working > done > waiting > rest, most
+  recent), or (d) the focus is idle (WAITING via `idle_prompt` or SessionStart, unknown, starting) while
+  another session works (then the most recently active working one). No timer: a DONE focus stays until
+  Claude Code's own `idle_prompt` (about 60 s after Stop) turns it into WAITING; only then does a working
+  session take over. This supersedes "permission > waiting > working > done" in "03, sessions" above.
+  Consequence: an idle session at its prompt never hides a working one; a just-opened session (SessionStart
+  only) never takes the bar from a working one.
+- **05**: a session without its own branch shows `board.context.branch` only when `board.context.repo` is the
+  repo it shows. The branch of an ended session (kept in the context) never appears next to another repo.
+- **07**: a `SessionEnd` of a session the board never saw only remembers its id; the phase stays (UNKNOWN or
+  STARTING stay). CLAUDE EXITED needs the end of the last session the board knew.
+
+Not solved here: after an Esc'd main-thread prompt the bar stays at NEEDS PERMISSION until the driver's next
+prompt (Claude Code sends no hook for the rejection); a DONE session stays shown over a working one for the
+~60 s until its `idle_prompt`; the bar still does not say which repo a `+N` session is in (issue 03, view).
