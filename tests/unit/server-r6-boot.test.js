@@ -98,8 +98,9 @@ test('start ok: selected, STARTING over; one window: selected, no "No session ch
   const live = await bootLive(t, r);
   assert.equal(await bootSessions({ runner: r, live, dirs: ['/tmp'], log: () => {} }), A);
   assert.equal(live.selected(), A);
-  assert.notEqual(live.state().view, 'starting');
-  assert.equal(live.state().note, 'No events from this session yet');
+  // the boot STARTING is over; the started session shows its own STARTING until its first hook or the launch limit
+  assert.equal(live.state().view, 'starting');
+  assert.equal(live.state().note, null);
   const r2 = runner({ windows: [{ id: A, window: '@1', cwd: '/tmp', name: 'w' }] });
   const live2 = await bootLive(t, r2);
   assert.equal(await bootSessions({ runner: r2, live: live2, dirs: [], log: () => {} }), A);

@@ -49,7 +49,9 @@ test('bootSessions: no windows -> starts each dir, refreshes, selects the last',
   assert.equal(id, B);
   assert.deepEqual(runner.started, ['/tmp/rel-a', '/tmp']);
   assert.equal(live.selected(), B);
-  assert.notEqual(live.state().view, 'starting');
+  // the boot STARTING is over; the session revview just started shows its own STARTING until its first hook (r6 part D)
+  assert.equal(live.state().view, 'starting');
+  assert.equal(live.state().nav, null);
 });
 
 test('bootSessions: one existing window -> selected, nothing started; several -> none', async () => {

@@ -37,7 +37,8 @@ const GESTURE_LOG_MAX = 32;
 const BUTTON_RE = /^[a-z][a-z0-9-]{0,31}$/;
 const GESTURES = ['tap', 'hold', 'long-hold'];
 // made only by revview itself (the actions, the boot path): no POST may forge them, not even under --dev-bridge
-const INTERNAL_EVENTS = ['RevviewInterrupted', 'RevviewAnswered', 'RevviewSelect', 'RevviewNav', 'RevviewOwned', 'RevviewProjects', 'RevviewNote', 'RevviewBootDone'];
+const LAUNCH_LIMIT_MS = 30000;
+const INTERNAL_EVENTS = ['RevviewInterrupted', 'RevviewAnswered', 'RevviewSelect', 'RevviewNav', 'RevviewOwned', 'RevviewProjects', 'RevviewNote', 'RevviewBootDone', 'RevviewLaunching', 'RevviewLaunchExpired'];
 export const MAX_SSE_CLIENTS = 8;
 export const MAX_CLIENT_BACKLOG_BYTES = 256 * 1024; // unread bytes after which a stalled SSE client is dropped
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -81,7 +82,7 @@ function serveStatic(req, res, root) {
 export async function startLiveServer({
   port = 0, viewDir = DEFAULT_VIEW_DIR, reduce: reduceEvent = reduceBoard,
   input = null, devBridge = false, inputDeps, inputRetryMs, onGesture,
-  sessions = null, clock, permissionWaitMs, minShownMs, projects = [], timers, navTimeoutMs, ownedPollMs = 5000, speech = null,
+  sessions = null, clock, permissionWaitMs, minShownMs, projects = [], timers, navTimeoutMs, ownedPollMs = 5000, speech = null, launchLimitMs = LAUNCH_LIMIT_MS,
   boot = false, netmon = null, dataLock = null,
 } = {}) {
   const root = path.resolve(viewDir);
@@ -128,8 +129,31 @@ export async function startLiveServer({
       return sessions.start(...a);
     },
   } : sessions;
+  // a session revview just started shows STARTING until its first hook, but at most launchLimitMs
+  const setT = timers?.setTimeout ?? setTimeout;
+  const clearT = timers?.clearTimeout ?? clearTimeout;
+  const launchTimers = new Map();
+  function launched(id) {
+    if (closed || typeof id !== 'string') return;
+    apply({ hook_event_name: 'RevviewLaunching', session_id: id }, true);
+    if (launchTimers.has(id)) clearT(launchTimers.get(id));
+    const t = setT(() => {
+      launchTimers.delete(id);
+      if (!closed) apply({ hook_event_name: 'RevviewLaunchExpired', session_id: id }, true);
+    }, launchLimitMs);
+    t?.unref?.();
+    launchTimers.set(id, t);
+  }
+  const marked = sessions ? {
+    ...guarded,
+    start: async (...a) => {
+      const r = await guarded.start(...a);
+      launched(r?.id);
+      return r;
+    },
+  } : guarded;
   const actions = createActions({
-    readAloud, runner: guarded, registry, getBoard: () => board, apply, projects, clock, timers, navTimeoutMs,
+    readAloud, runner: marked, registry, getBoard: () => board, apply, projects, clock, timers, navTimeoutMs,
     log: (m) => console.error(m), onOwnedChanged: refreshOwned,
   });
 
@@ -508,6 +532,8 @@ export async function startLiveServer({
     select: (id) => apply({ hook_event_name: 'RevviewSelect', session_id: id }, true),
     // internal: the key-on boot is over (ends the boot STARTING; a no-op afterwards)
     bootDone: (note) => apply({ hook_event_name: 'RevviewBootDone', ...(note ? { note } : {}) }, true),
+    // internal: revview just started this session (marks it STARTING for launchLimitMs; no HTTP route)
+    launched,
     refreshOwned,
     whenUnlocked: () => whenUnlocked,
     dataLocked: () => (dataMonitor ? dataMonitor.locked() !== false : false),
@@ -529,6 +555,8 @@ export async function startLiveServer({
         monitor?.stop();
         dataMonitor?.stop();
         actions.close();
+        for (const t of launchTimers.values()) clearT(t);
+        launchTimers.clear();
         if (ownedTimer !== null) clearInterval(ownedTimer);
         registry.close(); // leaves the tmux server alone: sessions outlive a server restart
         clearInterval(timer);
@@ -614,7 +642,10 @@ export async function bootSessions({ runner, live, dirs = [], log = () => {}, ti
         note = 'Key-on session not started: start folder must be an absolute path';
       } else {
         let last = null;
-        for (const dir of dirs) last = (await runner.start({ cwd: dir })).id;
+        for (const dir of dirs) {
+          last = (await runner.start({ cwd: dir })).id;
+          live.launched?.(last);
+        }
         await live.refreshOwned();
         live.select(last);
         id = last;

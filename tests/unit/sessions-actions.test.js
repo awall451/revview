@@ -212,3 +212,22 @@ test('a throwing runner is reported, not thrown, and the next gesture still runs
   assert.deepEqual([r1.done, r1.reason], [false, 'boom']);
   assert.equal((await a.handle(dev('push-to-talk', 'tap'))).done, true);
 });
+
+test('push-to-talk while the session is launching is dropped with a note; after expiry or the first hook it is sent', async () => {
+  const sent = [];
+  const applied = [];
+  let board = reduceBoard(reduceBoard(initialBoard(), { hook_event_name: 'RevviewOwned', ids: [SID] }), select);
+  board = reduceBoard(board, { hook_event_name: 'RevviewLaunching', session_id: SID });
+  const runner = { target: async () => ({ id: SID }), send: async (k) => { sent.push(k); return { sent: true, id: SID }; } };
+  const a = createActions({ runner, registry: {}, getBoard: () => board, apply: (e) => applied.push(e), log: () => {} });
+  const tap = () => a.handle(dev('push-to-talk', 'tap'));
+  assert.deepEqual(await tap(), { action: 'push-to-talk', done: false, reason: 'session starting' });
+  assert.deepEqual(sent, []);
+  assert.deepEqual(applied, [{ hook_event_name: 'RevviewNote', note: 'Claude is still starting: push-to-talk not sent' }]);
+  const launching = board;
+  board = reduceBoard(launching, { hook_event_name: 'RevviewLaunchExpired', session_id: SID });
+  assert.equal((await tap()).done, true);
+  board = reduceBoard(launching, ev('UserPromptSubmit', { prompt: 'x' }));
+  assert.equal((await tap()).done, true);
+  assert.deepEqual(sent, ['Space', 'Space']);
+});

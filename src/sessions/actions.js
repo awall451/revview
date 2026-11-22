@@ -147,7 +147,14 @@ export function createActions({
       });
     }
     if (button === 'read-aloud' && gesture === 'tap' && readAloud) return speakSelected();
-    if (button === 'push-to-talk' && gesture === 'tap') return send('push-to-talk', 'Space');
+    if (button === 'push-to-talk' && gesture === 'tap') {
+      // Claude is still loading (the boot STARTING, or a session revview just started with no hook yet): drop it
+      if (boardView(b).activity === 'starting') {
+        note('Claude is still starting: push-to-talk not sent');
+        return out('push-to-talk', false, 'session starting');
+      }
+      return send('push-to-talk', 'Space');
+    }
     if (button === 'press' && gesture === 'tap') {
       // a prompt on the bar: allow attempt only (a refusal never falls through to the list)
       if (shownPrompt(b) !== null) return answer('allow');

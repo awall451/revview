@@ -19,7 +19,7 @@ Open `http://127.0.0.1:8138/`.
 listening (so Claude's SessionStart hook reaches it) `bootSessions` looks at the tmux windows: none (the power was
 cut, tmux is gone) starts one session per `--start` directory, or the one in env `REVVIEW_START` when no `--start`
 was given (only used with `--sessions`), and selects the last; exactly one window (a service restart) selects it
-and starts nothing; several select none. A failure here is logged and never stops the bar. `bootSessions` always ends the boot
+and starts nothing; several select none. Every start revview makes (`bootSessions`, and the actions' New session) marks the session launching (`live.launched(id)`, internal, no HTTP route: board event `RevviewLaunching`) and arms a timer of `launchLimitMs` (default 30000; option of `startLiveServer`, with the injected `timers`) that applies `RevviewLaunchExpired`; both events are refused over HTTP with 403, `close()` clears the timers. Until its first hook the session shows STARTING (not UNKNOWN "No events from this session yet"); presses are NOT dropped then (only the boot STARTING drops them), so the menu and list work. A failure here is logged and never stops the bar. `bootSessions` always ends the boot
 STARTING (`live.bootDone(note)`, internal, no HTTP route; the board event `RevviewBootDone` is refused over HTTP with
 403), after any select, so the bar's buttons work and New session is reachable: nothing to start and no window ->
 note "No session yet: open the menu for New session"; a start folder that is not absolute is refused before trying
