@@ -1,3 +1,4 @@
+status: closed (2026-11-22, work/qa5-fixes: note "<repo> ended" when the selected session ends)
 ---
 id: qa-20261122-r5-04
 title: When the selected session ends, the selection moves to another session with no note; push-to-talk now goes there

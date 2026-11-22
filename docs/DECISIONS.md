@@ -991,3 +991,22 @@ QA r3-05: after an API error the bar showed a plain WAITING FOR ME, like a turn 
   (`out/shots/wb4-failed-turn.png`, `wb4-offline-failed.png`).
 - Not changed: headless `claude -p` still loses the StopFailure post (the process exits first); the car runs
   interactive claude.
+
+## 2026-11-22: owned window gone, ended-session note (QA r5-03, r5-04)
+
+- **Owned window gone ends its session.** A Claude that dies without a `SessionEnd` stayed on the bar for ever. Now a
+  `RevviewOwned` list (re-posted every `ownedPollMs`) that lacks an id the previous list had ends that session when it is on
+  the board and not a quiet placeholder: like a `SessionEnd` of a not-owned id (removed, remembered in `ended` so a late hook
+  is dropped, phase `ended` if it was the last). No timer: a listed window stays however silent. `b.owned === null` (first
+  list, no runner) ends nothing; sessions never owned are untouched. Cost: a window that vanishes and comes back (same id)
+  needs a new id, since the old one is in `ended`; a `SessionEnd` posted for a still-listed window keeps the core-hardening
+  behaviour (placeholder again on the next poll).
+- **Note when the selected session ends.** If `selected` ends (SessionEnd or window gone) and sessions remain, the board note is
+  "<repo> ended" (label cut to 100 chars, "Selected session" without a repo), cleared by the next gesture. `selected` itself
+  is unchanged (fall to the home key, as before). "Highlighted session ended: list closed" is set later in the same reduce
+  and replaces it: one note.
+- **Voice `none` wins over the quiet note (r5-03).** With owned windows and no selection, the placeholder's "No events from
+  this session yet" no longer hides "Push-to-talk goes nowhere: no session chosen"; a real board note still wins. The voice
+  wording is unchanged: BUTTONS.md does not say a press chooses a session, so "press to choose" would be false.
+- Changed assertion: `board-wb4.test.js` "placeholders: removed when no longer owned" expected a real session to stay when
+  its window left the list; it now ends.

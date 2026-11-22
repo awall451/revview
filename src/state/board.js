@@ -173,6 +173,13 @@ export function reduceBoard(board, event) {
   if (!isObj(event) || typeof event.hook_event_name !== 'string') return b;
   let next = reduceInner(b, event);
   if (event.hook_event_name === 'RevviewNav' && typeof next.note === 'string') next = { ...next, note: null };
+  // the selected session ended and others remain: the selection falls to another one, and the bar says so
+  const wasSel = selectedOf(b);
+  if (wasSel !== null && next !== b && !has(next.sessions, wasSel) && Object.keys(next.sessions).length > 0
+    && (event.hook_event_name === 'SessionEnd' || event.hook_event_name === 'RevviewOwned')) {
+    const label = b.sessions[wasSel].state.repo;
+    next = { ...next, note: `${typeof label === 'string' && label !== '' ? label.slice(0, 100) : 'Selected session'} ended` };
+  }
   const tid = targetOf(event, b.sessions);
   const spoke = isDriverPrompt(event) && has(next.sessions, tid) ? tid : null;
   // a driver prompt that changes nothing else (the session was already working) still moves the focus
@@ -370,23 +377,33 @@ function reduceInner(b, event) {
         if (!nameOf.has(id)) nameOf.set(id, ok ? n.trim().slice(0, 64) || null : null);
       });
       const owned = [...new Set(ids)];
+      // a window that is gone ends its session like a SessionEnd of a not-owned id (a Claude that died without one);
+      // no timer: a listed window stays however silent. b.owned === null (first list) ends nothing.
+      let gone = b;
+      if (b.owned !== null) {
+        for (const id of b.owned) {
+          const s = gone.sessions[id];
+          if (owned.includes(id) || s === undefined || s.quiet === true) continue;
+          gone = endSession(gone, s, id, pushEnded(gone.ended, id));
+        }
+      }
       // one tick per placeholder, in owned order, so the list order (born) follows the order revview started them
       let tick = b.tick;
-      let sessions = b.sessions;
-      for (const id of Object.keys(b.sessions)) {
-        if (b.sessions[id].quiet === true && !owned.includes(id)) sessions = withoutSession(sessions, id);
+      let sessions = gone.sessions;
+      for (const id of Object.keys(gone.sessions)) {
+        if (gone.sessions[id].quiet === true && !owned.includes(id)) sessions = withoutSession(sessions, id);
       }
       for (const id of owned) {
-        if (!UUID.test(id) || has(sessions, id) || b.ended.includes(id)) continue;
+        if (!UUID.test(id) || has(sessions, id) || gone.ended.includes(id)) continue;
         tick += 1;
         sessions = withSession(sessions, id, {
           state: { ...initialState(), repo: nameOf.get(id) ?? null }, open: [], pending: [], pre: [], touched: tick, born: tick, dropped: false, quiet: true,
         });
       }
       const same = b.owned !== null && owned.length === b.owned.length && owned.every((x) => b.owned.includes(x));
-      if (same && sessions === b.sessions) return b;
+      if (same && sessions === b.sessions && gone === b) return b;
       sessions = capSessions(sessions, null, b.selected ?? b.focus, b.selected, b.want, owned);
-      return { ...b, owned, sessions, tick };
+      return { ...gone, owned, sessions, tick };
     }
     case 'RevviewProjects': {
       const paths = event.paths;
@@ -686,7 +703,7 @@ function extrasOf(b, shownKey) {
     position: b.owned === null || i < 0 ? null : { index: i + 1, count: order.length },
     elsewhere: order.filter((k) => k !== shownKey && b.sessions[k].pending.length > 0).length,
     nav: navView(b),
-    note: typeof b.note === 'string' ? b.note : shownKey !== null && b.sessions[shownKey].quiet === true ? 'No events from this session yet' : null,
+    note: typeof b.note === 'string' ? b.note : voice !== 'none' && shownKey !== null && b.sessions[shownKey].quiet === true ? 'No events from this session yet' : null,
     answered: answeredOf(shownKey === null ? null : b.sessions[shownKey]),
   };
 }

@@ -450,9 +450,10 @@ test('placeholders: same board when nothing changes; come back after RevviewStar
   assert.deepEqual(sessionOrder(e), [U1]);
 });
 
-test('placeholders: removed when no longer owned; a real session is kept', () => {
+test('placeholders: removed when no longer owned; a real session whose window is gone ends too (QA r5-03)', () => {
   const b = run([owned([U1, U2]), start(U2), owned([])]);
-  assert.deepEqual(sessionOrder(b), [U2]);
+  assert.deepEqual(sessionOrder(b), []);
+  assert.equal(b.ended.includes(U2), true);
 });
 
 test('placeholders: the first hook event replaces it: normal session, same born, no quiet', () => {
