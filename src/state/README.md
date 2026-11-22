@@ -14,7 +14,7 @@ Pure logic that turns Claude Code hook events into the view state (no DOM, no I/
   `shortenPath` (format.js); `STATES`, `isState` (states.js).
 
 - `initialBoard()`, `reduceBoard(board, event)`, `boardView(board)`, `replayView(events, board)`,
-  `MAX_SESSIONS` (board.js): the per-session layer, see "Board" below. `PAGE_ONLY_VIEWS`, `VIEWS` (states.js).
+  `pendingPrompts(board)`, `shownPrompt(board)`, `MAX_SESSIONS` (board.js): the per-session layer, see "Board" below. `PAGE_ONLY_VIEWS`, `VIEWS` (states.js).
 
 `STATES` are the views the state core emits: `working`, `waiting`, `permission`, `done`, `starting`, `offline`,
 `insert-key`, `unknown` (nothing known yet: a fresh board or restarted server) and `ended` (Claude exited).
@@ -121,6 +121,19 @@ repo/branch fall back to `board.context`). With no live session `activity` is th
 (`unknown`, `starting`, `ended`), repo/branch come from `board.context`, the rest is null/0/false.
 `view = locked ? 'insert-key' : offline ? 'offline' : activity`. `replayView(events, board)` returns the
 `boardView` after each event; the recordings' expected files and the emulator fixtures use it.
+
+Internal event `RevviewInterrupted {session_id}`: revview itself sent Esc / Ctrl+C to that session and Claude Code
+fires no hook for it (QA r3-02). A session in a turn (effective activity `working` or `permission`) becomes
+`waiting` (view as the reducer computes it: locked/offline respected), `open`, `pending` and `pre` are emptied
+(Esc rejects a dialog), tool/command/file/diff are kept, `tick`/`touched` advance and focus is re-picked. An
+unknown or missing `session_id`, or a `done`/`waiting` session, returns the same board; it never creates a
+session. The server feeds it after sending the key and refuses it over HTTP.
+
+Read helpers: `pendingPrompts(board)` is the flat list over all sessions of
+`{ session, agent, since, tool, file, command }` per pending entry (`agent`: `''` main thread, an agent id, or
+`null` for a generic notification entry). `shownPrompt(board)` is `null` unless `boardView(board).view` is
+`'permission'`, else that record for the shown session's first pending entry; both use the same shown-session
+helper.
 
 ## Diff counting
 

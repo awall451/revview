@@ -176,6 +176,15 @@ function reduceInner(b, event) {
       return typeof event.locked === 'boolean' && b.locked !== event.locked ? { ...b, locked: event.locked } : b;
     case 'RevviewInput':
       return typeof event.present === 'boolean' && b.buttons !== event.present ? { ...b, buttons: event.present } : b;
+    case 'RevviewInterrupted': { // revview sent Esc / Ctrl+C itself; Claude Code fires no hook for it
+      if (!isStr(event.session_id) || live === null) return b;
+      if (act(live) !== 'working' && act(live) !== 'permission') return b;
+      // like an interrupt: waiting for the driver, last tool/command/file/diff kept, dialogs rejected by the Esc
+      const st = live.state;
+      const state = { ...st, activity: 'waiting', view: st.locked ? 'insert-key' : st.offline ? 'offline' : 'waiting' };
+      const tick = b.tick + 1;
+      return { ...b, tick, sessions: withSession(b.sessions, id, { ...live, state, open: [], pending: [], pre: [], touched: tick }) };
+    }
     case 'RevviewButton': // a gesture is for the server's actions, never for the screen
       return b;
     case 'RevviewStarting':
@@ -202,7 +211,7 @@ function reduceInner(b, event) {
       if (!live1) {
         const inTurn = (s) => act(s) === 'working' || act(s) === 'permission' || s.open.length > 0;
         const some = Object.keys(b.sessions).some((k) => inTurn(b.sessions[k]));
-        const shownKey = b.focus !== null && has(b.sessions, b.focus) ? b.focus : pickFocus(b, null);
+        const shownKey = shownKeyOf(b);
         hit = some ? inTurn : (s) => shownKey !== null && s === b.sessions[shownKey];
       }
       const sessions = mapSessions(b.sessions, (s) => (s.dropped || !hit(s) ? s : { ...s, dropped: true }));
@@ -369,10 +378,29 @@ function applyToSession(b, live, id, event) {
 
 const buttonsView = (b) => (b.buttons === null ? 'unknown' : b.buttons ? 'present' : 'missing');
 
+// The session the bar shows: the focus when it is live, else what pickFocus would choose.
+const shownKeyOf = (b) => (b.focus !== null && has(b.sessions, b.focus) ? b.focus : pickFocus(b, null));
+
+const promptOf = (session, p) => ({ session, agent: p.agent, since: p.since, tool: p.tool, file: p.file, command: p.command });
+
+// Every pending permission prompt of every session.
+export function pendingPrompts(board) {
+  const b = isValidBoard(board) ? board : initialBoard();
+  return Object.keys(b.sessions).flatMap((k) => b.sessions[k].pending.map((p) => promptOf(k, p)));
+}
+
+// The prompt the bar shows (the shown session's first pending one), or null when the view is not 'permission'.
+export function shownPrompt(board) {
+  const b = isValidBoard(board) ? board : initialBoard();
+  if (boardView(b).view !== 'permission') return null;
+  const k = shownKeyOf(b);
+  return k === null || b.sessions[k].pending.length === 0 ? null : promptOf(k, b.sessions[k].pending[0]);
+}
+
 export function boardView(board) {
   const b = isValidBoard(board) ? board : initialBoard();
   const buttons = buttonsView(b);
-  const shownKey = b.focus !== null && has(b.sessions, b.focus) ? b.focus : pickFocus(b, null);
+  const shownKey = shownKeyOf(b);
   const shown = shownKey === null ? null : b.sessions[shownKey];
   // needing the driver outranks OFFLINE; `offline` stays true in the flat state as a secondary mark
   const overlay = (activity) => (b.locked ? 'insert-key' : b.offline && activity !== 'permission' ? 'offline' : activity);
