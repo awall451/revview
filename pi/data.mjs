@@ -268,7 +268,7 @@ function cmdWrite(argv) {
   }
 
   const R = (p) => path.join(o.root, p);
-  const w = createWriter({ dry: !!o['--dry-run'], owner: o.owner, homeAbs: R(o.home), tag: 'revview data' });
+  const w = createWriter({ dry: !!o['--dry-run'], owner: o.owner, homeAbs: R(o.home), root: o.root, tag: 'revview data' });
   w.write(R('/etc/revview/data.conf'), files.conf);
   w.write(R('/etc/revview/data.env'), files.env);
   w.write(R('/etc/profile.d/revview-claude.sh'), files.profile);
@@ -282,8 +282,7 @@ function cmdWrite(argv) {
   else if (fs.existsSync(mnt)) console.log(`unchanged ${mnt}`);
   else if (o['--dry-run']) console.log(`would write ${mnt}`);
   else {
-    w.mkdirp(mnt, false, 0o755);
-    console.log(`wrote ${mnt}`);
+    if (w.mkdirp(mnt, false, 0o755)) console.log(`wrote ${mnt}`);
   }
   if (w.failed()) process.exitCode = 1;
 }

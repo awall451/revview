@@ -203,3 +203,41 @@ test('revview.service: data.env, the auto-updater off, flags unchanged', () => {
   assert.match(unit, /^Environment=DISABLE_AUTOUPDATER=1$/m);
   assert.match(unit, /--input .*--sessions --boot --netmon/);
 });
+
+test('install.sh: a symlinked ~/.config/labwc is refused: exit 1, nothing at the target', withRoot((r) => {
+  const elsewhere = path.join(r, 'elsewhere');
+  fs.mkdirSync(path.join(r, 'home/alice/.config'), { recursive: true });
+  fs.mkdirSync(elsewhere);
+  fs.symlinkSync(elsewhere, path.join(r, 'home/alice/.config/labwc'));
+  const res = run(base(r));
+  assert.equal(res.code, 1, res.out + res.err);
+  assert.match(res.out, /skipped .*autostart: .*labwc is a symlink/);
+  assert.match(res.err, /some files were refused/);
+  assert.deepEqual(fs.readdirSync(elsewhere), []);
+}));
+
+test('install.sh: setup.mjs crashing stops it: exit 3, no hooks, no done line', withRoot((r) => {
+  fs.mkdirSync(path.join(r, 'home/alice/.config/labwc/autostart'), { recursive: true });
+  const res = run(base(r));
+  assert.equal(res.code, 3, res.out + res.err);
+  assert.match(res.err, /setup\.mjs: failed part way/);
+  assert.match(res.err, /install\.sh: setup\.mjs failed part way \(exit 3\); nothing after that point was done, the hooks were not installed/);
+  assert.doesNotMatch(res.err, /some files were refused/);
+  assert.doesNotMatch(res.out, /^done\. Next:/m);
+  assert.equal(fs.existsSync(path.join(r, 'home/alice/.claude/settings.json')), false);
+}));
+
+test('install.sh: a two-line cmdline.txt, a missing cmdline.txt, a missing config.txt: exit 1, rest done', withRoot((r) => {
+  const cmd = path.join(r, 'boot/firmware/cmdline.txt');
+  fs.writeFileSync(cmd, 'console=tty1 root=/dev/x\nextra\n');
+  const res = run(base(r));
+  assert.equal(res.code, 1, res.out + res.err);
+  assert.match(res.err, /some files were refused/);
+  assert.equal(fs.readFileSync(cmd, 'utf8'), 'console=tty1 root=/dev/x\nextra\n');
+  assert.ok(fs.existsSync(path.join(r, 'home/alice/.claude/settings.json')), 'hooks still installed on exit 1');
+  fs.rmSync(cmd);
+  assert.equal(run(base(r)).code, 1);
+  fs.writeFileSync(cmd, 'console=tty1 root=/dev/x\n');
+  fs.rmSync(path.join(r, 'boot/firmware/config.txt'));
+  assert.equal(run(base(r)).code, 1);
+}));

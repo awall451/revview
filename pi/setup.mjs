@@ -4,6 +4,9 @@
 // The edit/render functions are pure (text in, text out). The CLI writes files at <root><path as seen on the Pi>.
 // Usage: node pi/setup.mjs --root R --user U --home H --dir D [--rotate 90|270] [--output HDMI-A-1]
 //                          [--node /usr/bin/node] [--owner UID:GID] [--dry-run]
+// Exit: 0 done; 1 a file was refused or skipped so that the appliance is half set up (a symlink anywhere in its path,
+//   cmdline.txt or config.txt missing or malformed, no root=): left as it was, everything else done; 2 bad arguments;
+//   3 an unexpected error (the files after that point were not written).
 // One line per file: wrote | unchanged | backup A -> B | skipped P: why | would write (--dry-run, nothing written).
 import fs from 'node:fs';
 import path from 'node:path';
@@ -183,7 +186,7 @@ function main(argv) {
   const homeAbs = R(o.home);
   const say = (s) => console.log(s);
 
-  const w = createWriter({ dry: o.dry, owner: o.owner, homeAbs, say, ownMark: AUTOSTART_MARK });
+  const w = createWriter({ dry: o.dry, owner: o.owner, homeAbs, root: o.root, say, ownMark: AUTOSTART_MARK });
   const { write, refuse, isLink, readOr } = w;
 
   const piDir = path.dirname(fileURLToPath(import.meta.url));
@@ -191,13 +194,12 @@ function main(argv) {
     const p = R(rel);
     if (isLink(p)) return refuse(p, 'is a symlink; not edited through it');
     const old = readOr(p);
-    if (old === null) return say(`skipped ${p}: missing`);
+    if (old === null) return refuse(p, 'missing');
     let res;
     try {
       res = fn(old);
     } catch (e) {
-      if (e instanceof NoRootError) return refuse(p, e.message);
-      return say(`skipped ${p}: ${e.message}`);
+      return refuse(p, e.message); // NoRootError, several lines, malformed: the file stays byte-identical, exit 1
     }
     for (const w of res.warnings ?? []) say(`warning ${p}: ${w}`);
     write(p, typeof res === 'string' ? res : res.text, { backup: 'first' });
@@ -207,6 +209,7 @@ function main(argv) {
   edit('/boot/firmware/config.txt', editConfigTxt);
   const lightdm = R('/etc/lightdm/lightdm.conf');
   if (fs.existsSync(lightdm) || isLink(lightdm)) edit('/etc/lightdm/lightdm.conf', (t) => editLightdm(t, o.user));
+  // a missing lightdm.conf stays a plain note (no exit code change): the desktop autologin is another way to get it
   else say(`skipped ${lightdm}: no lightdm.conf; set Desktop Autologin with raspi-config`);
 
   write(R('/etc/udev/rules.d/70-revview-dongle.rules'), fs.readFileSync(path.join(piDir, '70-revview-dongle.rules'), 'utf8'));
@@ -222,4 +225,11 @@ function main(argv) {
   if (w.failed()) process.exitCode = 1;
 }
 
-if (process.argv[1] && fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url))) main(process.argv.slice(2));
+if (process.argv[1] && fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url))) {
+  try {
+    main(process.argv.slice(2));
+  } catch (e) {
+    process.stderr.write(`setup.mjs: failed part way: ${e?.message ?? e}\nfiles after this point were not written; fix the cause and run it again\n`);
+    process.exit(3);
+  }
+}

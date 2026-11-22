@@ -11,8 +11,11 @@
 #   REVVIEW_DIR defaults to this repository; it should live outside the home (e.g. /opt/revview), with npm ci done.
 #             Its path must match ^/[A-Za-z0-9._/-]+$ (it goes into a shell line and a systemd unit).
 #   --root    must not merely resolve to / (a symlink): give exactly / for a real install.
-# Exit: 0 done; 2 bad arguments, or the root is read-only (overlay on) or /boot/firmware is ro (nothing written); 1 a file was refused (a symlink where a file is written, or a
-#   cmdline.txt without root=, or hooks skipped as ~/.claude is on the locked data): left as it was, everything else done, fix it and re-run.
+# Exit: 0 done; 2 bad arguments, or the root is read-only (overlay on) or /boot/firmware is ro (nothing written);
+#   1 a file was refused (a symlink at any part of its path, a cmdline.txt or config.txt that is missing or malformed
+#   or has no root=, or hooks skipped as ~/.claude is on the locked data): left as it was, everything else done,
+#   fix it and re-run; 3 (or any other code) setup.mjs failed part way: nothing after that point was done, the hooks
+#   were not installed, no "done" line.
 # What it changes (see pi/setup.mjs): /boot/firmware/cmdline.txt and config.txt (quiet boot, rotated console),
 #   /etc/lightdm/lightdm.conf (autologin), udev rules (dongle, touch rotation), /etc/systemd/user/revview.service
 #   and its enable symlink, /var/lib/systemd/linger/<user>, /etc/revview/server.env (only if missing),
@@ -155,7 +158,10 @@ if [ "$dry" -eq 1 ]; then setup_args+=(--dry-run); fi
 # exit code of this script stays non-zero. Exit 2 (bad arguments) stops here.
 setup_rc=0
 "$node_bin" "$here/setup.mjs" "${setup_args[@]}" || setup_rc=$?
-if [ "$setup_rc" -ne 0 ] && [ "$setup_rc" -ne 1 ]; then exit "$setup_rc"; fi
+if [ "$setup_rc" -ne 0 ] && [ "$setup_rc" -ne 1 ]; then
+  echo "install.sh: setup.mjs failed part way (exit $setup_rc); nothing after that point was done, the hooks were not installed; fix the error above and run it again" >&2
+  exit "$setup_rc"
+fi
 if [ "$setup_rc" -eq 1 ]; then echo "install.sh: some files were refused (see the skipped lines above); fix them and run it again" >&2; fi
 
 # Claude Code hooks for that user. ~/.claude may be a symlink into the locked data partition (pi/data-setup.sh):
