@@ -569,3 +569,36 @@ on Claude Code yet (WB3).
   The bridge feeds the same detector as the device. The Pi's server unit must never pass `--dev-bridge`.
 - Presses during `starting` are logged as `dropped` (WB3 must not act on them). The "bar briefly marks a
   dropped press" part of BUTTONS.md is not built.
+
+## 2026-11-22: QA round 3 (01 03 04 06 09 10)
+
+- **NEEDS PERMISSION shows only the requested call (01).** A `PermissionRequest` entry carries the request's
+  tool and file, the requested command for Bash only (null otherwise), and never output (a call waiting for
+  permission has produced nothing). The generic `permission_prompt` entry (its payload names no tool)
+  describes the open call only, and nothing when no call is open. `reduce` alone does the same. The gallery's
+  `worst-*-permission` shots merge their content through `asPermission` (`emulator/worst-case.js`), the same
+  rule, so they show what the state core can emit (an Edit with no `$` row).
+- **No diff under NEEDS PERMISSION (03).** The turn total reads as the size of the asked edit. The request's own
+  size is not shown either: no recording (Claude Code 2.1.330) has a PermissionRequest for Edit/Write/MultiEdit,
+  so that payload is not proven, and `old_string`/`new_string` line counts overstate an edit that keeps context
+  lines. `boardView.diff` stays the turn total; the view hides it in `permission`.
+- **An untied prompt clears on its agent's next tool event (06).** A pending entry with no `tuid` (its call had
+  already closed, its Pre was lost, or the match was ambiguous) is cleared by any later PreToolUse, Post* or
+  PermissionDenied of the same agent (generic entries: of the main thread). An agent with an open dialog
+  neither starts nor finishes other calls. A tied entry keeps the old rules because it may be one of several
+  parallel calls (concurrency-safe tools run side by side), and a sibling call's events prove nothing. Other
+  agents' events never clear an entry (round 2's rule kept). Not solved: a tied entry whose Post was lost after
+  approval stays until Stop, idle_prompt or a driver prompt.
+- **Needing the driver outranks OFFLINE (04).** `view = locked ? insert-key : offline && activity !==
+  'permission' ? offline : activity`. This changes the order in "synthetic events" above for this one case.
+  The dialog is local: Claude is blocked on the driver whatever the network does, and answering it (terminal
+  now, wheel buttons later) needs no network. OFFLINE then shows as one grey row at the bottom (`No network:
+  voice input will not work`), which takes one of the command's rows. WAITING, WORKING and DONE stay under
+  OFFLINE, because what the driver would do next there is speak, and that needs the network. INSERT KEY still
+  wins (the data is locked).
+- **Commands break at spaces (09).** The displayed command has a U+2060 WORD JOINER after each `-` that is
+  followed by a non-space; `data-full` and the ellipsis cut use the plain text. A token longer than a row still
+  breaks inside it. The row height is read from the computed line-height of `#command`, and a test pins it
+  (40 px, 6 rows).
+- **`#session` is not reachable with the emulator's fonts**: next to NEEDS PERMISSION, `9+` and NO BUTTONS,
+  `#where` keeps about 190 px against its 157 px floor. A test forces it with a style; the Pi's fonts may differ.
