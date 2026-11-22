@@ -1,0 +1,16 @@
+{
+   "blockdevices": [
+      {"name":"mmcblk0","path":"/dev/mmcblk0","type":"disk","fstype":null,"uuid":null,"label":null,"size":31914983424,"mountpoints":[null],"tran":null,"rm":false,
+         "children": [
+            {"name":"mmcblk0p1","path":"/dev/mmcblk0p1","type":"part","fstype":"vfat","uuid":"A1B2-C3D4","label":"bootfs","size":536870912,"mountpoints":["/boot/firmware"],"tran":null,"rm":false},
+            {"name":"mmcblk0p2","path":"/dev/mmcblk0p2","type":"part","fstype":"ext4","uuid":"5e0c1d7a-93c4-4f5e-8f55-0d6a7b9a1c11","label":"rootfs","size":16106127360,"mountpoints":["/"],"tran":null,"rm":false},
+            {"name":"mmcblk0p3","path":"/dev/mmcblk0p3","type":"part","fstype":null,"uuid":null,"label":null,"size":15271960576,"mountpoints":[null],"tran":null,"rm":false}
+         ]
+      },
+      {"name":"sda","path":"/dev/sda","type":"disk","fstype":null,"uuid":null,"label":null,"size":16008609792,"mountpoints":[null],"tran":"usb","rm":true,
+         "children": [
+            {"name":"sda1","path":"/dev/sda1","type":"part","fstype":"vfat","uuid":"1234-ABCD","label":"KEYSTICK","size":16007561216,"mountpoints":[null],"tran":null,"rm":true}
+         ]
+      }
+   ]
+}

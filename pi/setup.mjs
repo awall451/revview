@@ -8,6 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createWriter } from './files.mjs';
 
 const USER_RE = /^[a-z_][a-z0-9_-]{0,31}$/;
 const OUTPUT_RE = /^[A-Za-z0-9-]+$/;
@@ -180,79 +181,10 @@ function main(argv) {
   const o = parseArgs(argv);
   const R = (p) => path.join(o.root, p);
   const homeAbs = R(o.home);
-  const readOr = (p) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null);
   const say = (s) => console.log(s);
 
-  const chownIf = (p, owned) => {
-    if (owned && o.owner) fs.chownSync(p, o.owner.uid, o.owner.gid);
-  };
-  const mkdirp = (d, owned) => {
-    const todo = [];
-    for (let p = d; !fs.existsSync(p); p = path.dirname(p)) todo.unshift(p);
-    for (const p of todo) {
-      fs.mkdirSync(p);
-      chownIf(p, owned && (p === homeAbs || p.startsWith(`${homeAbs}${path.sep}`)));
-    }
-  };
-
-  // A refusal (symlink, cmdline without root=) leaves the file alone, goes on with the rest, and makes the exit
-  // code 1 at the end.
-  let failed = false;
-  const refuse = (p, why) => {
-    failed = true;
-    say(`skipped ${p}: ${why}`);
-    process.stderr.write(`revview setup: ${p}: ${why}\n`);
-  };
-  const isLink = (p) => {
-    try {
-      return fs.lstatSync(p).isSymbolicLink();
-    } catch {
-      return false;
-    }
-  };
-
-  // Temp file in the same directory, fsync, rename: a power cut leaves the old or the new file, never half of one
-  // (like hooks/install.mjs). On the FAT partition /boot/firmware rename is not guaranteed atomic by FAT itself,
-  // but it is still the best that is available there.
-  const atomicWrite = (p, content, mode, owned) => {
-    const tmp = path.join(path.dirname(p), `.${path.basename(p)}.revview-tmp-${process.pid}`);
-    fs.rmSync(tmp, { force: true });
-    const fd = fs.openSync(tmp, 'wx', mode);
-    try {
-      fs.writeSync(fd, content);
-      fs.fsyncSync(fd);
-    } finally {
-      fs.closeSync(fd);
-    }
-    try {
-      fs.chmodSync(tmp, mode);
-      chownIf(tmp, owned);
-      fs.renameSync(tmp, p);
-    } catch (e) {
-      fs.rmSync(tmp, { force: true });
-      throw e;
-    }
-  };
-
-  // write(p, content, { owned, backup: 'first' | 'foreign', createOnly, mode })
-  const write = (p, content, opts = {}) => {
-    if (isLink(p)) return refuse(p, 'is a symlink; not written through (replace it with a regular file or remove it)');
-    const old = readOr(p);
-    if (old !== null && opts.createOnly) return say(`unchanged ${p}`); // exists: never overwritten
-    if (old === content) return say(`unchanged ${p}`);
-    if (o.dry) return say(`would write ${p}`);
-    mkdirp(path.dirname(p), opts.owned);
-    const bak = `${p}.revview-backup`;
-    const wantBackup = old !== null && !fs.existsSync(bak) && !isLink(bak)
-      && (opts.backup === 'first' || (opts.backup === 'foreign' && !old.includes(AUTOSTART_MARK)));
-    const mode = opts.mode ?? (old !== null ? fs.statSync(p).mode & 0o777 : 0o644);
-    if (wantBackup) {
-      atomicWrite(bak, old, mode, opts.owned);
-      say(`backup ${p} -> ${bak}`);
-    }
-    atomicWrite(p, content, mode, opts.owned);
-    say(`wrote ${p}`);
-  };
+  const w = createWriter({ dry: o.dry, owner: o.owner, homeAbs, say, ownMark: AUTOSTART_MARK });
+  const { write, refuse, isLink, readOr } = w;
 
   const piDir = path.dirname(fileURLToPath(import.meta.url));
   const edit = (rel, fn) => {
@@ -281,26 +213,13 @@ function main(argv) {
   write(R('/etc/udev/rules.d/71-revview-touch.rules'), renderTouchRule(o.rotate));
   write(R('/etc/systemd/user/revview.service'), renderUnit(fs.readFileSync(path.join(piDir, 'revview.service'), 'utf8'), o));
 
-  const link = R('/etc/systemd/user/default.target.wants/revview.service');
-  const target = '/etc/systemd/user/revview.service';
-  let cur = null;
-  try {
-    cur = fs.readlinkSync(link);
-  } catch { /* missing or not a link */ }
-  if (cur === target) say(`unchanged ${link}`);
-  else if (o.dry) say(`would write ${link}`);
-  else {
-    mkdirp(path.dirname(link), false);
-    fs.rmSync(link, { force: true });
-    fs.symlinkSync(target, link);
-    say(`wrote ${link}`);
-  }
+  w.link(R('/etc/systemd/user/default.target.wants/revview.service'), '/etc/systemd/user/revview.service');
 
   write(R(`/var/lib/systemd/linger/${o.user}`), '');
   write(R('/etc/revview/server.env'), renderServerEnv(), { createOnly: true });
   write(path.join(homeAbs, '.config/labwc/autostart'), renderAutostart({ dir: o.dir, output: o.output, transform: o.rotate }),
     { owned: true, backup: 'foreign', mode: 0o755 });
-  if (failed) process.exitCode = 1;
+  if (w.failed()) process.exitCode = 1;
 }
 
 if (process.argv[1] && fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url))) main(process.argv.slice(2));
