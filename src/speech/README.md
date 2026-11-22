@@ -10,6 +10,7 @@ the read-aloud wheel button (`docs/BUTTONS.md` section 5, DECISIONS "wheel butto
   characters plus "..."; other tools "Permission: <tool> <file base name>"). Else the last Stop message: code
   blocks, inline code, URLs, links (text kept), file paths and markdown removed, at most 3 sentences and 300
   characters. Nothing to say gives "Nothing to read." (`NOTHING_TO_READ`).
+  Path rule: a word is dropped if it starts with /, ./, ../, ~/ or a drive letter, has two or more slashes, is one slash plus a file extension, or is name.ext (index.js, README.md); and/or, input/output stay spoken (slash as a space), Node.js and Next.js (Capitalized.js) are names, .env is spoken. [[ ]] and < > are replaced by spaces.
 - `memo.js`: the last Stop message per session, kept outside the state core (the board and view stay unchanged).
   At most 16 sessions and 8000 characters each; forgotten on SessionEnd.
 - `config.js`: loads and checks `config/speech.json`; `pickEngine` takes the first engine whose programs and `needs`

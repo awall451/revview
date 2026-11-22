@@ -126,3 +126,20 @@ test('memo: junk never throws and is not stored', () => {
   assert.equal(m.size(), 0);
   assert.equal(m.get(undefined), null);
 });
+
+test('closing: single-slash words are spoken, real paths and files are dropped', () => {
+  assert.equal(closingText('It was a/b testing and/or something.'), 'It was a b testing and or something.');
+  assert.equal(closingText('Use the input/output pair, either/or.'), 'Use the input output pair, either or.');
+  assert.equal(closingText('I changed src/speech/text.js and src/text.js and ./x and ~/y and C:\\z ok.'), 'I changed and and and and ok.');
+  assert.equal(closingText('I used Node.js and Next.js, not index.js or README.md.'), 'I used Node.js and Next.js, not or.');
+});
+
+test('closing: holes are tidied and a dot-word keeps its space', () => {
+  assert.equal(closingText('Done (see src/a/b.js) now.'), 'Done now.');
+  assert.equal(closingText('Try the .env file.'), 'Try the .env file.');
+});
+
+test('speech text never carries [[ ]] or < >', () => {
+  assert.equal(closingText('Say [[h@lou]] and <break time="1s"/> then a < b > c.'), 'Say h@lou and then a b c.');
+  assert.equal(permissionText({ tool: 'Bash', file: null, command: 'if [[ -f x ]]; then <b>hi</b>' }), 'Permission: Bash if -f x ; then b hi /b');
+});

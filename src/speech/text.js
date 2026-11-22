@@ -17,6 +17,9 @@ function cutWords(text, max) {
   return `${kept}...`;
 }
 
+// Nothing that a speech engine could take as markup: [[ ]] (espeak-ng phoneme input) and < > (SSML-like tags).
+const scrub = (s) => s.replace(/\[\[|\]\]/g, ' ').replace(/[<>]/g, ' ');
+
 const flat = (s) => s.replace(CONTROL, '').replace(/\s+/g, ' ').trim();
 
 // "mcp__github__create_issue" -> "mcp github create issue"
@@ -31,29 +34,41 @@ export function permissionText(prompt) {
   const tool = speakableTool(p.tool);
   if (p.tool === 'Bash' && isStr(p.command)) {
     // control characters become spaces here, so a newline in a command separates words
-    const command = flat(p.command.replace(CONTROL, (c) => (/\s/.test(c) ? ' ' : '')));
+    const command = flat(scrub(p.command.replace(CONTROL, (c) => (/\s/.test(c) ? ' ' : ''))));
     if (command !== '') return `Permission: ${tool} ${cutWords(command, SPEECH_LIMITS.maxCommandChars)}`;
   }
   if (isStr(p.file)) {
-    const base = flat(p.file.split('/').filter((x) => x !== '').pop() ?? '');
+    const base = flat(scrub(p.file).split('/').filter((x) => x !== '').pop() ?? '');
     if (base !== '') return `Permission: ${tool} ${base}`;
   }
   return `Permission: ${tool}`;
 }
 
-// Does this word look like a file path or file name? (Heuristic: it errs on the side of dropping.)
-// A slash or backslash, a leading ./ or ~/, or name.ext with a 1-5 letter extension (index.js, README.md).
-// Not "done", "2.5", "v1.2.3" (the extension must be letters only), nor "e.g" / "i.e".
+// Does this word look like a file path or file name? (Heuristic.) A path is a word that
+//  - starts with /, ./, ../, ~/ or a drive letter (C:\ or C:/), or contains a backslash, or
+//  - has two or more slashes (src/speech/text.js), or
+//  - has one slash and ends in a file extension (src/text.js), or
+//  - is name.ext with a 1-5 letter extension (index.js, README.md).
+// Not paths: a single-slash word without extension (and/or, a/b, input/output: spoken, the slash as a space),
+// "done", "2.5", "v1.2.3" (extension must be letters), "e.g" / "i.e", ".env" (spoken as "dot env"), and a bare
+// product name Capitalized.js (Node.js, Next.js), while lower-case index.js is a file.
+const EXT = /\.[A-Za-z]{1,5}$/;
 function looksLikePath(core) {
   if (core === '') return false;
-  if (/[/\\]/.test(core) || core.startsWith('./') || core.startsWith('~/')) return true;
+  if (/^(?:\/|\.\/|\.\.\/|~\/|[A-Za-z]:[\\/])/.test(core) || core.includes('\\')) return true;
+  const slashes = core.split('/').length - 1;
+  if (slashes >= 2) return true;
+  if (slashes === 1) return EXT.test(core);
   if (/^(?:e\.g|i\.e)$/i.test(core)) return false;
+  if (/^[A-Z][A-Za-z0-9]*\.js$/.test(core)) return false;
   return /^[\w-]+(?:\.[\w-]+)*\.[A-Za-z]{1,5}$/.test(core) && /[A-Za-z]$/.test(core);
 }
 
 const dropPathWords = (line) => line.split(/\s+/).map((w) => {
   const m = /^([("'[<]*)(.*?)([)"'\]>,;:!?.]*)$/s.exec(w);
-  return m !== null && looksLikePath(m[2]) ? m[1] + m[3] : w;
+  if (m === null) return w;
+  if (looksLikePath(m[2])) return m[1] + m[3];
+  return m[2].includes('/') ? m[1] + m[2].replace(/\//g, ' ') + m[3] : w; // and/or -> "and or"
 }).join(' ');
 
 // one markdown line -> plain words ('' when nothing is left)
@@ -76,8 +91,8 @@ function tidy(s) {
   let t = s;
   for (let i = 0; i < 3; i++) {
     t = t
-      .replace(/\(\s*\)|\[\s*\]|\{\s*\}|""|''/g, '')
-      .replace(/\s+([,.;:!?])/g, '$1')
+      .replace(/\(\s*(?:(?:see|in|at|from|via|to|and|or)\s*)?\)|\[\s*\]|\{\s*\}|""|''/gi, '')
+      .replace(/\s+([,;:!?]|\.(?![A-Za-z]))/g, '$1')
       .replace(/([,;:])(?:\s*[,;:])+/g, '$1')
       .replace(/[,;:]\s*(?=[.!?])/g, '')
       .replace(/([.!?])(?:\s+\.)+(?=\s|$)/g, '$1')
@@ -99,7 +114,7 @@ export function closingText(message) {
     .replace(/<\/?[A-Za-z][^>]*>/g, '')
     .replace(CONTROL, '')
     .replace(/\r/g, '');
-  const joined = tidy(text.split('\n').map(plainLine).filter((l) => l !== '').join(' '));
+  const joined = tidy(scrub(text.split('\n').map(plainLine).filter((l) => l !== '').join(' ')));
   const sentences = (joined.match(/.+?(?:[.!?]+(?=\s|$)|$)/gs) ?? []).map((s) => s.trim()).filter((s) => /[\p{L}\p{N}]/u.test(s));
   if (sentences.length === 0) return '';
   if (sentences[0].length > SPEECH_LIMITS.maxChars) return cutWords(sentences[0], SPEECH_LIMITS.maxChars);

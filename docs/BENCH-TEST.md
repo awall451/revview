@@ -43,7 +43,7 @@ these are the first ones.
 | 35 | `/voice hold` mode with the button imitating key auto-repeat (Space about every 50 ms while held) | Recording starts while held and stops on release. Expect it may fail: it depends on Claude Code's own timing | untested |
 | 36 | Two sessions, select the second by button, press push-to-talk | Only the selected session gets the transcript; the bar shows which one it is | untested |
 | 37 | On the Pi, with a permission prompt shown, press allow, then in a second prompt deny (waiting PermissionRequest hook) | Allow runs the command, deny shows "Denied by PermissionRequest hook"; the dialog goes away within about 1.5 s | untested |
-| 38 | Read aloud over the 3.5 mm jack into the car's AUX; stop it with the hold; press push-to-talk while it speaks | Speech is clear over cabin noise, stops on the hold, and push-to-talk stops it first | untested |
+| 38 | Read aloud over the 3.5 mm jack into the car's AUX; stop it with the hold; press push-to-talk while it speaks | Speech is clear over cabin noise, stops on the hold, and push-to-talk stops it first. Also note: the push-to-talk key can be delayed up to about 1-2 s while speech is being stopped; note whether the delay felt | untested |
 | 39 | Coin-cell pod battery life: note the voltage or the date it stops working | Several weeks of normal use; note the number | untested |
 | | Note | Items 1 and 2 (a single 2.4 GHz remote) are superseded by items 27 and 29 if the owner confirms the pods. | |
 
