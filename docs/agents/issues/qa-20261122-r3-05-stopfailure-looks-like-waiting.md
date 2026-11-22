@@ -41,3 +41,12 @@ binary (`~/.local/share/claude/versions/2.1.330`; not run, not recorded, may dif
   (hook output and exit code ignored), default timeout 120 s.
 
 A recording (or a bench item) is still needed before the view claims a failed turn.
+
+## Recorded (2026-11-22, stage 2 hook wiring)
+
+Now recorded with Claude Code 2.1.330 (`fixtures/sessions/hook-wiring/events-stop-failure*.jsonl`, API unreachable
+through `ANTHROPIC_BASE_URL` to a closed port, `CLAUDE_CODE_MAX_RETRIES=0`): `StopFailure` with `error: "server_error"`,
+`last_assistant_message` ("API Error: Connection refused ..."), no `error_details`, no `Stop`. Interactive: the hook
+reached the server and the bar showed WAITING FOR ME (as reported); the terminal said "Resend your message to try
+again". Headless `claude -p`: the hook post never reached the server (5 runs). Still open: the state core / view
+change is for the state-core lead.

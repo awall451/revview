@@ -1,24 +1,84 @@
 # Hooks
 
-`permission-request.mjs` is a Claude Code `PermissionRequest` command hook. It posts the request
-JSON (unchanged) to the revview server (`http://127.0.0.1:$REVVIEW_PORT/permission`, default 8138) and
-waits. If the driver answers with a wheel button, the server replies with `{behavior:'allow'}` or
-`{behavior:'deny',message}` and the hook prints the matching `hookSpecificOutput` for Claude Code.
+Two Claude Code command hooks feed the bar from a real Claude Code session (charter stage 2):
 
-Install: `node hooks/install.mjs` merges `hooks/settings.json` (with `$REVVIEW_DIR` replaced by this
-repository's absolute path) into `$CLAUDE_CONFIG_DIR/settings.json`, else `~/.claude/settings.json`. It keeps
-every other key and hook, replaces revview's own entries (idempotent; after moving the repo, run it again),
-and copies an existing file once to `settings.json.revview-backup`. Options: `--settings <file>` picks another
-file, `--dry-run` prints the result and writes nothing, `--remove` takes revview's hooks out again.
+- `event.mjs`: every event the state core uses except `PermissionRequest`. Posts the hook's stdin JSON unchanged to
+  `http://127.0.0.1:$REVVIEW_PORT/event` (default port 8138) and, for a few events, a synthetic `RevviewContext`
+  (repo and branch). Never prints, never blocks for long: see "event.mjs" below.
+- `permission-request.mjs`: the `PermissionRequest` hook. It posts the request JSON (unchanged) to
+  `/permission` and waits. If the driver answers with a wheel button, the server replies with `{behavior:'allow'}` or
+  `{behavior:'deny',message}` and the hook prints the matching `hookSpecificOutput` for Claude Code.
 
-## No decision means the terminal prompt stays
+`settings.json` is the complete hooks block (with the placeholder `$REVVIEW_DIR`). `install.mjs` writes it into a
+Claude Code settings file.
+
+## Install
+
+```
+node $REVVIEW_DIR/hooks/install.mjs            # into $CLAUDE_CONFIG_DIR/settings.json, else ~/.claude/settings.json
+node $REVVIEW_DIR/hooks/install.mjs --dry-run  # print the merged file, write nothing
+node $REVVIEW_DIR/hooks/install.mjs --remove   # take revview's hooks out again
+```
+
+It replaces `$REVVIEW_DIR` with this repository's absolute path (refused if the path has `"`, `` ` ``, `$`, `\` or
+control characters, since it goes inside a quoted bash word), keeps every other key and hook, removes revview's own
+entries (any command containing `/hooks/event.mjs` or `/hooks/permission-request.mjs`) before adding them again
+(idempotent; after moving the repo, run it again), and copies an existing file once to
+`settings.json.revview-backup`. `--settings <file>` picks another file. Run it as the user that runs Claude Code
+(on the Pi: the user of the revview sessions, see `pi/README.md`). Install into ONE settings file only: the same
+hook in user and project settings would post every event twice (a doubled diff, QA r3-07).
+
+The server port must match: the hooks read `REVVIEW_PORT` from Claude Code's environment (default 8138, the
+server's default too).
+
+## Which events
+
+| Event | Hook | Why |
+| --- | --- | --- |
+| SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, PermissionDenied, Notification, Stop, StopFailure, SubagentStop, SessionEnd | `event.mjs`, timeout 5 s | the state core (`src/state/`) uses them |
+| PermissionRequest | `permission-request.mjs`, timeout 600 s | owned by `/permission` (wheel-button answers) |
+| SubagentStart, PreCompact, PostCompact | none | the state core ignores them; each hook costs a node start |
+
+## event.mjs
+
+- Reads stdin, checks it is a JSON object with a string `hook_event_name`, posts the bytes unchanged.
+- **Never posts `PermissionRequest`** (also if it were installed on that event by mistake): the server feeds it into
+  the board from `/permission`; a second copy through `/event` would make a duplicate pending entry, and a button
+  press would then do nothing. Never posts a name starting with `Revview` either (a payload cannot become a
+  synthetic event). Pinned in `tests/unit/hook-event.test.js`.
+- **Context**: after a successful post of `SessionStart` (not `compact`), `UserPromptSubmit`, `Stop`, or
+  `PostToolUse` of `Bash` (a command may switch branches), it runs `git -C <cwd> rev-parse --show-toplevel
+  --abbrev-ref HEAD` (no shell) and posts `{hook_event_name:'RevviewContext', session_id, cwd:<toplevel>, branch}`.
+  The toplevel keeps the repo name when Claude `cd`s into a subdirectory; a detached HEAD or no git gives
+  `branch: null` (and the payload's cwd).
+- **Failure rule**: prints nothing on stdout and exits 0 on anything (server down, non-2xx, hang, bad stdin). The
+  whole run has an absolute deadline, `REVVIEW_EVENT_WAIT_MS` (default 1000 ms, clamped to 50..3000), well inside
+  the settings `timeout` of 5 s. A diagnostic line may go to stderr, as in the permission hook.
+- **Oversize** stdin (over 1 MiB, e.g. an Edit of a large file): the first 1 MiB + 64 KiB is posted, the server
+  answers 413 and, if it was a `PostToolUse` of Edit/Write/MultiEdit, marks that session's diff incomplete (`≥`),
+  as it does for any oversize body. Any other oversize event is lost (the bar keeps its previous state for it).
+- The hooks are synchronous: Claude waits for each (about 0.1 s here, mostly node start-up; slower on a Pi, bench
+  H3). Claude Code's `async` hook option is not used: background hooks could post a tool's Post before its Pre.
+
+## Spoken summary on Stop
+
+Built in WB5, off by default. With the wiring installed, set `"speakOnStop": true` in a copy of
+`config/speech.json` and start the server with `--speech <copy>` (or `REVVIEW_SPEECH=<copy>`). The `Stop` event that
+`event.mjs` posts carries `last_assistant_message`; the server speaks it when the selected session stops (see
+`src/speech/README.md`; bench R12, untested; nothing has made a sound here).
+
+## A Claude that dies without SessionEnd
+
+It stays on the bar with its last state (the state core has no clock; DECISIONS "stage 2 hook wiring").
+
+## permission-request.mjs: no decision means the terminal prompt stays
 
 Connection refused, timeout, non-200, a malformed or extended response, or stdin that is not JSON
 (or over 1 MiB): the hook prints nothing and exits 0. The normal terminal dialog is shown at once
 anyway and stays. The hook never allows or denies by default, and an allow never carries
 `updatedPermissions` (no "always allow").
 
-## Timeouts
+## permission-request.mjs timeouts
 
 | Where | Value | Why |
 | --- | --- | --- |
@@ -29,4 +89,4 @@ anyway and stays. The hook never allows or denies by default, and an allow never
 ## Do not also post PermissionRequest to /event
 
 The server feeds `PermissionRequest` from this hook into the board itself. Another hook posting the
-same event to `/event` would create a duplicate pending entry.
+same event to `/event` would create a duplicate pending entry. `event.mjs` skips it (see above).

@@ -650,7 +650,7 @@ Recordings: `fixtures/buttons/README.md`, section WB3. Bench S1-S6.
   anything else (204, timeout, server down,
   error, extra keys) prints nothing and exits 0, so the normal terminal dialog stays. Never allow or deny by
   default, no `updatedPermissions` ("always allow" is impossible). Timeouts: the server ends its wait at **540 s**
-  (204), the hook gives up at **570 s** (`REVVIEW_HOOK_WAIT_MS` is clamped to at most 590 s, `hooks/wait.mjs`), Claude Code's `timeout` is **600 s** in `hooks/settings-snippet.json`.
+  (204), the hook gives up at **570 s** (`REVVIEW_HOOK_WAIT_MS` is clamped to at most 590 s, `hooks/wait.mjs`), Claude Code's `timeout` is **600 s** in `hooks/settings-snippet.json` (since stage 2: `hooks/settings.json`).
 - **The press answers only the prompt shown on the bar.** The server feeds the request's own event to the board
   and binds the request to the pending entry THAT event created (identity: session, agent, the board tick
   `since`; plus its shown tool, file and command). If the event created no entry (a duplicate, a request for a
@@ -903,3 +903,61 @@ Code: `src/state/board.js`, `tests/unit/board-hardening.test.js`, `tests/unit/sp
   scrubbing `< >` stays as a cheap safeguard in case someone adds `-m`. Still untested: the sound, Piper, the Pi,
   the `audio` group, the delay. The tests assert on the real engine only when it is on PATH (their names say so) and
   pass otherwise.
+
+## 2026-11-22: stage 2 hook wiring (built; real Claude Code 2.1.330 here, not on the Pi)
+
+- **Two hooks, one settings file.** `hooks/event.mjs` for every event the state core uses, `hooks/permission-request.mjs`
+  (WB3) for `PermissionRequest`. `hooks/settings.json` is the complete hooks block (it replaces
+  `settings-snippet.json`), `hooks/install.mjs` merges it into a Claude Code settings file (see `hooks/README.md`).
+  Registered with `event.mjs`: SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure,
+  PermissionDenied, Notification, Stop, StopFailure, SubagentStop, SessionEnd (all in the 2.1.330 settings schema,
+  checked in the binary). Not registered: SubagentStart, PreCompact, PostCompact (ignored by the core; each hook is a
+  node start). No `matcher` on the event hooks (the earlier recordings used none and fired for every tool);
+  PermissionRequest keeps `matcher: "*"` and `timeout: 600`.
+- **event.mjs never posts PermissionRequest** (the press would do nothing with a duplicate pending entry) nor any
+  `Revview*` name. Tests pin both, also end to end: the recorded `permission-prompt` session fed line by line through
+  the real hook into a real server shows NEEDS PERMISSION (from the Notification) with exactly one pending entry.
+- **Node, synchronous, 1 s deadline.** Same language and failure rule as the WB3 hook (nothing on stdout, exit 0 on
+  any failure). Claude waits for each hook (about 0.1 s here, mostly node start-up); Claude Code's `async` hook option
+  was not used because background hooks could reach the server out of order (a Post before its Pre). A hung server
+  costs at most `REVVIEW_EVENT_WAIT_MS` (1000 ms, clamped 50..3000) per event; settings `timeout` 5 s is the backstop.
+  The Pi's node start time is unknown (bench H3); if it is too slow, a curl one-liner or a resident helper is the
+  fallback, not async hooks.
+- **Synthetic events: who sends what.**
+  - `RevviewContext` (accepted over HTTP): sent by `event.mjs` after SessionStart (not `compact`), UserPromptSubmit,
+    Stop and Bash PostToolUse, with the git toplevel as `cwd` (a `cd` into a subdirectory never renames the repo) and
+    the branch (`null` when detached or not a repo). Posted after the event itself, so the session exists on the board.
+  - `RevviewStarting` (accepted over HTTP): key-on, before any Claude is ready. It belongs to the Pi's boot (stage 4):
+    the kiosk/boot unit should post it once when the server comes up on key-on. Not a hook's job: a hook only runs
+    once Claude is already up, and the event clears every session. Not sent by anything yet.
+  - `RevviewNetwork {online}` (accepted over HTTP): a network monitor on the Pi (stage 4: hotspot link up/down, e.g. a
+    small systemd unit polling the default route or NetworkManager's state). Not sent by anything yet.
+  - `RevviewDataLock {locked}` (accepted over HTTP): the key-stick unlock on the Pi (stage 4, DESIGN data partition).
+    Not sent by anything yet.
+  - Internal ones (`RevviewInterrupted`, `RevviewAnswered`, `RevviewSelect`, `RevviewNav`, `RevviewOwned`,
+    `RevviewProjects`, `RevviewNote`, and `RevviewButton`/`RevviewInput` without `--dev-bridge`) keep their 403; no
+    hook sends them, and `event.mjs` refuses to forward any `Revview*` name from a payload.
+- **Spoken summary on Stop** is WB5's `speakOnStop` (off by default); the wiring only had to deliver `Stop` with
+  `last_assistant_message`, which it does. How to turn it on: `hooks/README.md`. Not rebuilt.
+- **Recorded proof** (`fixtures/sessions/hook-wiring/`, real Claude Code 2.1.330, haiku, hooks installed by
+  `install.mjs` into a temp `CLAUDE_CONFIG_DIR` next to a user's own recorder hook): the bar followed a session
+  through repo, branch `main` -> `feature-bar` (after a `git switch` in Bash), Write +3, Edit, a failing command,
+  done, ended. Seen for the first time: **PostToolUseFailure** (a Bash command with non-zero exit; fields `tool_name`,
+  `tool_input`, `tool_use_id`, `error`, `is_interrupt`, `duration_ms`) and **StopFailure** (API unreachable; `error:
+  "server_error"`, `last_assistant_message`, no `error_details`). In headless `claude -p` the StopFailure hook did not
+  reach the server in any of 5 runs (the process exits first, probably); interactive (the car's mode, in tmux) it
+  did, and the bar showed WAITING FOR ME, which is QA r3-05 (state core, not changed here). Not provoked:
+  **PermissionDenied** (the auto-mode classifier allowed the command we tried; we did not try a really dangerous one),
+  **worker_permission_prompt** (agent teams only). No duplicated PostToolUse (r3-07) and no late PostToolUse after
+  Stop (r3-08) were seen.
+- **A Claude that dies without SessionEnd** (decided, not built here). Hooks cannot see a death, and the state core
+  has no clock by design. On the car every driver session is a revview tmux window (`--sessions`), and the server
+  already polls the owned windows every 5 s (`RevviewOwned`); today `board.js` drops an id that is no longer owned
+  only while it is still a quiet placeholder. Proposal: treat a session that WAS owned and is no longer owned like a
+  `SessionEnd` (its window and so its Claude are gone). That is a small `board.js` change, owned by the state-core
+  lead, so it is left to them. Sessions started by hand outside revview still stay until a new session pushes them out
+  or `RevviewStarting` clears the board; a power cut restarts the server with an empty board anyway. A timer
+  ("no event for N minutes") was rejected: a long silent tool call (a build, a test run) would vanish while it works.
+- **Install on the Pi**: as the user that runs the Claude sessions (stage 4 still has to decide that user, see
+  `pi/README.md`). One settings file only: the same hook installed twice (user and project settings) would post every
+  event twice.

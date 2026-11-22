@@ -50,3 +50,7 @@ to open the sound card. With no engine the server logs it and the read-aloud but
 
 Open points, all untested: `KillMode=process` in the unit is meant to keep the tmux sessions alive across a
 service restart (bench D3); `claude` in the sessions needs its own sign-in for user `revview` (not set up here).
+The bar only gets events once the hooks are installed for that same user: `node /opt/revview/hooks/install.mjs`
+(see `hooks/README.md`, bench H1-H7). `install.sh` does not do it yet, since the sessions' user is not decided.
+Stage 4 also has to send the boot/network events: `RevviewStarting` on key-on, `RevviewNetwork`, `RevviewDataLock`
+(DECISIONS "stage 2 hook wiring").
