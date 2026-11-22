@@ -188,12 +188,15 @@ fallback.
 | starting | `#e0e0e0` light grey | ring | 15.91:1 (black on band) |
 | offline | `#ff6b6b` red | cross | 7.57:1 (black on band) |
 | insert-key | `#ff8ad8` pink | key | 9.88:1 (black on band) |
+| unknown | `#5ce1e6` cyan | question mark | 13.37:1 (black on band) |
+| ended | `#d8c28a` sand | power-off symbol | 12.00:1 (black on band) |
+| no-link | black, white outline | broken link | 21:1 (white on black) |
 
 Detail text is white `#fff` (21:1) or grey `#b8b8b8` (10.59:1) on black; diff counts are `#5fe08a` added
 (12.52:1) and `#ff7a7a` removed (8.32:1) on black; band text is black on the band colour (9.21 working, 10.07
-waiting, 11.48 permission, 11.85 done, 15.91 starting, 7.57 offline, 9.88 insert-key). The table gives, per
+waiting, 11.48 permission, 11.85 done, 15.91 starting, 7.57 offline, 9.88 insert-key, 13.37 unknown, 12.00 ended; no-link is white on black, 21). The table gives, per
 state, the lowest ratio over every colour pair that state can show; the diff counts appear in every state
-except starting and insert-key (`showDiff` in `src/view/view.js`), so they set the minimum in working,
+except starting, insert-key, unknown, ended and no-link (`NO_DIFF`, `showDiff` in `src/view/view.js`), so they set the minimum in working,
 waiting, permission and done. The ratios were computed with the WCAG formula from the colours in
 `src/view/view.css`. The Playwright test computes the ratio of every text element from its computed colour
 and its effective (opaque) background, but only for the fixtures, which are a subset of what can be shown; the floor is **7:1** (WCAG AAA for normal text) because the panel is read in daylight
