@@ -149,3 +149,26 @@ the grab, replug and battery; the items below only add the steps they do not cov
 | D10 | (c) Press and watch the screen by eye, then film the pod and screen with a phone at 60 fps or more and count frames | No delay you can notice by eye; note the frames from press to change (extends 31, which measures it). Try a shorter connection interval in `wheel.conf` if slow | untested |
 | D11 | (c) Range with hands on the wheel: drive or sit in the car, hands holding the pods on the wheel, dongle at its real place; press every key 20 times, turn the wheel through its whole range | No lost or doubled presses; note any key position that fails. If it does, move the dongle or try a USB extension cable | untested |
 | D12 | (c) Note the battery voltage (or the date) of both coin cells when new, after 1 week, and when a pod stops (extends 39) | A number for each pod; the owner decides whether weeks are enough | untested |
+
+## Wheel buttons 5: read aloud, WB5 (2026-11-22)
+
+Read aloud was built and tested only with a stand-in engine. There was no audio device and no engine in the VM:
+nothing here has been heard. The Piper command line and paths are from memory. Config: `config/speech.json`; the
+server log says which engine it found. Ids `R1`... are new (`S1`-`S6` are taken).
+
+| # | Try | Should happen | State |
+|---|---|---|---|
+| R1 | Pi with `espeak-ng` installed and no Piper: start the service, `journalctl -u revview -n 30` | The log has `read aloud: espeak-ng (...)` | untested |
+| R2 | Pi with Piper and its voice at the `config/speech.json` paths (and alsa-utils), also with espeak-ng: start the service | The log has `read aloud: piper (...)`. Remove the voice file: the log then names espeak-ng | untested |
+| R3 | Pi with neither: start the service, then tap read aloud | The log has `read aloud: no speech engine found (tried piper, espeak-ng): the read-aloud button does nothing`; the tap puts the note "Read aloud: no speech engine installed" on the screen; nothing else breaks | untested |
+| R4 | Both engines, one after the other (change the order in the config): a closing message, over AUX at driving noise, from the driver's seat | Say how well each is understood on the first hearing, and which one the owner prefers. Not recorded here | untested |
+| R5 | The volume: the ALSA mixer level on the headphone card (`alsamixer`, `amixer`) and the car's volume knob | Note the mixer level and the car volume where it is clear but not loud. If the level has to be set, say where (install script?) | untested |
+| R6 | Tap read aloud and measure the time to the first sound (phone video, 60 fps or more). Both engines; for Piper also the first speech after a reboot and the next ones | A number in seconds for each. Note Piper's first-start cost on the Pi 4B and whether it is too slow | untested |
+| R7 | While it speaks, hold read aloud. Then `pgrep espeak-ng`, `pgrep piper`, `pgrep aplay` | Silence within about 0.5 s; all three `pgrep` empty. Same with a long-hold, and with a list open | untested |
+| R8 | While it speaks, tap read aloud again | The first speech stops and the new one starts; never two voices at once | untested |
+| R9 | While it speaks, tap push-to-talk (tap mode), then speak. Read the transcript | The speech stops before Claude's mic opens (Space is sent only after the stop). Is there any bleed of the speech in the transcript? Note what is heard | untested |
+| R10 | A permission prompt with a long Bash command (over 100 characters) on the selected session, then tap read aloud | "Permission: Bash ..." cut at a word, with "..." at the end; understandable. Also an Edit prompt (file base name) and an MCP tool. Note what is heard | untested |
+| R11 | A closing message with a code block, inline code, a URL, a link and file paths | Only the prose is heard (at most 3 sentences and 300 characters); nothing spells out code or a path. With no closing message yet: "Nothing to read." is heard | untested |
+| R12 | Set `"speakOnStop": true` in a copy of the config (`--speech <file>` or `REVVIEW_SPEECH`), restart. Let the selected session finish a turn; let another session finish; let a session with background subagents finish its main turn | The closing message is spoken once per Stop of the selected session only; another session's Stop and the subagent case are silent. "Nothing to read." is never spoken this way | untested |
+| R13 | Restart the service (`sudo systemctl restart revview`) while it speaks; then `pgrep espeak-ng`, `pgrep piper`, `pgrep aplay` | No speech process is left. Also try `kill -9` of node while it speaks and note whether a child finishes its sentence (known, not handled) | untested |
+| R14 | As user `revview`: `sudo -u revview aplay -l` and `sudo -u revview speaker-test -t sine -l 1` (or play a short wav) after `pi/install.sh` | The user can open the audio device (group `audio`); `id revview` lists `audio` | untested |

@@ -821,3 +821,49 @@ Code: `src/state/board.js`, `src/sessions/actions.js`, `src/server/index.js`, `s
   node or default is checked. Every such file says so.
 - **Open questions** (boards, 5-way part, `zmk.dev` domain, USB ids, hold on the Pi) are in BUTTONS.md section 9
   with suggested defaults. Bench items D1-D12.
+
+## 2026-11-22: wheel buttons 5, read aloud (built; stand-in engine only, no engine or audio device here)
+
+Code: `src/speech/`, `config/speech.json`, `src/sessions/actions.js`, `src/server/index.js`; the READMEs of those
+folders. Bench R1-R14. Everything is tested with a stand-in engine (`tests/unit/fixtures/speech/fake-engine.sh`).
+Nothing was heard: there is no audio device and no speech engine in this VM, so all sound is untested.
+
+- **Engines.** espeak-ng is a Debian package, tiny, starts at once and sounds robotic. Piper sounds natural, but a
+  voice is about 60 MB, it starts slower on a Pi 4B, and it is not a Debian package. The standing default from
+  BUTTONS.md section 8 is kept: Piper first, espeak-ng as the fallback. They are an ordered list in
+  `config/speech.json`, so the owner can change the order or the words without code.
+- **Honest status of the engines.** Neither is installed here. The lead asked the owner for `apt:espeak-ng`
+  (request id `20261122T134519Z-k-4b7f18`, pending when this was written). Piper has no apt package or recipe here,
+  so it could not be installed or tried at all. Piper's command line (`--model <voice.onnx> --output-raw` piped into
+  `aplay -r 22050 -f S16_LE -t raw -`) and the `/opt/piper` paths are FROM MEMORY and UNTESTED.
+- **Pinning for the Pi (all from memory, unverified).** espeak-ng: whatever Debian 12 (bookworm) ships
+  (`apt install espeak-ng`, 1.51 as far as I remember; check with `espeak-ng --version`). Piper: the rhasspy/piper
+  release 2023.11.14-2 aarch64 tarball and the voice `en_US-lessac-medium`; the version and the file names are not
+  checked. `aplay` comes from alsa-utils.
+- **Design consequences.** The engine is a configured command, not code. The first engine whose programs and `needs`
+  files exist is used. With none found, nothing harmful happens: the server logs `read aloud: no speech engine found
+  (tried piper, espeak-ng): the read-aloud button does nothing`, and a tap puts the fixed note "Read aloud: no
+  speech engine installed" on the screen. With one found it logs `read aloud: <name> (...)`. A bad config file is
+  logged and the server runs without speech.
+- **Safety.** The text goes only to stdin of the first stage. Arguments are an argv array, used exactly as written
+  (no placeholder substitution), spawned with no shell. Each stage is its own process group. Stop is SIGTERM to the
+  groups, then SIGKILL after 500 ms. A new speak stops the old one first, a push-to-talk waits for the stop before
+  the Space key is sent, and server close kills speech, so no process is left over. Failures are logged, never
+  thrown. Not handled: a hard kill (SIGKILL) of node itself can leave a speech child that finishes its sentence.
+- **What the buttons do.** Read-aloud tap speaks for the selected session (none selected: refused). Hold or
+  long-hold stops, also with a list open. It never sends a key and never answers a prompt. No HTTP route speaks, and
+  `RevviewButton` stays refused over HTTP as before. The stop hold is the same F14 hold the config already had.
+- **What is spoken.** A pending permission prompt of the selected session wins: "Permission: Bash <command>", the
+  command cut at a word to 100 characters plus "...", other tools "Permission: <tool> <file base name>", and MCP-style
+  tool names spoken with spaces. Else the last Stop's `last_assistant_message`, with code blocks, inline code, URLs,
+  links (the text is kept), file paths and markdown removed, at most 3 sentences and 300 characters (BUTTONS.md
+  said about 2; 3 is the built limit).
+- **"Nothing to read."** When there is nothing to say, the fixed phrase "Nothing to read." is spoken. A driver needs
+  to hear that the button worked; silence is ambiguous (broken, or empty?). `speakOnStop` never speaks that phrase.
+- **The closing message is kept outside the state core.** `src/speech/memo.js` keeps the last Stop message per session
+  in the server: at most 16 sessions and 8000 characters each, forgotten on SessionEnd. It is deliberately not in the
+  board, so the board, the reducer and the view stay unchanged and the message text never goes to the page.
+- **`speakOnStop` (charter stage 2) is off by default** (`config/speech.json`). When on, the closing text is spoken once
+  when the SELECTED session stops, not while background subagents keep it working.
+- **Not done, possible follow-ups.** No "speaking" mark on the view. No Settings row for the engine: Settings still
+  does not show it. Neither engine, nor the audio path, was heard; see the bench.

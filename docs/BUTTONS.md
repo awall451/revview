@@ -230,6 +230,14 @@ Describe only: the exact pixel layout is for whoever builds it, within the 7-row
 
 ## 5. Read aloud
 
+**Built (WB5), untested with sound.** `src/speech/` and `config/speech.json`; see DECISIONS "wheel buttons 5" and
+bench R1-R14. Read-aloud tap speaks for the selected session (a pending prompt first, else the last Stop message,
+else "Nothing to read."); hold or long-hold stops; a push-to-talk press stops speech before it sends Space. The
+engines are chosen in the config (Piper first, espeak-ng as the fallback; the first one installed is used). Neither
+is installed in the VM and nothing was heard: the Piper command line is from memory. The built limit is 3 sentences
+and 300 characters, not 2. The spoken Stop summary (`speakOnStop`) is built and off by default. No "speaking" mark
+on the view yet. The proposal text below stays where it is still true.
+
 Engines on a Pi 4B **[proposal]**:
 
 | Engine | Notes |
@@ -244,14 +252,14 @@ a DECISIONS entry with a pinned version.
 **What is spoken.** **[proposal]**
 - After a Stop: the `last_assistant_message` field (it is in `fixtures/sessions/working-turn.jsonl`), cut to
   about 2 sentences or 300 characters, with markdown and code removed.
-- A pending prompt: "<repo> wants to run <tool>: <command>", from the PermissionRequest.
+- A pending prompt: "<repo> wants to run <tool>: <command>", from the PermissionRequest. Built as "Permission: Bash <command, cut at 100 characters>".
 
 **Stopping.**
 - The read-aloud hold kills the player.
 - A new speak replaces the old one.
 - A push-to-talk press stops speech first, so the microphone does not hear the car speakers.
 
-**Output.** ALSA to the Pi's headphone card (3.5 mm) into AUX. **[untested hardware]** (bench 38)
+**Output.** ALSA to the Pi's headphone card (3.5 mm) into AUX. **[untested hardware]** (bench 38, R4-R6)
 
 **Scope.** The spoken summary on Stop is charter stage 2. Read aloud on demand by a button goes beyond stage 3.
 

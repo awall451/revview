@@ -31,6 +31,14 @@ the unit. Either can start first. If the server is late the kiosk shows NO LINK 
 absent the reader retries (every second, then backing off) and the view shows NO BUTTONS. Neither waits for the
 other (bench D2).
 
+## Read aloud (untested)
+
+`config/speech.json` lists the engines. It needs `apt install espeak-ng` (the fallback, in Debian 12; version from
+memory). Piper is a manual install to `/opt/piper` (the program and the voice `en_US-lessac-medium.onnx`; the
+release and file names are from memory) and needs `alsa-utils` for `aplay`. The service user is in group `audio`
+to open the sound card. With no engine the server logs it and the read-aloud button does nothing. See DECISIONS
+"wheel buttons 5" and bench R1 to R14.
+
 ## Install
 
 1. Put this repository on the Pi, e.g. `/opt/revview`, with `npm ci` done. Node 22 or newer (bench 25).

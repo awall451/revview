@@ -30,7 +30,7 @@ logged with the reason. That the directory exists is `runner.start`'s check at s
 
 ## Actions (`actions.js`): one controller for every gesture
 
-`createActions({ runner, registry, getBoard, apply, projects, log, clock, ctrlCGapMs, timers, navTimeoutMs, onOwnedChanged })`
+`createActions({ runner, registry, readAloud, getBoard, apply, projects, log, clock, ctrlCGapMs, timers, navTimeoutMs, onOwnedChanged })`
 -> `handle(entry)` (one gesture at a time) and `close()`. `runner` may be `null` (no `--sessions`): keys, answers and
 New session are refused with reason `no sessions`; navigation still works. Only `source` `device`/`bridge` and not
 `dropped` act (a dropped or posted gesture changes neither nav nor selection). The board is read at the start of each
@@ -51,7 +51,12 @@ gesture.
   - allow/deny: `runner.target(selectedKey)`, then the board is read AGAIN; a list opened or a selection change during
     the await refuses (`selection changed`); then `registry.answer(kind, shownPrompt(board), id)`; on ok
     `RevviewAnswered`.
-  - up, down, left, right, menu, back (tap and hold) are `RevviewNav`. read-aloud and spare do nothing.
+  - up, down, left, right, menu, back (tap and hold) are `RevviewNav`. spare does nothing.
+  - **read-aloud tap** speaks for `selectedKey(board)` through the `readAloud` object (`src/speech`); none selected:
+    refused. **read-aloud hold or long-hold** stops speech, also with a list open. With no speech engine a tap puts the
+    fixed note "Read aloud: no speech engine installed". Read aloud never sends a key and never answers a prompt.
+  - **push-to-talk (any gesture)** awaits the speech stop BEFORE the Space key is sent, so the microphone does not
+    hear the speaker.
 - **Nav timeout:** after every accepted gesture, an open list/menu (re)arms ONE timer of `navTimeoutMs` (10 s) that
   applies `RevviewNav {button: 'timeout'}`; a closed one clears it.
 
@@ -61,6 +66,8 @@ or by timeout), restarts the 1500 ms shown time of the prompt.
 
 The server (`src/server/index.js`) wires it to every device/bridge gesture, `POST /permission` feeds the registry, and
 applies `RevviewOwned` (from `runner.list()`; also at once when a key send fails with 'selected session gone') and `RevviewProjects`.
+
+Read aloud is described in `src/speech/README.md`. It is tested with a stand-in engine only; nothing was heard.
 
 ## Why targeting is safe
 

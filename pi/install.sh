@@ -13,15 +13,16 @@ fi
 for need in node python3 tmux; do
   command -v "$need" > /dev/null || echo "warning: $need not found (the server needs node, the grab needs python3, sessions need tmux)" >&2
 done
+command -v espeak-ng > /dev/null || echo "warning: espeak-ng not found: read aloud needs it (apt install espeak-ng) or Piper in /opt/piper (manual install, with alsa-utils); untested" >&2
 case "$dir" in
   *[[:space:]@\|]*) echo "REVVIEW_DIR must not contain spaces, @ or |: $dir" >&2; exit 1 ;;
 esac
 
-# A service user without a login, in the input group.
+# A service user without a login, in the input group (buttons) and the audio group (read aloud).
 if ! id revview > /dev/null 2>&1; then
-  useradd --system --create-home --shell /usr/sbin/nologin --groups input revview
+  useradd --system --create-home --shell /usr/sbin/nologin --groups input,audio revview
 else
-  usermod --append --groups input revview
+  usermod --append --groups input,audio revview
 fi
 
 install -m 0644 "$here/70-revview-dongle.rules" /etc/udev/rules.d/70-revview-dongle.rules

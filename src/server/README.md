@@ -7,7 +7,7 @@ session, see `src/state/README.md`), reduces every event with `reduceBoard` and 
 No persistence: a fresh or restarted server shows `unknown` (a restored state could not be trusted, and hooks
 posted while the server was down are lost).
 
-Run: `npm start` or `node src/server/index.js [port] [--input [path]] [--dev-bridge] [--sessions] [--start dir]... [--projects file]` (port default **8138**, or env `REVVIEW_PORT`).
+Run: `npm start` or `node src/server/index.js [port] [--input [path]] [--dev-bridge] [--sessions] [--start dir]... [--projects file] [--speech file]` (port default **8138**, or env `REVVIEW_PORT`).
 `--input` reads the wheel buttons in this process (config `config/buttons.json`, or the path given); a bad config or
 unknown flag prints the message to stderr and exits with code 2 before listening. `--dev-bridge` (or `npm run start:dev`) turns on `POST /dev/key`. SIGTERM and SIGINT close the server (stopping the grab helper) and exit 0.
 It binds to **127.0.0.1 only**; there is deliberately no way to change the host from the CLI.
@@ -102,6 +102,17 @@ for each (a throwing callback is caught and logged).
   Gating: the route is only registered with `--dev-bridge` / `devBridge: true`; otherwise it is an unknown path.
   It is still loopback only and subject to the Origin/Host checks. The page sends keys only when loaded with `?devkeys=1`.
 
+## Read aloud (`src/speech`)
+
+With a speech config the server can read aloud (`src/speech/README.md`). `--speech <file>` (default env `REVVIEW_SPEECH`,
+else `config/speech.json`) is loaded at start. A bad config is logged and the server runs without speech. The log says
+`read aloud: <name> (...)` or `read aloud: no speech engine found (tried piper, espeak-ng): the read-aloud button does nothing`.
+- Hook events POSTed to `/event` feed a small memo of each session's last Stop message (kept in the server, not in the board).
+- The gestures go through the actions: read-aloud tap speaks for the selected session, hold stops, push-to-talk stops first.
+- With `speakOnStop` in the config, the closing text is spoken when the SELECTED session stops (not while background subagents keep it working).
+- **No route speaks or stops speech.** `RevviewButton` and the internal events stay refused over HTTP as before.
+- `close()` kills any speech. Untested with a real engine or audio device.
+
 ## Security notes
 
 - Loopback only, so nothing on the network can reach it.
@@ -118,8 +129,8 @@ for each (a throwing callback is caught and logged).
 With a runner, `RevviewOwned` (the ids of `runner.list()`) is applied at start, after every session start and every `ownedPollMs`
 (default 5000; an unref'd timer; a failing `list()` is logged and the last value kept). The tmux server is never killed by the live server (sessions outlive a restart).
 
-Programmatic use (tests): `startLiveServer({ port: 0, viewDir, reduce, input, devBridge, inputDeps, inputRetryMs, onGesture, sessions, clock, permissionWaitMs, minShownMs, projects, timers, navTimeoutMs, ownedPollMs })`
-(`sessions` is a runner (`list/target/send/start`), `clock`/`permissionWaitMs`/`minShownMs` go to the permission registry, `projects` is the
+Programmatic use (tests): `startLiveServer({ port: 0, viewDir, reduce, input, devBridge, inputDeps, inputRetryMs, onGesture, sessions, speech, clock, permissionWaitMs, minShownMs, projects, timers, navTimeoutMs, ownedPollMs })`
+(`speech` is a read-aloud object from `src/speech` (default none); `sessions` is a runner (`list/target/send/start`), `clock`/`permissionWaitMs`/`minShownMs` go to the permission registry, `projects` is the
 validated path list, `timers`/`navTimeoutMs` go to the actions; `permissionsWaiting()` is a test seam)
 (`input` is a parsed config, `inputDeps`/`inputRetryMs` go to the device reader; `gestures()` returns a copy of the log) (`reduce` is a test seam for a failing state core; there is no host option) resolves to
 `{ url, port, close(), state(), select(id) }` (`select(id)` is the internal `RevviewSelect` for the boot path) (`reduce` is `(board, event) => board`, default `reduceBoard`; `state()` returns `boardView(board)`).
