@@ -1,6 +1,6 @@
 // Pure board layer: many sessions + overlays -> the flat state the page renders.
 // No clock, I/O or timers; never throws; returns the SAME reference when nothing changes.
-import { initialState, reduce } from './reducer.js';
+import { initialState, isDriverPrompt, reduce } from './reducer.js';
 
 export const MAX_SESSIONS = 8; // the band hint "+N" has room for one digit
 // Ids of ended sessions are remembered so that a late hook cannot resurrect one. The list is bounded; an id
@@ -195,7 +195,7 @@ function applyToSession(b, live, id, event) {
     open = [...open, toolUseId];
   } else if (POST.has(name) && toolUseId !== null && open.includes(toolUseId)) {
     open = open.filter((x) => x !== toolUseId);
-  } else if (name === 'UserPromptSubmit') {
+  } else if (isDriverPrompt(event)) {
     open = [];
     dropped = false;
   }

@@ -121,6 +121,17 @@ test('RevviewDropped marks the session, UserPromptSubmit resets; without id mark
   assert.equal(reduceBoard(empty, ev('RevviewDropped')), empty);
 });
 
+test('an injected task-notification prompt keeps the open tools and the dropped mark', () => {
+  let b = run([ev('SessionStart', A), ev('UserPromptSubmit', A), ev('PreToolUse', { ...A, ...BASH, tool_use_id: 't1' }),
+    ev('RevviewDropped', A)]);
+  b = reduceBoard(b, ev('UserPromptSubmit', { ...A, prompt: '<task-notification>\n<task-id>x</task-id>' }));
+  assert.deepEqual(b.sessions.A.open, ['t1']);
+  assert.equal(b.sessions.A.dropped, true);
+  b = reduceBoard(b, ev('UserPromptSubmit', { ...A, prompt: 'next' }));
+  assert.deepEqual(b.sessions.A.open, []);
+  assert.equal(b.sessions.A.dropped, false);
+});
+
 test('RevviewContext goes to a live session, else to the board', () => {
   let b = run([ev('SessionStart', A), ev('RevviewContext', { session_id: 'A', cwd: '/w/alpha', branch: 'dev' })]);
   assert.equal(boardView(b).branch, 'dev');

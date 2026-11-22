@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { initialState, reduce, replay, STATES, isState } from '../../src/state/index.js';
+import { initialState, reduce, replay, STATES, isState, isDriverPrompt } from '../../src/state/index.js';
 
 const CWD = '/tmp/revrec/repo';
 const e = (hook_event_name, extra = {}) => ({ hook_event_name, cwd: CWD, ...extra });
@@ -367,4 +367,48 @@ test('a Bash event without a string command keeps the previous command', () => {
     e('PostToolUse', { tool_name: 'Bash', tool_input: {} }),
   ]);
   assert.equal(s.command, 'echo hi');
+});
+
+// QA round 2 issue 06; payloads from fixtures/sessions/compaction.jsonl (recorded, 2.1.330).
+test('SessionStart source compact (auto mid-turn or manual) keeps the activity', () => {
+  const working = run([e('SessionStart', { source: 'startup' }), e('UserPromptSubmit', { prompt: 'p' }),
+    e('PreToolUse', { tool_name: 'Read', tool_input: { file_path: `${CWD}/a.txt` }, tool_use_id: 't1' })]);
+  assert.equal(working.activity, 'working');
+  assert.equal(reduce(working, e('PreCompact', { trigger: 'auto', custom_instructions: null })), working);
+  assert.equal(reduce(working, e('SessionStart', { source: 'compact', model: 'claude-haiku-5-5' })), working);
+  const done = reduce(working, e('Stop', { background_tasks: [] }));
+  assert.equal(reduce(done, e('SessionStart', { source: 'compact' })), done);
+  for (const source of ['startup', 'resume', 'clear', undefined]) {
+    assert.equal(reduce(working, e('SessionStart', { source })).activity, 'waiting', String(source));
+  }
+});
+
+// Async subagents (fixtures/sessions/subagent-permission.jsonl): the main turn stops while they run.
+test('Stop while background subagents run -> working; with none running -> done', () => {
+  const s = run([e('UserPromptSubmit', { prompt: 'p' })]);
+  const running = { id: 'a1', type: 'subagent', status: 'running', description: 'd', agent_type: 'general-purpose' };
+  assert.equal(reduce(s, e('Stop', { background_tasks: [running] })).activity, 'working');
+  assert.equal(reduce(s, e('Stop', { background_tasks: [] })).activity, 'done');
+  assert.equal(reduce(s, e('Stop', { background_tasks: [{ ...running, status: 'completed' }] })).activity, 'done');
+  // a background shell (a dev server) is not Claude working on the turn
+  assert.equal(reduce(s, e('Stop', { background_tasks: [{ ...running, type: 'shell' }] })).activity, 'done');
+  assert.equal(reduce(s, e('Stop', { background_tasks: [null, 'x'] })).activity, 'done');
+});
+
+test('a task-notification prompt (injected when a subagent ends) continues the turn without a reset', () => {
+  const s = run([e('UserPromptSubmit', { prompt: 'p' }),
+    e('PostToolUse', { tool_name: 'Edit', tool_input: EDIT_INPUT, tool_response: EDIT_RESPONSE }), e('Stop')]);
+  assert.equal(isDriverPrompt(e('UserPromptSubmit', { prompt: 'p' })), true);
+  const inj = e('UserPromptSubmit', { prompt: '<task-notification>\n<task-id>a1</task-id>\n</task-notification>' });
+  assert.equal(isDriverPrompt(inj), false);
+  const t = reduce(s, inj);
+  assert.equal(t.activity, 'working');
+  assert.deepEqual(t.diff, { added: 1, removed: 1 });
+  assert.equal(t.tool, 'Edit');
+  // the schema's optional source: only "user" (or none) is the driver
+  assert.equal(isDriverPrompt(e('UserPromptSubmit', { prompt: 'p', source: 'user' })), true);
+  assert.equal(isDriverPrompt(e('UserPromptSubmit', { prompt: 'p', source: 'system' })), false);
+  assert.deepEqual(reduce(s, e('UserPromptSubmit', { prompt: 'p', source: 'loop_wakeup' })).diff, { added: 1, removed: 1 });
+  assert.equal(isDriverPrompt(e('Stop')), false);
+  assert.equal(isDriverPrompt(null), false);
 });

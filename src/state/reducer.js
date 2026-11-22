@@ -53,13 +53,30 @@ function toolPatch(event, activity) {
   return patch;
 }
 
+// True for a UserPromptSubmit the driver typed. Claude Code 2.1.330 also fires UserPromptSubmit for prompts it
+// injects itself: a `<task-notification>` when a background subagent ends (recorded, no `source` field), and
+// the input schema's optional `source` ("user", "sdk", "system", "loop_wakeup", ...; from the binary).
+export function isDriverPrompt(event) {
+  if (!isObj(event) || event.hook_event_name !== 'UserPromptSubmit') return false;
+  if (event.source !== undefined && event.source !== 'user') return false;
+  return !(typeof event.prompt === 'string' && event.prompt.trimStart().startsWith('<task-notification>'));
+}
+
+// A Stop of the main turn while background subagents still run (Claude Code 2.1.330 lists them in
+// `background_tasks`, recorded) does not end the work: their results start a new turn by themselves.
+function subagentsRunning(event) {
+  return Array.isArray(event.background_tasks)
+    && event.background_tasks.some((t) => isObj(t) && t.type === 'subagent' && t.status === 'running');
+}
+
 // Returns a patch (object) to merge into the state, or null to ignore the event.
 function patchFor(event) {
   switch (event.hook_event_name) {
     case 'SessionStart':
-      return { activity: 'waiting' };
+      // source "compact" follows a compaction (auto in the middle of a turn, or /compact): nothing changed
+      return event.source === 'compact' ? null : { activity: 'waiting' };
     case 'UserPromptSubmit':
-      return { activity: 'working', ...TURN_RESET };
+      return isDriverPrompt(event) ? { activity: 'working', ...TURN_RESET } : { activity: 'working' };
     case 'PreToolUse': {
       if (!isStr(event.tool_name)) return null;
       const patch = toolPatch(event, 'working');
@@ -89,7 +106,7 @@ function patchFor(event) {
       }
       return event.notification_type === 'idle_prompt' ? { activity: 'waiting' } : null;
     case 'Stop':
-      return { activity: 'done' };
+      return { activity: subagentsRunning(event) ? 'working' : 'done' };
     case 'StopFailure':
       return { activity: 'waiting' };
     default:
