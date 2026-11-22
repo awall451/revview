@@ -1,0 +1,422 @@
+[
+  {
+    "event": "SessionStart",
+    "state": {
+      "view": "waiting",
+      "activity": "waiting",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": null,
+      "file": null,
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "UserPromptSubmit",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": null,
+      "file": null,
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "PreToolUse Bash",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Bash",
+      "file": null,
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": "touch denied.txt && echo made",
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "PermissionRequest Bash",
+    "state": {
+      "view": "permission",
+      "activity": "permission",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Bash",
+      "file": null,
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": "touch denied.txt && echo made",
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "Notification permission_prompt",
+    "state": {
+      "view": "permission",
+      "activity": "permission",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Bash",
+      "file": null,
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": "touch denied.txt && echo made",
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "UserPromptSubmit",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": null,
+      "file": null,
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "PreToolUse Agent",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Agent",
+      "file": null,
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "SubagentStart",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Agent",
+      "file": null,
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "PostToolUse Agent",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Agent",
+      "file": null,
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "PreToolUse Bash",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Bash",
+      "file": null,
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": "touch denied2.txt && echo made",
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "PermissionRequest Bash",
+    "state": {
+      "view": "permission",
+      "activity": "permission",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Bash",
+      "file": null,
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": "touch denied2.txt && echo made",
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "Stop",
+    "state": {
+      "view": "permission",
+      "activity": "permission",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Bash",
+      "file": null,
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": "touch denied2.txt && echo made",
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "Notification permission_prompt",
+    "state": {
+      "view": "permission",
+      "activity": "permission",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Bash",
+      "file": null,
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": "touch denied2.txt && echo made",
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "PostToolUse Bash",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Bash",
+      "file": null,
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": "touch denied2.txt && echo made",
+      "output": "made",
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "SubagentStop",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Bash",
+      "file": null,
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": "touch denied2.txt && echo made",
+      "output": "made",
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "UserPromptSubmit",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Bash",
+      "file": null,
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": "touch denied2.txt && echo made",
+      "output": "made",
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "Stop",
+    "state": {
+      "view": "done",
+      "activity": "done",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Bash",
+      "file": null,
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": "touch denied2.txt && echo made",
+      "output": "made",
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "UserPromptSubmit",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": null,
+      "file": null,
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "Stop",
+    "state": {
+      "view": "done",
+      "activity": "done",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": null,
+      "file": null,
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "SessionEnd",
+    "state": {
+      "view": "ended",
+      "activity": "ended",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": null,
+      "file": null,
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  }
+]

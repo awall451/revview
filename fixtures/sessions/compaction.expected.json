@@ -1,0 +1,632 @@
+[
+  {
+    "event": "SessionStart",
+    "state": {
+      "view": "waiting",
+      "activity": "waiting",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": null,
+      "file": null,
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "UserPromptSubmit",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": null,
+      "file": null,
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "PreToolUse Read",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Read",
+      "file": "src/f1.txt",
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "PostToolUse Read",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Read",
+      "file": "src/f1.txt",
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "PreCompact",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Read",
+      "file": "src/f1.txt",
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "PreToolUse Read",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Read",
+      "file": "src/f2.txt",
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "PostToolUse Read",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Read",
+      "file": "src/f2.txt",
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "PreCompact",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Read",
+      "file": "src/f2.txt",
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "SubagentStop",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Read",
+      "file": "src/f2.txt",
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "SessionStart",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Read",
+      "file": "src/f2.txt",
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "PostCompact",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Read",
+      "file": "src/f2.txt",
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "PreToolUse Read",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Read",
+      "file": "src/f3.txt",
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "PostToolUse Read",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Read",
+      "file": "src/f3.txt",
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "PreCompact",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Read",
+      "file": "src/f3.txt",
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "SubagentStop",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Read",
+      "file": "src/f3.txt",
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "SessionStart",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Read",
+      "file": "src/f3.txt",
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "PostCompact",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Read",
+      "file": "src/f3.txt",
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "Stop",
+    "state": {
+      "view": "done",
+      "activity": "done",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Read",
+      "file": "src/f3.txt",
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "SubagentStop",
+    "state": {
+      "view": "done",
+      "activity": "done",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Read",
+      "file": "src/f3.txt",
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "PreCompact",
+    "state": {
+      "view": "done",
+      "activity": "done",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Read",
+      "file": "src/f3.txt",
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "SubagentStop",
+    "state": {
+      "view": "done",
+      "activity": "done",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Read",
+      "file": "src/f3.txt",
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "SessionStart",
+    "state": {
+      "view": "done",
+      "activity": "done",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Read",
+      "file": "src/f3.txt",
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "PostCompact",
+    "state": {
+      "view": "done",
+      "activity": "done",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Read",
+      "file": "src/f3.txt",
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "UserPromptSubmit",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": null,
+      "file": null,
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "PreToolUse Read",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Read",
+      "file": "src/f1.txt",
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "PostToolUse Read",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Read",
+      "file": "src/f1.txt",
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "PreCompact",
+    "state": {
+      "view": "working",
+      "activity": "working",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Read",
+      "file": "src/f1.txt",
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "Stop",
+    "state": {
+      "view": "done",
+      "activity": "done",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Read",
+      "file": "src/f1.txt",
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "SubagentStop",
+    "state": {
+      "view": "done",
+      "activity": "done",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": "Read",
+      "file": "src/f1.txt",
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  },
+  {
+    "event": "SessionEnd",
+    "state": {
+      "view": "ended",
+      "activity": "ended",
+      "offline": false,
+      "locked": false,
+      "repo": "repo",
+      "branch": null,
+      "tool": null,
+      "file": null,
+      "diff": {
+        "added": 0,
+        "removed": 0
+      },
+      "command": null,
+      "output": null,
+      "others": 0,
+      "diffIncomplete": false
+    }
+  }
+]
