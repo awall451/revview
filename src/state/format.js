@@ -1,7 +1,7 @@
 // Pure string helpers for display. Every shortener returns a string no longer than `max`
 // (Unicode code points), or null for non-string / empty input.
 // `path` is only a memory/payload guard: the view fits the file name to real pixels (keeping the base name).
-export const LIMITS = Object.freeze({ path: 200, command: 60, output: 80 });
+export const LIMITS = Object.freeze({ path: 200, command: 300, output: 80, outputLines: 3 });
 
 const ELLIPSIS = '…';
 const ESC = '\u001b';
@@ -29,27 +29,35 @@ export function stripAnsi(s) {
     .replace(CONTROL_RE, '');
 }
 
-function lastLine(text) {
-  const lines = text.split('\n');
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const raw = lines[i].replace(/\r+$/, '');
-    const part = raw.slice(raw.lastIndexOf('\r') + 1);
-    const line = stripAnsi(part).trim();
-    if (line !== '') return line;
+// The last n non-empty cleaned lines of text, oldest first. Scans from the end: the work is bounded by the
+// lines it needs, not by the size of the text.
+function lastLines(text, n) {
+  const found = [];
+  let end = text.length;
+  while (end > 0 && found.length < n) {
+    const nl = text.lastIndexOf('\n', end - 1);
+    const raw = text.slice(nl + 1, end).replace(/\r+$/, '');
+    end = nl < 0 ? 0 : nl;
+    const line = stripAnsi(raw.slice(raw.lastIndexOf('\r') + 1)).trim();
+    if (line !== '') found.push(line);
   }
-  return null;
+  return found.reverse();
 }
 
-// text: a string, or a Bash tool_response object {stdout, stderr, ...}.
-export function lastOutputLine(text, max = LIMITS.output) {
-  let line = null;
+// text: a string, or a Bash tool_response object {stdout, stderr, ...} (stderr only when stdout has no line).
+export function lastOutputLines(text, n = LIMITS.outputLines, max = LIMITS.output) {
+  let lines = [];
   if (typeof text === 'string') {
-    line = lastLine(text);
+    lines = lastLines(text, n);
   } else if (text && typeof text === 'object' && !Array.isArray(text)) {
-    if (typeof text.stdout === 'string') line = lastLine(text.stdout);
-    if (line === null && typeof text.stderr === 'string') line = lastLine(text.stderr);
+    if (typeof text.stdout === 'string') lines = lastLines(text.stdout, n);
+    if (lines.length === 0 && typeof text.stderr === 'string') lines = lastLines(text.stderr, n);
   }
-  return line === null ? null : truncate(line, max);
+  return lines.map((l) => truncate(l, max)).filter((l) => l !== null);
+}
+
+export function lastOutputLine(text, max = LIMITS.output) {
+  return lastOutputLines(text, 1, max).at(-1) ?? null;
 }
 
 export function shortenCommand(cmd, max = LIMITS.command) {

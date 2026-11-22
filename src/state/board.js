@@ -311,14 +311,14 @@ function applyToSession(b, live, id, event) {
     const tuid = fits.length === 1 ? fits[0].tuid : null;
     if (tuid !== null && pending.some((p) => p.agent === agent && p.tuid === tuid)) return b;
     const shown = reduce(prev, event);
-    pending = [...pending, { agent, tuid, tool: shown.tool, file: shown.file, command: shown.command, output: shown.output, since: b.tick + 1 }];
+    pending = [...pending, { agent, tuid, tool: shown.tool, file: shown.file, command: shown.command, output: shown.output, outputLines: shown.outputLines, since: b.tick + 1 }];
     // the state stays as it was (only a repo the session still lacks is taken from the event)
     const state = prev.repo === null && shown.repo !== null ? { ...prev, repo: shown.repo } : prev;
     return commit(state, prevOpen, prevDropped);
   }
   if (name === 'Notification' && PERMISSION_TYPES.has(event.notification_type)) {
     if (pending.length > 0 || finished) return b;
-    pending = [{ agent: null, tuid: null, tool: prev.tool, file: prev.file, command: prev.command, output: prev.output, since: b.tick + 1 }];
+    pending = [{ agent: null, tuid: null, tool: prev.tool, file: prev.file, command: prev.command, output: prev.output, outputLines: prev.outputLines, since: b.tick + 1 }];
     return commit(prev, prevOpen, prevDropped);
   }
 
@@ -369,6 +369,7 @@ export function boardView(board) {
       diff: { added: 0, removed: 0 },
       command: null,
       output: null,
+      outputLines: [],
       others: 0,
       diffIncomplete: false,
     };
@@ -391,6 +392,7 @@ export function boardView(board) {
     diff: { added: s.diff.added, removed: s.diff.removed },
     command: ask === null ? s.command : ask.command,
     output: ask === null ? s.output : ask.output,
+    outputLines: ask === null ? s.outputLines : ask.outputLines,
     others: Object.keys(b.sessions).filter((k) => k !== '').length - (shownKey === '' ? 0 : 1),
     diffIncomplete: shown.dropped,
   };

@@ -16,6 +16,7 @@
       },
       "command": null,
       "output": null,
+      "outputLines": [],
       "others": 0,
       "diffIncomplete": false
     }
@@ -37,6 +38,7 @@
       },
       "command": null,
       "output": null,
+      "outputLines": [],
       "others": 0,
       "diffIncomplete": false
     }
@@ -58,6 +60,7 @@
       },
       "command": null,
       "output": null,
+      "outputLines": [],
       "others": 0,
       "diffIncomplete": false
     }
@@ -79,6 +82,7 @@
       },
       "command": null,
       "output": null,
+      "outputLines": [],
       "others": 0,
       "diffIncomplete": false
     }
@@ -100,6 +104,7 @@
       },
       "command": null,
       "output": null,
+      "outputLines": [],
       "others": 0,
       "diffIncomplete": false
     }
@@ -121,6 +126,7 @@
       },
       "command": null,
       "output": null,
+      "outputLines": [],
       "others": 0,
       "diffIncomplete": false
     }
@@ -142,6 +148,7 @@
       },
       "command": null,
       "output": null,
+      "outputLines": [],
       "others": 0,
       "diffIncomplete": false
     }
@@ -163,6 +170,7 @@
       },
       "command": null,
       "output": null,
+      "outputLines": [],
       "others": 0,
       "diffIncomplete": false
     }
@@ -182,8 +190,9 @@
         "added": 4,
         "removed": 1
       },
-      "command": "git -c color.ui=always diff --stat && printf '\\033[32m2 pas…",
+      "command": "git -c color.ui=always diff --stat && printf '\\033[32m2 passed\\033[0m in 0.01s\\n'",
       "output": null,
+      "outputLines": [],
       "others": 0,
       "diffIncomplete": false
     }
@@ -203,8 +212,13 @@
         "added": 4,
         "removed": 1
       },
-      "command": "git -c color.ui=always diff --stat && printf '\\033[32m2 pas…",
+      "command": "git -c color.ui=always diff --stat && printf '\\033[32m2 passed\\033[0m in 0.01s\\n'",
       "output": "2 passed in 0.01s",
+      "outputLines": [
+        "src/app.py | 2 +-",
+        "1 file changed, 1 insertion(+), 1 deletion(-)",
+        "2 passed in 0.01s"
+      ],
       "others": 0,
       "diffIncomplete": false
     }
@@ -224,8 +238,13 @@
         "added": 4,
         "removed": 1
       },
-      "command": "git -c color.ui=always diff --stat && printf '\\033[32m2 pas…",
+      "command": "git -c color.ui=always diff --stat && printf '\\033[32m2 passed\\033[0m in 0.01s\\n'",
       "output": "2 passed in 0.01s",
+      "outputLines": [
+        "src/app.py | 2 +-",
+        "1 file changed, 1 insertion(+), 1 deletion(-)",
+        "2 passed in 0.01s"
+      ],
       "others": 0,
       "diffIncomplete": false
     }
@@ -247,6 +266,7 @@
       },
       "command": null,
       "output": null,
+      "outputLines": [],
       "others": 0,
       "diffIncomplete": false
     }

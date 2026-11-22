@@ -13,6 +13,9 @@
   },
   "command": "rm -f /tmp/revrec/repo/old.log && echo removed",
   "output": "removed",
+  "outputLines": [
+    "removed"
+  ],
   "others": 0,
   "diffIncomplete": false
 }

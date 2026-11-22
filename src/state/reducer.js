@@ -1,6 +1,6 @@
 // Pure reducer: (state, hook event) -> state. No clock, I/O, randomness or timers.
 import { countDiff } from './diff.js';
-import { lastOutputLine, relativeTo, shortenCommand, shortenPath } from './format.js';
+import { lastOutputLines, relativeTo, shortenCommand, shortenPath } from './format.js';
 
 const isObj = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
 const isStr = (x) => typeof x === 'string' && x !== '';
@@ -18,10 +18,11 @@ export function initialState() {
     diff: { added: 0, removed: 0 },
     command: null,
     output: null,
+    outputLines: [],
   };
 }
 
-const TURN_RESET = { tool: null, file: null, command: null, output: null, diff: { added: 0, removed: 0 } };
+const TURN_RESET = { tool: null, file: null, command: null, output: null, outputLines: [], diff: { added: 0, removed: 0 } };
 
 function computeView(s) {
   return s.locked ? 'insert-key' : s.offline ? 'offline' : s.activity;
@@ -44,6 +45,14 @@ function bashCommand(event) {
   if (event.tool_name !== 'Bash' || !isObj(event.tool_input)) return undefined;
   return typeof event.tool_input.command === 'string' ? shortenCommand(event.tool_input.command) : undefined;
 }
+
+// output is always the last of outputLines.
+function setOutput(patch, lines) {
+  patch.outputLines = lines;
+  patch.output = lines.at(-1) ?? null;
+}
+
+const sameLines = (a, b) => Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => x === b[i]);
 
 // Fields common to PreToolUse / PermissionRequest / PostToolUse(Failure).
 function toolPatch(event, activity) {
@@ -80,7 +89,7 @@ function patchFor(event) {
     case 'PreToolUse': {
       if (!isStr(event.tool_name)) return null;
       const patch = toolPatch(event, 'working');
-      if ('command' in patch) patch.output = null;
+      if ('command' in patch) setOutput(patch, []);
       return patch;
     }
     case 'PermissionRequest':
@@ -89,13 +98,13 @@ function patchFor(event) {
       if (!isStr(event.tool_name)) return null;
       const patch = toolPatch(event, 'working');
       patch.addDiff = countDiff(event);
-      if (event.tool_name === 'Bash') patch.output = lastOutputLine(event.tool_response);
+      if (event.tool_name === 'Bash') setOutput(patch, lastOutputLines(event.tool_response));
       return patch;
     }
     case 'PostToolUseFailure': {
       if (!isStr(event.tool_name)) return null;
       const patch = toolPatch(event, 'working');
-      if (event.tool_name === 'Bash') patch.output = lastOutputLine(event.error);
+      if (event.tool_name === 'Bash') setOutput(patch, lastOutputLines(event.error));
       return patch;
     }
     case 'PermissionDenied':
@@ -157,6 +166,7 @@ export function reduce(state, event) {
   if (addDiff && (addDiff.added !== 0 || addDiff.removed !== 0)) {
     next.diff = { added: base.diff.added + addDiff.added, removed: base.diff.removed + addDiff.removed };
   }
+  if (sameLines(next.outputLines, base.outputLines)) next.outputLines = base.outputLines;
   next.view = computeView(next);
 
   const changed = Object.keys(next).some((k) => (k === 'diff'

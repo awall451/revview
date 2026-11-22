@@ -32,18 +32,18 @@ Pure logic that turns Claude Code hook events into the view state (no DOM, no I/
 | `branch` | only from `RevviewContext` |
 | `tool`, `file` | current tool name and its target file (relative to cwd, shortened) |
 | `diff` | `{added, removed}` running total for the current turn |
-| `command`, `output` | last Bash command (shortened) and last non-empty output line (ANSI-stripped, shortened) |
+| `command`, `output`, `outputLines` | last Bash command (whitespace collapsed, at most 300 code points), last non-empty output line (ANSI-stripped, at most 80), and `outputLines`: the last 3 non-empty output lines, oldest first, cleaned like `output`, each at most 80; `[]` when none. `output` is kept as the last line for compatibility: `outputLines.at(-1) ?? null === output` always |
 
 ## Events
 
 | event | effect |
 | --- | --- |
 | `SessionStart` | activity `waiting`; `source: "compact"` (after an auto compaction mid-turn or `/compact`, recorded) is ignored |
-| `UserPromptSubmit` | `working`; a driver prompt (`isDriverPrompt`) starts a new turn: diff 0/0, tool/file/command/output null. A prompt Claude Code injects itself (`<task-notification>` when a background subagent ends, recorded; or a `source` other than `user`) only sets `working` |
-| `PreToolUse` (needs `tool_name`) | `working`; tool, file (`file_path`/`notebook_path`); Bash: command, output null |
+| `UserPromptSubmit` | `working`; a driver prompt (`isDriverPrompt`) starts a new turn: diff 0/0, tool/file/command/output null, outputLines []. A prompt Claude Code injects itself (`<task-notification>` when a background subagent ends, recorded; or a `source` other than `user`) only sets `working` |
+| `PreToolUse` (needs `tool_name`) | `working`; tool, file (`file_path`/`notebook_path`); Bash: command, output null, outputLines [] |
 | `PermissionRequest` | `permission`; tool/file/command as PreToolUse |
-| `PostToolUse` (needs `tool_name`) | `working`; tool, file; diff += `countDiff` (the only place diff is counted); Bash: command and output |
-| `PostToolUseFailure` | `working`; Bash: output from `error`; no diff |
+| `PostToolUse` (needs `tool_name`) | `working`; tool, file; diff += `countDiff` (the only place diff is counted); Bash: command, output and outputLines |
+| `PostToolUseFailure` | `working`; Bash: output and outputLines from `error`; no diff |
 | `PermissionDenied` | `working` |
 | `Notification` | `notification_type` `permission_prompt` / `worker_permission_prompt` -> `permission`; `idle_prompt` -> `waiting`; anything else ignored (message text is never used) |
 | `Stop` | `done`; `working` while `background_tasks` lists a `subagent` with status `running` (async subagents, recorded) |
@@ -55,7 +55,7 @@ Pure logic that turns Claude Code hook events into the view state (no DOM, no I/
 | `RevviewDataLock` `{locked: boolean}` (synthetic) | `locked` |
 
 `repo` is never renamed by other events, so a hook fired from a subdirectory keeps the repo name. On `Stop`
-(and `StopFailure`/idle) tool, file, command and output are kept on purpose: at `done` the driver can still
+(and `StopFailure`/idle) tool, file, command, output and outputLines are kept on purpose: at `done` the driver can still
 see the last command and its result (e.g. "2 passed"). Fields persist through `done`/`waiting` until the next
 `UserPromptSubmit` resets them; the renderer decides what to show per state. Activity keeps updating under the
 offline/locked overlays and shows again when they clear.
@@ -69,14 +69,14 @@ when nothing changes. Board: `{phase, offline, locked, context: {repo, branch}, 
 with a PreToolUse and no Post yet, `touched` = board tick of the last applied event, `pending` = unanswered
 permission prompts, `pre` = the open PreToolUse calls per agent (at most 32); `focus` = id of the session the bar shows, or null; `spokenTo` = id of the session the driver last spoke to (a real driver prompt only), or null).
 
-- Pending prompts: `pending = [{agent, tuid, tool, file, command, output, since}]`, `pre = [{agent, tuid,
+- Pending prompts: `pending = [{agent, tuid, tool, file, command, output, outputLines, since}]`, `pre = [{agent, tuid,
   tool, input}]`; the agent key is `agent_id` if it is a non-empty string, else `''` (main thread). A
   `PermissionRequest` (no `tool_use_id` in Claude Code 2.1.330) is tied to a `tuid` only when exactly one open
   PreToolUse of that agent has the same tool (and the same input, if the request carries one), else the `tuid` stays empty; it is appended unless the same agent+tuid is already pending. Only the main
   thread's request is "late" after Stop; a subagent's never is. A `permission_prompt` Notification adds a
   generic entry (`agent: null`) only when nothing is pending and the turn is not finished. The session's
   `state.activity` is NOT changed by them: the effective activity is `permission` while `pending` is not empty
-  (and tool/file/command/output come from `pending[0]`). Answered (entry removed) by `PostToolUse`,
+  (and tool/file/command/output/outputLines come from `pending[0]`). Answered (entry removed) by `PostToolUse`,
   `PostToolUseFailure`, `PermissionDenied` with the same `tool_use_id` (or, without a tuid, the same agent and
   tool; a main-thread Post also clears generic entries); `SubagentStop` clears that agent (and its `pre`);
   `Stop` clears the main-thread and generic entries, and a subagent's unless `background_tasks` lists it as running (a missing list means none runs, as in the reducer); an `idle_prompt` Notification clears main-thread and generic entries (Claude Code sends it only when no dialog is open: an Esc'd prompt); a driver prompt clears main-thread and generic entries (an Esc'd prompt
@@ -114,7 +114,7 @@ permission prompts, `pre` = the open PreToolUse calls per agent (at most 32); `f
 - `boardView` branch: `s.branch`, else `board.context.branch` only when `board.context.repo` is the repo shown.
 
 `boardView(board)` is the flat state the page renders, always with exactly these keys: `view, activity,
-offline, locked, repo, branch, tool, file, diff {added, removed}, command, output, others, diffIncomplete`.
+offline, locked, repo, branch, tool, file, diff {added, removed}, command, output, outputLines, others, diffIncomplete`.
 With a shown session these are its fields (`others` = other live sessions, `diffIncomplete` = its `dropped`,
 repo/branch fall back to `board.context`). With no live session `activity` is the board phase
 (`unknown`, `starting`, `ended`), repo/branch come from `board.context`, the rest is null/0/false.
@@ -129,7 +129,7 @@ with `type: 'create'` counts the lines of its content; otherwise falls back to `
 
 ## Limits
 
-`LIMITS = {path: 200, command: 60, output: 80}`; longer text is cut with a trailing `…` (the path limit is only a
+`LIMITS = {path: 200, command: 300, output: 80, outputLines: 3}` (`outputLines` is a count, the others are code points; `lastOutputLines(text, n, max)` scans from the end, so its work does not grow with the size of the output); longer text is cut with a trailing `…` (the path limit is only a
 payload guard, the view fits the file to pixels; paths keep the file
 name and the trailing directories after `…/`).
 

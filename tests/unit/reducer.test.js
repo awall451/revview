@@ -23,7 +23,7 @@ function deepFreeze(o) {
 test('initialState', () => {
   assert.deepEqual(initialState(), {
     view: 'unknown', activity: 'unknown', offline: false, locked: false, repo: null, branch: null,
-    tool: null, file: null, diff: { added: 0, removed: 0 }, command: null, output: null,
+    tool: null, file: null, diff: { added: 0, removed: 0 }, command: null, output: null, outputLines: [],
   });
   assert.notEqual(initialState(), initialState());
   assert.ok(isState(initialState().view));
@@ -411,4 +411,30 @@ test('a task-notification prompt (injected when a subagent ends) continues the t
   assert.deepEqual(reduce(s, e('UserPromptSubmit', { prompt: 'p', source: 'loop_wakeup' })).diff, { added: 1, removed: 1 });
   assert.equal(isDriverPrompt(e('Stop')), false);
   assert.equal(isDriverPrompt(null), false);
+});
+
+test('outputLines: last 3 lines of a Bash result, output is the last one, cleared by PreToolUse and new turn', () => {
+  const r = { stdout: 'a\nb\n\u001b[32mc\u001b[0m\nd\n' };
+  const s = reduce(initialState(), e('PostToolUse', { tool_name: 'Bash', tool_input: { command: 'x' }, tool_response: r }));
+  assert.deepEqual(s.outputLines, ['b', 'c', 'd']);
+  assert.equal(s.output, 'd');
+  const same = reduce(s, e('PostToolUse', { tool_name: 'Bash', tool_input: { command: 'x' }, tool_response: r }));
+  assert.equal(same, s, 'equal outputLines keep the identity');
+  const pre = reduce(s, e('PreToolUse', { tool_name: 'Bash', tool_input: { command: 'y' } }));
+  assert.deepEqual(pre.outputLines, []);
+  assert.equal(pre.output, null);
+  const f = reduce(pre, e('PostToolUseFailure', { tool_name: 'Bash', error: 'l1\nl2' }));
+  assert.deepEqual(f.outputLines, ['l1', 'l2']);
+  assert.equal(f.output, 'l2');
+  const nb = reduce(s, e('PostToolUse', { tool_name: 'Read', tool_input: { file_path: '/a' } }));
+  assert.deepEqual(nb.outputLines, ['b', 'c', 'd']);
+  const t = reduce(s, e('UserPromptSubmit', { prompt: 'go' }));
+  assert.deepEqual(t.outputLines, []);
+  assert.equal(t.output, null);
+  assert.equal(reduce(t, e('Notification', { notification_type: 'other' })), t);
+});
+
+test('a command up to 300 code points is kept', () => {
+  const cmd = 'echo ' + 'a'.repeat(295);
+  assert.equal(reduce(initialState(), e('PreToolUse', { tool_name: 'Bash', tool_input: { command: cmd } })).command, cmd);
 });

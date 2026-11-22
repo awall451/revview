@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { LIMITS, stripAnsi, lastOutputLine, shortenCommand, shortenPath } from '../../src/state/format.js';
+import { LIMITS, stripAnsi, lastOutputLine, lastOutputLines, shortenCommand, shortenPath } from '../../src/state/format.js';
 
 const REAL_STDOUT =
   ' src/app.py | 2 \u001b[32m+\u001b[m\u001b[31m-\u001b[m\n 1 file changed, 1 insertion(+), 1 deletion(-)\n\u001b[32m2 passed\u001b[0m in 0.01s';
 
 test('LIMITS are frozen and have the agreed values', () => {
-  assert.deepEqual({ ...LIMITS }, { path: 200, command: 60, output: 80 });
+  assert.deepEqual({ ...LIMITS }, { path: 200, command: 300, output: 80, outputLines: 3 });
   assert.ok(Object.isFrozen(LIMITS));
 });
 
@@ -62,7 +62,7 @@ test('shortenCommand collapses whitespace including newlines', () => {
 });
 
 test('shortenCommand truncates with an ellipsis', () => {
-  const out = shortenCommand('echo ' + 'a'.repeat(100));
+  const out = shortenCommand('echo ' + 'a'.repeat(400));
   assert.equal(out.length, LIMITS.command);
   assert.ok(out.endsWith('…'));
   assert.equal(shortenCommand('abcdef', 4), 'abc…');
@@ -121,4 +121,50 @@ test('truncation never splits a surrogate pair', () => {
     assert.ok(!lone.test(cmd), `cmd max ${max}`);
   }
   assert.ok(!lone.test(lastOutputLine('😀'.repeat(100), 11)));
+});
+
+const AWKWARD = [
+  '', '\n', 'a', 'a\nb\nc\nd\ne', 'a\r\nb\r\nc\r\nd\r\n', 'x\n\n\n  \n\t\n',
+  'progress 10%\rprogress 50%\rprogress 100%\ndone\n', 'a\rb\n', 'a\r\r\nb',
+  '\u001b[32mgreen\u001b[0m\n\u001b]0;title\u0007after\n', '\u001b]8;;http://x\u001b\\link\n',
+  'ctl\u0001\u0002\n\u0000\n', 'a\tb\n\tc\t\n', 'é😀'.repeat(60) + '\nshort',
+  { stdout: 'o1\no2', stderr: 'e' }, { stdout: '\n \n', stderr: 'e1\ne2\ne3\ne4' }, { stdout: '', stderr: 'only err' },
+  { stdout: 5, stderr: 'e' }, { stderr: 'e' }, {}, null, undefined, 5, true, [], ['a', 'b'], { stdout: [] },
+  'a\n'.repeat(1000), 'z'.repeat(10000),
+];
+
+test('lastOutputLines: last 3 non-empty lines, oldest first, cleaned like lastOutputLine', () => {
+  assert.deepEqual(lastOutputLines('a\n\nb\r\nc\n  \nd\n'), ['b', 'c', 'd']);
+  assert.deepEqual(lastOutputLines('a\nb'), ['a', 'b']);
+  assert.deepEqual(lastOutputLines('p 1\rp 2\n\u001b[32m2 passed\u001b[0m\n', 2), ['p 2', '2 passed']);
+  assert.deepEqual(lastOutputLines({ stdout: ' \n', stderr: 'e1\ne2' }), ['e1', 'e2']);
+  assert.deepEqual(lastOutputLines({ stdout: 'o', stderr: 'e1' }), ['o']);
+  assert.deepEqual(lastOutputLines('a'.repeat(100) + '\nb', 3, 5), ['aaaa…', 'b']);
+  assert.deepEqual(lastOutputLines(null), []);
+  assert.deepEqual(lastOutputLines(['a']), []);
+  assert.deepEqual(lastOutputLines(''), []);
+});
+
+test('lastOutputLines last element equals lastOutputLine for awkward inputs', () => {
+  for (const x of AWKWARD) {
+    for (const max of [80, 5, 1]) {
+      const lines = lastOutputLines(x, 3, max);
+      assert.ok(lines.length <= 3);
+      assert.equal(lines.at(-1) ?? null, lastOutputLine(x, max), JSON.stringify(x)?.slice(0, 60));
+      for (const l of lines) assert.ok(Array.from(l).length <= max && l !== '');
+    }
+  }
+});
+
+test('lastOutputLines is bounded on multi-MB input', () => {
+  const many = 'short line\n'.repeat(500000);
+  const t0 = Date.now();
+  assert.deepEqual(lastOutputLines(many), ['short line', 'short line', 'short line']);
+  assert.ok(Date.now() - t0 < 500);
+  const big = 'x'.repeat(5 * 1024 * 1024);
+  const out = lastOutputLines(big);
+  assert.equal(out.length, 1);
+  assert.equal(Array.from(out[0]).length, LIMITS.output);
+  assert.equal(lastOutputLine(big), out[0]);
+  assert.deepEqual(lastOutputLines('a\nb\n' + big + '\n'), ['a', 'b', out[0]].slice(-3));
 });
