@@ -645,10 +645,12 @@ Recordings: `fixtures/buttons/README.md`, section WB3. Bench S1-S6.
   the press. An Esc or Ctrl+C typed by anyone else still leaves WORKING (no hook fires).
 - **Allow / deny by a waiting PermissionRequest hook** (`hooks/permission-request.mjs`). The hook POSTs its stdin
   to `POST /permission` and waits. Only on a 200 with exactly `{"behavior":"allow"}` or `{"behavior":"deny",
-  "message": "Denied with the wheel button."}` does it print a decision; anything else (204, timeout, server down,
+  "message": <1 to 200 characters>}` does it print a decision (the server always sends the one sentence
+  "Denied with the wheel button."; the hook accepts any message of that length, it is the server's job to choose);
+  anything else (204, timeout, server down,
   error, extra keys) prints nothing and exits 0, so the normal terminal dialog stays. Never allow or deny by
   default, no `updatedPermissions` ("always allow" is impossible). Timeouts: the server ends its wait at **540 s**
-  (204), the hook gives up at **570 s**, Claude Code's `timeout` is **600 s** in `hooks/settings-snippet.json`.
+  (204), the hook gives up at **570 s** (`REVVIEW_HOOK_WAIT_MS` is clamped to at most 590 s, `hooks/wait.mjs`), Claude Code's `timeout` is **600 s** in `hooks/settings-snippet.json`.
 - **The press answers only the prompt shown on the bar.** The server feeds the request's own event to the board
   and binds the request to the pending entry THAT event created (identity: session, agent, the board tick
   `since`; plus its shown tool, file and command). If the event created no entry (a duplicate, a request for a
@@ -673,6 +675,8 @@ Residual risks (honest):
   fill the 16 request slots (same); post a fake `/permission` request and receive the driver's allow for it if the
   driver presses while the fake is shown (the answer goes to the faker, not to Claude Code). It cannot make a press
   answer a real request whose own tool, file and command were not on the bar for 1.5 s in the chosen session.
+- The repo, branch and diff shown next to the prompt come from session state, which a hostile `POST /event` can
+  change while the prompt is shown. The request's own tool, file and command cannot be changed that way.
 - What the bar shows is the shortened command (`shortenCommand`); two commands that differ only beyond the shown
   part look the same to the driver. The request is still bound to its own entry, so a different hidden command
   can only be allowed if Claude itself asked for it.

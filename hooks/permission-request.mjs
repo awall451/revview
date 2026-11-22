@@ -3,10 +3,11 @@
 // wheel buttons answered this prompt. Any other outcome prints nothing and exits 0,
 // so the normal terminal dialog stays. Never allows or denies by default.
 import http from 'node:http';
+import { resolveWaitMs } from './wait.mjs';
 
 const MAX_STDIN = 1024 * 1024;
 const port = Number(process.env.REVVIEW_PORT) || 8138;
-const waitMs = Number(process.env.REVVIEW_HOOK_WAIT_MS) || 570000;
+const waitMs = resolveWaitMs(process.env.REVVIEW_HOOK_WAIT_MS);
 
 const bail = (why) => {
   if (why) process.stderr.write(`revview hook: ${why}\n`);

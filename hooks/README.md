@@ -20,7 +20,7 @@ anyway and stays. The hook never allows or denies by default, and an allow never
 | Where | Value | Why |
 | --- | --- | --- |
 | server wait per request | 540 s | ends first, answers the hook with no decision |
-| hook wait (`REVVIEW_HOOK_WAIT_MS`) | 570 s | backstop if the server hangs |
+| hook wait (`REVVIEW_HOOK_WAIT_MS`) | 570 s (clamped to at most 590 s) | backstop if the server hangs |
 | settings `timeout` | 600 s | Claude Code kills the hook last |
 
 ## Do not also post PermissionRequest to /event

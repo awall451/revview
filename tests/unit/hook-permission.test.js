@@ -132,3 +132,17 @@ test('stdin over 1 MiB prints nothing', async () => {
   assert.equal(r.out, '');
   assert.equal(s.seen.length, 0);
 });
+
+test('hook wait: default 570 s, clamped below the 600 s settings timeout', async () => {
+  const { resolveWaitMs, DEFAULT_WAIT_MS, MAX_WAIT_MS } = await import('../../hooks/wait.mjs');
+  assert.equal(DEFAULT_WAIT_MS, 570000);
+  assert.equal(resolveWaitMs(undefined), 570000);
+  assert.equal(resolveWaitMs(''), 570000);
+  assert.equal(resolveWaitMs('abc'), 570000);
+  assert.equal(resolveWaitMs('0'), 570000);
+  assert.equal(resolveWaitMs('-5'), 570000);
+  assert.equal(resolveWaitMs('2000'), 2000);
+  assert.equal(resolveWaitMs('600000'), MAX_WAIT_MS);
+  assert.equal(resolveWaitMs('99999999'), MAX_WAIT_MS);
+  assert.ok(MAX_WAIT_MS < 600000);
+});
