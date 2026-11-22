@@ -93,3 +93,17 @@ Done here: a second reviewer (default model, fresh context, 10 minutes) on the m
 Not proven: unchanged from cycle 9 (nothing on hardware, no successful EVIOCGRAB seen, constructed traces); the helper's exit after its parent dies stays bench W5.
 
 Process notes: an owner one-shot can arrive for work a normal cycle has just finished; check gate/main and the ready branches before dispatching. A leftover clean worktree `/tmp/rv-wb2` (detached, commit in main) was removed.
+
+## 2026-11-22: one-shot cycle (wheel buttons 3: sessions and actions)
+
+Owner message 20261122T061803Z-o-0ba39d (backlog f07db5, owner issue 20261122T061752Z-i-845780). One topic, `wb3-sessions`, merged first try as c609518 (666 tests, was 563). `tools/check` untouched.
+
+Dispatched: area-lead-core (Opus, five Sonnet builders, a Haiku scout, about 27 minutes) built the session runner, the actions, the permission registry, the hook and the internal interrupt event, with real-tmux tests (stand-in claude) and real Claude Code 2.1.330 recordings (about 12 haiku turns). Reviewer (Opus, fresh context, 20 minutes): changes needed. Blocking: tmux expands formats in `-c` and `-n`, so a directory named `#(cmd)` ran a shell command when a session was started in it. Six smaller findings (hook wait not pinned, tests that hang instead of failing, NEEDS PERMISSION staying after an allow, a residual risk missing in DECISIONS, a doc mismatch, an internal path in a fixture). A second area-lead-core run (Sonnet, 5 minutes) fixed all seven; the lead read the diff of the risky files (runner, actions, board, server) before submitting.
+
+Deviation from the item text, on purpose: the item says "hub pattern (`claude --bg`, `claude agents --json`) with the chosen session attached"; the design note the owner approved afterwards (BUTTONS.md section 3) chose plain `claude` in a private tmux server because `attach` adds a client layer. Built as in BUTTONS.md; said so in the reply. Hold-mode push-to-talk is not built (the detector emits no raw key-down/up; bench S2); the reply says so.
+
+Facts worth remembering: the uuid given with `--session-id` is the `session_id` in hook events; a subagent permission prompt shows no terminal dialog while the hook waits; a Claude config that defaults to auto mode shows no dialog at all (recordings set `defaultMode: "default"`); allow pressed at once does nothing by design (1500 ms rule).
+
+Not proven: voice in tmux, anything on the Pi (bench S1-S6 untested); the 540 s no-answer case for a subagent prompt.
+
+Process notes: again the independent reviewer found what the builders did not (shell injection through tmux formats): keep it for WB4's selection path. Agents cannot remove their own worktree (sandbox): the lead removes it from the main checkout after checking it is clean. Do not run `pgrep -af claude` in the lead's shell: it prints the whole cycle prompt. The publish refusal (secret-scan false positive in commit 0e34fc3) is noted in STATE.md follow-up (g), not handled here.
