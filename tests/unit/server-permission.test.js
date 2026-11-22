@@ -30,8 +30,11 @@ async function setup(t, { sessions = true, ...opts } = {}) {
   const perm = (e) => {
     const ac = new AbortController();
     aborts.push(ac);
-    return { p: fetch(`${s.url}/permission`, { method: 'POST', body: JSON.stringify(e), signal: ac.signal })
-      .then(async (r) => ({ status: r.status, body: await r.text() }), () => null), abort: () => ac.abort() };
+    // bounded: a request that never ends resolves to status 'NO RESPONSE' after 3 s, so a regression fails an assertion
+    const answered = fetch(`${s.url}/permission`, { method: 'POST', body: JSON.stringify(e), signal: ac.signal })
+      .then(async (r) => ({ status: r.status, body: await r.text() }), () => null);
+    const giveUp = new Promise((res) => setTimeout(() => res({ status: 'NO RESPONSE', body: '' }), 3000).unref());
+    return { p: Promise.race([answered, giveUp]), abort: () => ac.abort() };
   };
   const state = async () => (await (await fetch(`${s.url}/state`)).json());
   const press = async (code) => {
@@ -238,4 +241,17 @@ test('close() answers waiting requests 204', async (t) => {
   const r = await realPrompt(c);
   await c.s.close();
   assert.equal((await r.p)?.status ?? 204, 204);
+});
+
+test('a request that adds no prompt to the bar is not bound to an older prompt of the same session (since binding)', async (t) => {
+  const c = await setup(t);
+  const real = await realPrompt(c);
+  // same call, other command: the board keeps the first entry; a twin bound to it would make a press ambiguous
+  const twin = c.perm({ ...C2[3], tool_input: { command: 'rm -rf /' } });
+  for (let i = 0; i < 100 && c.s.permissionsWaiting() < 2; i++) await sleep(10);
+  assert.equal(c.s.permissionsWaiting(), 2);
+  c.ctx.now = 1500;
+  await c.press('F21');
+  assert.deepEqual(await real.p, { status: 200, body: '{"behavior":"allow"}' });
+  assert.equal(await pending(twin.p), 'pending');
 });
