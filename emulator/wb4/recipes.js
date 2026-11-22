@@ -51,6 +51,7 @@ function answered(id, decision, ...after) {
 const owned = (...ids) => ({ hook_event_name: 'RevviewOwned', ids });
 const select = (id) => ({ hook_event_name: 'RevviewSelect', session_id: id });
 const nav = (...buttons) => buttons.map((button) => ({ hook_event_name: 'RevviewNav', button, gesture: 'tap' }));
+const note = (text) => ({ hook_event_name: 'RevviewNote', note: text });
 const projects = (paths) => ({ hook_event_name: 'RevviewProjects', paths });
 
 const three = [...session('s1', 'waiting', 'revview'), ...session('s2', 'working', 'billing-api'), ...session('s3', 'done', 'docs-site')];
@@ -111,6 +112,15 @@ export const RECIPES = Object.freeze({
   'denied-done': [...answered('s1', 'deny', { hook_event_name: 'Stop' }), owned('s1'), select('s1')],
   // revview allowed the prompt; the command is running
   allowed: [...answered('s1', 'allow'), owned('s1'), select('s1')],
+  // an owned session after a restart: no event yet, selected, UNKNOWN with its note
+  quiet: [{ hook_event_name: 'RevviewInput', present: true }, { ...owned('0b6f6f0e-5a3c-4c1d-9a55-2f0d1c7a9e01', '0b6f6f0e-5a3c-4c1d-9a55-2f0d1c7a9e02'), names: ['revview', 'billing-api'] },
+    select('0b6f6f0e-5a3c-4c1d-9a55-2f0d1c7a9e01'), projects(PROJECTS)],
+  // a refused New session: the fixed note on a normal view
+  'note-start-failed': [...three, owned('s1', 's2', 's3'), select('s2'), note('New session not started: project folder missing')],
+  // the list: s2 is not a revview session, its row has the crossed mic
+  'list-not-owned': [...three, owned('s1', 's3'), select('s1'), ...nav('press', 'down')],
+  // no network while the shown session is the target: the band mic is crossed too
+  'offline-mic': [...session('s1', 'working', 'revview'), owned('s1'), select('s1'), { hook_event_name: 'RevviewNetwork', online: false }],
   'worst-band': worst('working'),
   'worst-band-permission': worst('permission'),
 });

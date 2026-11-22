@@ -635,7 +635,7 @@ function navView(b) {
   } else if (kind === 'settings') {
     const found = b.buttons === null ? 'not known' : b.buttons ? 'found' : 'not found';
     rows = [
-      'Voice: tap mode, set in Claude Code',
+      'Voice: needs tap mode (/voice tap in Claude Code)',
       `Wheel buttons: ${found}`,
       `Sessions: ${order.length} on the bar, ${b.owned?.length ?? 0} started by revview`,
       `Projects: ${b.projects.length} in the config file`,

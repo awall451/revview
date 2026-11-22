@@ -292,7 +292,7 @@ test('nav rows content', () => {
   assert.deepEqual(boardView({ ...b, nav: { kind: 'projects', row: 5 } }).nav, { kind: 'projects', row: 0, rows: [{ label: '/p/x' }] });
   assert.deepEqual(boardView({ ...initialBoard(), nav: { kind: 'new', row: 3 } }).nav, { kind: 'new', row: 0, rows: [] });
   assert.deepEqual(boardView({ ...b, nav: { kind: 'settings', row: 0 } }).nav.rows.map((r) => r.label), [
-    'Voice: tap mode, set in Claude Code', 'Wheel buttons: not known', 'Sessions: 3 on the bar, 1 started by revview', 'Projects: 1 in the config file',
+    'Voice: needs tap mode (/voice tap in Claude Code)', 'Wheel buttons: not known', 'Sessions: 3 on the bar, 1 started by revview', 'Projects: 1 in the config file',
   ]);
   assert.equal(boardView({ ...b, buttons: true, nav: { kind: 'settings', row: 0 } }).nav.rows[1].label, 'Wheel buttons: found');
   assert.equal(boardView({ ...b, buttons: false, nav: { kind: 'settings', row: 0 } }).nav.rows[1].label, 'Wheel buttons: not found');

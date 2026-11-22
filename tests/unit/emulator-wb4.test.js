@@ -6,7 +6,7 @@ import { WB4_IDS, RECIPES, wb4State } from '../../emulator/wb4/recipes.js';
 // each recipe really produces the fields its look is meant to show.
 
 test('every look has a recipe and a state, and the state carries the new keys', () => {
-  assert.equal(WB4_IDS.length, 15);
+  assert.equal(WB4_IDS.length, 19);
   for (const id of WB4_IDS) {
     const s = wb4State(id);
     for (const k of ['voice', 'position', 'elsewhere', 'nav']) assert.ok(k in s, `${id} has ${k}`);
@@ -85,4 +85,17 @@ test('denied-done and allowed: the answer is in the view, the command is the one
   assert.equal(a.view, 'working');
   assert.equal(a.answered, 'allow');
   assert.equal(a.command, d.command);
+});
+
+test('quiet, start-failed note, list-not-owned, offline-mic', () => {
+  const q = wb4State('quiet');
+  assert.equal(q.view, 'unknown');
+  assert.equal(q.voice, 'here');
+  assert.equal(q.note, 'No events from this session yet');
+  assert.equal(wb4State('note-start-failed').note, 'New session not started: project folder missing');
+  assert.deepEqual(wb4State('list-not-owned').nav.rows.map((r) => r.voice), [true, false, true]);
+  const o = wb4State('offline-mic');
+  assert.equal(o.view, 'offline');
+  assert.equal(o.voice, 'here');
+  assert.equal(o.offline, true);
 });

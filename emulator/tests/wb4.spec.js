@@ -28,7 +28,7 @@ const rect = (page, sel) => page.locator(sel).evaluate((e) => {
 
 const NOTE = {
   none: 'Push-to-talk goes nowhere: no session chosen',
-  'not-owned': 'Push-to-talk goes nowhere: not a revview session',
+  'not-owned': 'Buttons do nothing here: not a revview session',
   'no-session': 'Push-to-talk does nothing: no revview session',
 };
 
@@ -122,6 +122,40 @@ test('notes views: the voice note replaces note2', async ({ openView, page }, te
   await expect(page.locator('#note2')).toHaveText('No network: voice input will not work');
   await expect(page.locator('#voice-note')).toHaveText(NOTE['no-session']);
   await common(page, 'offline-voice', testInfo);
+});
+
+test('quiet: owned session after a restart, UNKNOWN with its note', async ({ openView, page }, testInfo) => {
+  await openView(wb4State('quiet'));
+  await expect(page.locator('#state-word')).toHaveText('UNKNOWN');
+  await expect(page.locator('#note2')).toHaveText('No events from this session yet');
+  await expect(page.locator('#voice-mark')).toHaveAttribute('data-mark', 'mic');
+  await common(page, 'quiet', testInfo);
+  await shot(page, 'wb4-quiet');
+});
+
+test('note-start-failed: the refused start note on a normal view', async ({ openView, page }, testInfo) => {
+  await openView(wb4State('note-start-failed'));
+  await expect(page.locator('#voice-note')).toHaveText('New session not started: project folder missing');
+  await common(page, 'note-start-failed', testInfo);
+  await shot(page, 'wb4-note-start-failed');
+});
+
+test('offline-mic: no network crosses the band mic and says why', async ({ openView, page }, testInfo) => {
+  await openView(wb4State('offline-mic'));
+  await expect(page.locator('#voice-mark')).toHaveAttribute('data-mark', 'mic-off');
+  await expect(page.locator('#voice')).toHaveAttribute('data-full', 'No network: push-to-talk will not work');
+  await openView({ ...wb4State('mic-position'), buttons: 'missing' });
+  await expect(page.locator('#voice-mark')).toHaveAttribute('data-mark', 'mic-off');
+  await expect(page.locator('#voice')).toHaveAttribute('data-full', 'No wheel buttons found');
+  await openView(wb4State('offline-mic'));
+  await common(page, 'offline-mic', testInfo);
+  await shot(page, 'wb4-offline-mic');
+});
+
+test('starting shows one note row only', async ({ openView, page }) => {
+  await openView({ ...loadFixture('starting'), voice: 'none', position: null });
+  await expect(page.locator('#note1')).toHaveText('Not ready for voice yet');
+  await expect(page.locator('#note2')).toHaveText('');
 });
 
 // ---- band: a prompt in another session ----
@@ -237,6 +271,16 @@ test('list: band as on the home view, inverted row 2 with a bar, chips, words an
   await openView(state);
   await common(page, 'list', testInfo);
   await shot(page, 'wb4-list');
+});
+
+test('list-not-owned: the not-owned row has the crossed mic, the target the plain one', async ({ openView, page }, testInfo) => {
+  await openView(wb4State('list-not-owned'));
+  await expect(page.locator('#nav .row-mic')).toHaveCount(2);
+  await expect(page.locator('#nav .row').nth(0).locator('.row-mic')).toHaveAttribute('data-mark', 'mic');
+  await expect(page.locator('#nav .row').nth(1).locator('.row-mic')).toHaveAttribute('data-mark', 'mic-off');
+  await expect(page.locator('#nav .row').nth(2).locator('.row-mic')).toHaveCount(0);
+  await common(page, 'list-not-owned', testInfo);
+  await shot(page, 'wb4-list-not-owned');
 });
 
 test('list-long: 8 sessions, 6 rows, long labels cut in the middle, scroll marks', async ({ openView, page }, testInfo) => {

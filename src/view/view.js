@@ -68,7 +68,7 @@ const svg = (inner, cls) => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden
 // Push-to-talk is not going to the shown session: the note for the bottom row (or in place of note2).
 const VOICE_NOTES = {
   none: 'Push-to-talk goes nowhere: no session chosen',
-  'not-owned': 'Push-to-talk goes nowhere: not a revview session',
+  'not-owned': 'Buttons do nothing here: not a revview session',
   'no-session': 'Push-to-talk does nothing: no revview session',
 };
 const MIC_STATES = { here: 1, none: 1, 'not-owned': 1, 'no-session': 1 };
@@ -180,7 +180,10 @@ export function render(input) {
   const voice = Object.hasOwn(MIC_STATES, s.voice) ? s.voice : null;
   // a board note (a short message from revview itself) takes the voice note's place
   const plainVoiceNote = voice !== null && Object.hasOwn(VOICE_NOTES, voice) ? VOICE_NOTES[voice] : '';
-  const voiceNote = typeof s.note === 'string' && s.note !== '' ? s.note : plainVoiceNote;
+  // STARTING already says "Not ready for voice yet": no second note under it
+  const voiceNote = typeof s.note === 'string' && s.note !== '' ? s.note : view === 'starting' ? '' : plainVoiceNote;
+  // push-to-talk cannot usefully work (no network, no wheel buttons) although the session is the target: crossed mic too
+  const micWhy = voice !== 'here' ? '' : s.offline === true ? 'No network: push-to-talk will not work' : s.buttons === 'missing' ? 'No wheel buttons found' : '';
   const pos = s.position && Number.isInteger(s.position.index) && Number.isInteger(s.position.count) && s.position.index > 0 && s.position.count > 0 ? s.position : null;
   const elsewhere = Number.isInteger(s.elsewhere) && s.elsewhere > 0 ? s.elsewhere : 0;
   const added = s.diff && typeof s.diff === 'object' ? s.diff.added : 0;
@@ -241,11 +244,12 @@ export function render(input) {
   // push-to-talk mark and position: never shrinks, #where gives way first
   el.voice.hidden = voice === null;
   if (voice !== null) {
-    el['voice-mark'].innerHTML = voice === 'here' ? MIC : MIC_OFF;
-    el['voice-mark'].dataset.mark = voice === 'here' ? 'mic' : 'mic-off';
+    const crossed = voice !== 'here' || micWhy !== '';
+    el['voice-mark'].innerHTML = crossed ? MIC_OFF : MIC;
+    el['voice-mark'].dataset.mark = crossed ? 'mic-off' : 'mic';
     set(el.position, pos ? `${pos.index}/${pos.count}` : '');
     el.voice.dataset.voice = voice;
-    el.voice.dataset.full = voice === 'here'
+    el.voice.dataset.full = micWhy !== '' ? micWhy : voice === 'here'
       ? `Push-to-talk goes to this session${pos ? ` (${pos.index} of ${pos.count})` : ''}`
       : plainVoiceNote;
   } else {
@@ -323,11 +327,13 @@ function navRow(r, i, nav, isEmpty) {
     chip.dataset.state = str(r.state);
     chip.style.background = CHIP[r.state] ?? CHIP.unknown;
     body.append(chip, text(`row${i}-label`, 'label', label), text(`row${i}-word`, 'word', str(r.word)));
-    if (r.target === true) {
+    if (r.target === true || r.voice === false) {
+      // a session the buttons cannot drive shows the crossed mic (as the band does), never a plain one
+      const off = r.voice === false;
       const mic = document.createElement('span');
       mic.className = 'row-mic';
-      mic.dataset.mark = 'mic';
-      mic.innerHTML = svg(MIC, 'mic');
+      mic.dataset.mark = off ? 'mic-off' : 'mic';
+      mic.innerHTML = svg(off ? MIC_OFF : MIC, 'mic');
       body.append(mic);
     }
   } else {

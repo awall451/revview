@@ -218,7 +218,8 @@ span:empty { display: none; }
 #nav .chip { display: block; flex: none; width: 22px; height: 22px; box-sizing: border-box; border: 2px solid currentColor; }
 #nav .label { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; }
 #nav .word { flex: none; font-weight: 700; white-space: nowrap; }
-#nav .row-mic { flex: none; width: 1.1em; height: 1.1em; display: block; }
+#nav .row-mic { --band: #000; flex: none; width: 1.1em; height: 1.1em; display: block; }
+#nav .row[data-selected="true"] .row-mic { --band: #fff; }
 #nav .mic { width: 100%; height: 100%; display: block; }
 
 /* "Denied: Bash" / "Allowed: Bash" on the tool row: revview's own answer, said in words */
