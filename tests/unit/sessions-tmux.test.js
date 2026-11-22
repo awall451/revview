@@ -40,7 +40,7 @@ async function waitFor(fn, ms = 5000) {
 }
 const settle = () => new Promise((r) => setTimeout(r, 300));
 
-test('keys reach only the chosen session', async (t) => {
+test('keys reach only the session whose id is given', async (t) => {
   const { logA, logB, runner, runnerB } = setup(t);
   const a = await runner.start({ cwd: os.tmpdir(), name: 'a' });
   const b = await runnerB.start({ cwd: os.tmpdir(), name: 'b' });
@@ -49,46 +49,42 @@ test('keys reach only the chosen session', async (t) => {
   assert.deepEqual(JSON.parse(read(logB)[0]), ['--session-id', b.id]);
   assert.deepEqual((await runner.list()).map((s) => s.id).sort(), [a.id, b.id].sort());
 
-  assert.equal(await runner.choose(a.id), true);
-  assert.equal((await runner.send('Escape')).sent, true);
+  assert.equal((await runner.send('Escape', a.id)).sent, true);
   assert.ok(await waitFor(() => read(logA).includes('1b')), 'A got Escape');
-  assert.equal((await runner.send('C-c')).sent, true);
+  assert.equal((await runner.send('C-c', a.id)).sent, true);
   assert.ok(await waitFor(() => read(logA).includes('03')), 'A got C-c');
   await settle();
   assert.equal(read(logA).filter((l) => l === '03').length, 1);
   assert.equal(read(logB).length, 1, 'B untouched');
 
   const aLen = read(logA).length;
-  assert.equal(await runner.choose(b.id), true);
-  assert.equal((await runner.send('Space')).sent, true);
+  assert.equal((await runner.send('Space', b.id)).sent, true);
   assert.ok(await waitFor(() => read(logB).includes('20')), 'B got Space');
   await settle();
   assert.equal(read(logA).length, aLen, 'A nothing new');
 });
 
-test('nothing chosen or window gone: nothing is sent', async (t) => {
+test('no id or window gone: nothing is sent', async (t) => {
   const { sock, logA, runner, runnerB } = setup(t);
   const a = await runner.start({ cwd: os.tmpdir(), name: 'a' });
   assert.ok(await waitFor(() => read(logA).length >= 1));
   const fresh = createSessionRunner({ socket: { path: sock } });
-  assert.deepEqual(await fresh.send('Escape'), { sent: false, reason: 'no session chosen' });
+  assert.deepEqual(await fresh.send('Escape'), { sent: false, reason: 'no session selected' });
 
   // window killed behind the runner's back
   const before = read(logA).length;
-  const t0 = await runner.target();
+  const t0 = await runner.target(a.id);
   assert.equal(t0.id, a.id);
   execFileSync('tmux', ['-f', '/dev/null', '-S', sock, 'kill-window', '-t', t0.window]);
-  assert.equal(await runner.target(), null);
-  assert.equal(runner.chosen(), null);
-  assert.equal((await runner.send('Escape')).sent, false);
+  assert.equal(await runner.target(a.id), null);
+  assert.equal((await runner.send('Escape', a.id)).sent, false);
   await settle();
   assert.equal(read(logA).length, before);
 
-  // stop clears the choice
+  // a stopped session gets nothing
   const b = await runnerB.start({ cwd: os.tmpdir(), name: 'b' });
   assert.equal(await runnerB.stop(b.id), true);
-  assert.equal(runnerB.chosen(), null);
-  assert.equal((await runnerB.send('Space')).sent, false);
+  assert.equal((await runnerB.send('Space', b.id)).sent, false);
 });
 
 // tmux expands formats in -c and -n, and #(cmd) runs a shell command: revview must refuse such text.

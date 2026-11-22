@@ -16,11 +16,13 @@ const name = (e) => e.hook_event_name;
 async function setup(t, target) {
   const ctx = { now: 0, tid: target, sent: [] };
   const runner = {
-    chosen: () => ctx.tid,
-    target: async () => ({ id: ctx.tid, window: '@1' }),
-    send: async (k) => { ctx.sent.push(k); return { sent: true, id: ctx.tid, window: '@1' }; },
+    // ctx.tid is the one live window; the selected session is the board's (s.select)
+    target: async (id) => (id === ctx.tid ? { id, window: '@1' } : null),
+    send: async (k, id) => { ctx.sent.push(k); return { sent: true, id, window: '@1' }; },
+    list: async () => (ctx.tid === null ? [] : [{ id: ctx.tid, window: '@1' }]),
   };
   const s = await startLiveServer({ port: 0, devBridge: true, sessions: runner, clock: () => ctx.now });
+  s.select(ctx.tid); // the driver's selection: that session, once its first event arrives
   const aborts = [];
   t.after(async () => { for (const a of aborts) a.abort(); await s.close(); });
   const post = (p, body) => fetch(`${s.url}${p}`, { method: 'POST', body: JSON.stringify(body) });
@@ -122,14 +124,17 @@ for (const [fixture, hold] of [['wb3-esc', 0], ['wb3-ctrlc', 1200]]) {
   });
 }
 
-test('wb3-two-sessions: a prompt in the session that is not chosen gets no answer from a button', async (t) => {
+test('wb3-two-sessions: a prompt in the session that is not selected gets no answer from a button', async (t) => {
   const evs = events('wb3-two-sessions');
   const [a, b] = [evs[0].session_id, evs[1].session_id];
   assert.notEqual(a, b);
-  const c = await setup(t, a); // A is the chosen one
+  const c = await setup(t, a); // A is the selected one
   const i = await replayToPermission(c, evs, b);
   const r = c.perm(evs[i]);
-  assert.equal(await c.view('permission'), 'permission');
+  // the bar stays on the selected session A; B's prompt is only counted as elsewhere
+  for (let i = 0; i < 200 && (await c.state()).elsewhere !== 1; i++) await sleep(10);
+  assert.equal((await c.state()).elsewhere, 1);
+  assert.notEqual((await c.state()).view, 'permission');
   c.ctx.now = 1500;
   await c.press('F21');
   await c.press('F16');

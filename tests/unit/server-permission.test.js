@@ -15,13 +15,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function setup(t, { sessions = true, ...opts } = {}) {
   const ctx = { now: 0, tid: SID, sent: [] };
   const runner = {
-    chosen: () => ctx.tid,
-    target: async () => (ctx.tid === null ? null : { id: ctx.tid, window: '@1' }),
-    send: async (k) => { ctx.sent.push(k); return { sent: true, id: ctx.tid, window: '@1' }; },
+    // ctx.tid is the one live window; the selected session is the board's (s.select)
+    target: async (id) => (ctx.tid === null || id !== ctx.tid ? null : { id: ctx.tid, window: '@1' }),
+    send: async (k, id) => { ctx.sent.push(k); return { sent: true, id, window: '@1' }; },
+    list: async () => (ctx.tid === null ? [] : [{ id: ctx.tid, window: '@1' }]),
   };
   const s = await startLiveServer({
     port: 0, devBridge: true, sessions: sessions ? runner : null, clock: () => ctx.now, ...opts,
   });
+  if (sessions) s.select(SID); // the driver's selection: the session of the first events
   const aborts = [];
   t.after(async () => { for (const a of aborts) a.abort(); await s.close(); });
   const post = (path, body) => fetch(`${s.url}${path}`, { method: 'POST', body: typeof body === 'string' ? body : JSON.stringify(body) });
@@ -85,6 +87,7 @@ test('deny: 200 with the message', async (t) => {
 test('subagent permission request is answered through its own bound prompt', async (t) => {
   const c = await setup(t);
   c.ctx.tid = SUB[0].session_id;
+  c.s.select(SUB[0].session_id);
   for (const e of SUB.slice(1, 9)) await c.ev(e);
   const r = c.perm(SUB[9]);
   for (let i = 0; i < 100 && (await c.state()).state.view !== 'permission'; i++) await sleep(10);
@@ -237,6 +240,7 @@ test('after a button deny the prompt leaves the bar at once', async (t) => {
 test('two prompts in one session (main + subagent): an answer clears only the answered one', async (t) => {
   const c = await setup(t);
   c.ctx.tid = SUB[0].session_id;
+  c.s.select(SUB[0].session_id);
   for (const e of SUB.slice(1, 9)) await c.ev(e);
   const sub = c.perm(SUB[9]);
   for (let i = 0; i < 100 && (await c.state()).state.view !== 'permission'; i++) await sleep(10);
@@ -253,6 +257,7 @@ test('two prompts in one session (main + subagent): an answer clears only the an
 
 test('bad bodies: 400', async (t) => {
   const c = await setup(t);
+  const seq0 = (await c.state()).seq;
   const bad = ['', '{nope', '[]', 'null', '{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash"}',
     '{"hook_event_name":"PermissionRequest","session_id":"","tool_name":"Bash"}',
     '{"hook_event_name":"PermissionRequest","tool_name":"Bash"}',
@@ -261,7 +266,7 @@ test('bad bodies: 400', async (t) => {
     '{"hook_event_name":"PermissionRequest","session_id":"s","tool_name":5}'];
   for (const b of bad) assert.equal((await c.post('/permission', b)).status, 400, b);
   assert.equal((await fetch(`${c.s.url}/permission`)).status, 405);
-  assert.equal((await c.state()).seq, 0);
+  assert.equal((await c.state()).seq, seq0, 'a refused body leaves the board alone');
 });
 
 test('without sessions, /permission answers 204 at once and buttons answer nothing', async (t) => {

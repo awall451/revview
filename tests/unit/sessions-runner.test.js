@@ -42,7 +42,8 @@ test('start: first creates the session, argv shape, no shell', async () => {
   assert.ok(ns.args.includes('-d') && ns.args.includes('-P'));
   const so = sub(f.calls, 'set-option')[0];
   assert.deepEqual(so.args.slice(-5), ['-w', '-t', '@7', '@revview_id', A]);
-  assert.equal(r.chosen(), A);
+  assert.equal(r.chosen, undefined, 'the runner keeps no second "chosen" state');
+  assert.equal(r.choose, undefined);
 });
 
 test('start: later sessions use new-window; socket path uses -S', async () => {
@@ -75,21 +76,21 @@ test('list: only windows with a uuid @revview_id; no server -> []', async () => 
   assert.deepEqual(await r.list(), []);
 });
 
-test('choose only listed ids', async () => {
+test('target only for listed uuid ids; anything else is null without a tmux call', async () => {
   const f = fake({ windows: [row('@1', A)] });
   const r = createSessionRunner({ exec: f.exec });
-  assert.equal(await r.choose(B), false);
-  assert.equal(r.chosen(), null);
-  assert.equal(await r.choose(A), true);
-  assert.equal(r.chosen(), A);
+  assert.equal(await r.target(B), null);
+  assert.deepEqual(await r.target(A), { id: A, window: '@1' });
+  const n = f.calls.length;
+  for (const bad of [undefined, null, '', 'not-a-uuid', 7, `${A};x`]) assert.equal(await r.target(bad), null);
+  assert.equal(f.calls.length, n);
 });
 
-test('send goes only to the re-verified window', async () => {
-  const f = fake({ windows: [row('@1', A)] });
+test('send goes only to the re-verified window of the given id', async () => {
+  const f = fake({ windows: [row('@1', A), row('@2', B)] });
   const r = createSessionRunner({ exec: f.exec });
-  await r.choose(A);
-  f.state.windows = [row('@9', A)]; // window id changed behind our back
-  assert.deepEqual(await r.send('Escape'), { sent: true, id: A, window: '@9' });
+  f.state.windows = [row('@9', A), row('@2', B)]; // window id changed behind our back
+  assert.deepEqual(await r.send('Escape', A), { sent: true, id: A, window: '@9' });
   const sk = sub(f.calls, 'send-keys');
   assert.equal(sk.length, 1);
   assert.deepEqual(sk[0].args.slice(-3), ['-t', '@9', 'Escape']);
@@ -99,43 +100,38 @@ test('send goes only to the re-verified window', async () => {
 test('send: unknown key throws and runs nothing', async () => {
   const f = fake({ windows: [row('@1', A)] });
   const r = createSessionRunner({ exec: f.exec });
-  await r.choose(A);
   const n = f.calls.length;
-  for (const k of ['Enter', 'a', '', undefined, 'Escape;x']) await assert.rejects(r.send(k));
+  for (const k of ['Enter', 'a', '', undefined, 'Escape;x']) await assert.rejects(r.send(k, A));
   assert.equal(f.calls.length, n);
 });
 
-test('send with nothing chosen runs nothing', async () => {
+test('send without a valid session id runs nothing', async () => {
   const f = fake({ windows: [row('@1', A)] });
   const r = createSessionRunner({ exec: f.exec });
-  assert.deepEqual(await r.send('C-c'), { sent: false, reason: 'no session chosen' });
+  for (const id of [undefined, null, '', 'not-a-uuid', 7]) {
+    assert.deepEqual(await r.send('C-c', id), { sent: false, reason: 'no session selected' });
+  }
   assert.equal(f.calls.length, 0);
 });
 
-test('chosen window gone: cleared, nothing sent', async () => {
+test('session window gone: nothing sent', async () => {
   const f = fake({ windows: [row('@1', A)] });
   const logs = [];
   const r = createSessionRunner({ exec: f.exec, log: (m) => logs.push(m) });
-  await r.choose(A);
   f.state.windows = [row('@2', B)];
-  assert.equal(await r.target(), null);
-  assert.equal(r.chosen(), null);
+  assert.equal(await r.target(A), null);
   assert.ok(logs.length > 0);
-  await r.choose(B);
   f.state.windows = [];
-  assert.deepEqual(await r.send('Space'), { sent: false, reason: 'chosen session gone' });
+  assert.deepEqual(await r.send('Space', B), { sent: false, reason: 'selected session gone' });
   assert.equal(sub(f.calls, 'send-keys').length, 0);
 });
 
-test('stop kills the verified window and clears the choice', async () => {
+test('stop kills the verified window', async () => {
   const f = fake({ windows: [row('@1', A), row('@2', B)] });
   const r = createSessionRunner({ exec: f.exec });
-  await r.choose(A);
   assert.equal(await r.stop(B), true);
-  assert.equal(r.chosen(), A);
   assert.deepEqual(sub(f.calls, 'kill-window')[0].args.slice(-2), ['-t', '@2']);
   assert.equal(await r.stop(A), true);
-  assert.equal(r.chosen(), null);
   assert.equal(await r.stop('33333333-3333-4333-8333-333333333333'), false);
   assert.equal(sub(f.calls, 'kill-window').length, 2);
 });

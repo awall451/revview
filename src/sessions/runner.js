@@ -16,6 +16,9 @@ const NO_SERVER_RE = /no server running|error connecting|no sessions|can't find 
 const SESSION = 'revview';
 const UNSAFE_TEXT_RE = /[#\u0000-\u001f\u007f-\u009f]/;
 
+// tmux expands formats and runs #(cmd): text with '#' or a control character must never reach it
+export const isUnsafeText = (s) => UNSAFE_TEXT_RE.test(s);
+
 const errText = (e) => `${e?.stderr ?? ''} ${e?.message ?? ''}`;
 
 export function createSessionRunner({
@@ -31,7 +34,6 @@ export function createSessionRunner({
     const r = await exec(tmux, ['-f', '/dev/null', ...socketArgs, ...args]);
     return String(r?.stdout ?? '');
   };
-  let chosenId = null;
 
   async function list() {
     let out;
@@ -81,36 +83,26 @@ export function createSessionRunner({
     const window = out.trim();
     if (!WINDOW_RE.test(window)) throw new Error(`unexpected window id from tmux: ${JSON.stringify(window)}`);
     await run(['set-option', '-w', '-t', window, '@revview_id', id]);
-    chosenId = id;
     log(`session ${id} started in ${window}`);
     return { id, window, cwd };
   }
 
-  async function choose(id) {
-    if (!(await list()).some((s) => s.id === id)) return false;
-    chosenId = id;
-    return true;
-  }
-
-  const chosen = () => chosenId;
-
-  async function target() {
-    if (!chosenId) return null;
-    const want = chosenId;
-    const hit = (await list()).find((s) => s.id === want);
+  // The session id always comes from the caller (the board's selection); nothing is remembered here.
+  async function target(id) {
+    if (typeof id !== 'string' || !UUID_RE.test(id)) return null;
+    const hit = (await list()).find((s) => s.id === id);
     if (!hit) {
-      if (chosenId === want) chosenId = null;
-      log(`chosen session ${want} is gone`);
+      log(`session ${id} is gone`);
       return null;
     }
     return { id: hit.id, window: hit.window };
   }
 
-  async function send(key) {
+  async function send(key, id) {
     if (!SEND_KEYS.includes(key)) throw new Error(`key not allowed: ${String(key)}`);
-    if (!chosenId) return { sent: false, reason: 'no session chosen' };
-    const t = await target();
-    if (!t || !WINDOW_RE.test(t.window)) return { sent: false, reason: 'chosen session gone' };
+    if (typeof id !== 'string' || !UUID_RE.test(id)) return { sent: false, reason: 'no session selected' };
+    const t = await target(id);
+    if (!t || !WINDOW_RE.test(t.window)) return { sent: false, reason: 'selected session gone' };
     await run(['send-keys', '-t', t.window, key]);
     return { sent: true, id: t.id, window: t.window };
   }
@@ -119,7 +111,6 @@ export function createSessionRunner({
     const hit = (await list()).find((s) => s.id === id);
     if (!hit) return false;
     await run(['kill-window', '-t', hit.window]);
-    if (chosenId === id) chosenId = null;
     return true;
   }
 
@@ -129,8 +120,7 @@ export function createSessionRunner({
     } catch (e) {
       if (!NO_SERVER_RE.test(errText(e))) throw e;
     }
-    chosenId = null;
   }
 
-  return { start, list, choose, chosen, target, send, stop, killServer };
+  return { start, list, target, send, stop, killServer };
 }

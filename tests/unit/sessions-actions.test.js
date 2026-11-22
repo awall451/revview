@@ -6,12 +6,18 @@ import { initialBoard, reduceBoard } from '../../src/state/index.js';
 const SID = '7de4c978-52e0-4e1a-ad17-826801362ee2';
 const ev = (name, extra = {}) => ({ session_id: SID, hook_event_name: name, ...extra });
 
-function permissionBoard() {
-  let b = initialBoard();
+const select = { hook_event_name: 'RevviewSelect', session_id: SID };
+
+// SID is on the board and the driver's selection (a stale 'chosen' id in the runner no longer exists)
+function workingBoard() {
+  return reduceBoard(reduceBoard(initialBoard(), ev('UserPromptSubmit', { prompt: 'x' })), select);
+}
+
+function permissionBoard(command = 'ls') {
+  let b = workingBoard();
   for (const e of [
-    ev('UserPromptSubmit', { prompt: 'x' }),
-    ev('PreToolUse', { tool_name: 'Bash', tool_use_id: 't1', tool_input: { command: 'ls' } }),
-    ev('PermissionRequest', { tool_name: 'Bash', tool_input: { command: 'ls' } }),
+    ev('PreToolUse', { tool_name: 'Bash', tool_use_id: 't1', tool_input: { command } }),
+    ev('PermissionRequest', { tool_name: 'Bash', tool_input: { command } }),
   ]) b = reduceBoard(b, e);
   return b;
 }
@@ -24,10 +30,10 @@ function setup({ target = { id: SID, window: '@1' }, sendResult, answerResult, b
   let now = 0;
   const waiters = [];
   const runner = {
-    chosen: () => 'WRONG-chosen-id',
     target: async () => (typeof target === 'function' ? target() : target),
-    send: async (k) => {
+    send: async (k, id) => {
       sent.push(k);
+      assert.equal(id, SID, 'the key goes to the selected session id');
       if (waiters.length) await waiters.shift();
       return sendResult ?? { sent: true, id: SID, window: '@1' };
     },
@@ -141,30 +147,32 @@ test('an answered press/deny tells the board which exact prompt was answered; a 
 test('no target: the registry is not asked (no session), nothing sent', async () => {
   const s = setup({ target: null });
   const r = await s.a.handle(dev('press', 'tap'));
-  assert.deepEqual([r.done, r.reason], [false, 'no session chosen']);
+  assert.deepEqual([r.done, r.reason], [false, 'no session selected']);
   assert.deepEqual(s.answers, []);
 });
 
-test('press hold, other buttons: no action', async () => {
+test('press hold, read-aloud, spare: no action; up and menu are navigation (never a key or an answer)', async () => {
   const s = setup();
-  for (const [b, g] of [['press', 'hold'], ['press', 'long-hold'], ['up', 'tap'], ['menu', 'tap'], ['read-aloud', 'tap']]) {
+  for (const [b, g] of [['press', 'hold'], ['press', 'long-hold'], ['read-aloud', 'tap'], ['spare', 'tap']]) {
     const r = await s.a.handle(dev(b, g));
     assert.deepEqual([r.done, r.reason], [false, 'no action']);
   }
+  for (const [b, g] of [['up', 'tap'], ['menu', 'tap']]) assert.equal((await s.a.handle(dev(b, g))).action, 'nav');
+  assert.deepEqual(s.applied.map((e) => e.hook_event_name), ['RevviewNav', 'RevviewNav']);
   assert.deepEqual(s.sent, []);
   assert.deepEqual(s.answers, []);
 });
 
 test('the board is read after the target await', async () => {
-  let board = initialBoard();
+  let board = permissionBoard('ls'); // a prompt is shown, so press is an allow attempt
   const answers = [];
   const a = createActions({
-    runner: { target: async () => { board = permissionBoard(); return { id: SID }; }, send: async () => ({ sent: false }) },
+    runner: { target: async () => { board = permissionBoard('pwd'); return { id: SID }; }, send: async () => ({ sent: false }) },
     registry: { answer: (k, shown) => { answers.push(shown); return { ok: false, reason: 'x' }; } },
     getBoard: () => board, apply: () => {},
   });
   await a.handle(dev('press', 'tap'));
-  assert.equal(answers[0]?.session, SID);
+  assert.equal(answers[0]?.command, 'pwd', 'the prompt of the board as it is after the await');
 });
 
 test('gestures are serialized: a second one waits for the first', async () => {
@@ -183,7 +191,7 @@ test('a throwing runner is reported, not thrown, and the next gesture still runs
   let n = 0;
   const a = createActions({
     runner: { target: async () => null, send: async () => { if (n++ === 0) throw new Error('boom'); return { sent: true, id: SID }; } },
-    registry: {}, getBoard: initialBoard, apply: () => {},
+    registry: {}, getBoard: workingBoard, apply: () => {},
   });
   const r1 = await a.handle(dev('push-to-talk', 'tap'));
   assert.deepEqual([r1.done, r1.reason], [false, 'boom']);

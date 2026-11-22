@@ -1,5 +1,5 @@
 // End to end with a REAL tmux server (private temp socket) and a stand-in claude: wheel gestures -> keys in the
-// chosen session only, and the real PermissionRequest hook script answered by a button.
+// selected session only, and the real PermissionRequest hook script answered by a button.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -49,10 +49,10 @@ async function setup(t, opts = {}) {
   return { server, runner, ctx, a, b, log, waitFor, post, key, state, working };
 }
 
-test('gestures act on the chosen session only', { timeout: 30000 }, async (t) => {
+test('gestures act on the selected session only', { timeout: 30000 }, async (t) => {
   const c = await setup(t);
   const { a, b, log, key } = c;
-  assert.equal(await c.runner.choose(a.id), true);
+  c.server.select(a.id);
   await c.working(a.id);
   assert.equal((await c.state()).view, 'working');
 
@@ -74,8 +74,9 @@ test('gestures act on the chosen session only', { timeout: 30000 }, async (t) =>
   assert.equal(log(a.id).filter((l) => l === '03').length, 1);
   assert.deepEqual(log(b.id), ['started']);
 
-  // push-to-talk goes to B once chosen
-  assert.equal(await c.runner.choose(b.id), true);
+  // push-to-talk goes to B once selected
+  await c.working(b.id);
+  c.server.select(b.id);
   const aBefore = log(a.id).length;
   await key('F13', 'down');
   await key('F13', 'up');
@@ -84,7 +85,7 @@ test('gestures act on the chosen session only', { timeout: 30000 }, async (t) =>
   assert.equal(log(b.id).filter((l) => l === '20').length, 1);
   assert.equal(log(a.id).length, aBefore);
 
-  // stop the chosen session: a press sends nothing anywhere
+  // stop the selected session: a press sends nothing anywhere
   assert.equal(await c.runner.stop(b.id), true);
   const aLen = log(a.id).length;
   for (const code of ['F13', 'F15']) {
@@ -105,9 +106,9 @@ function runHook(port, payload) {
   });
 }
 
-test('the real hook script is answered by the allow button for the chosen session', { timeout: 20000 }, async (t) => {
+test('the real hook script is answered by the allow button for the selected session', { timeout: 20000 }, async (t) => {
   const c = await setup(t);
-  assert.equal(await c.runner.choose(c.a.id), true);
+  c.server.select(c.a.id);
   await c.working(c.a.id);
   const h = runHook(c.server.port, { ...C2[3], session_id: c.a.id });
   assert.ok(await c.waitFor(async () => (await c.state()).view === 'permission'), 'prompt on the bar');
@@ -119,12 +120,14 @@ test('the real hook script is answered by the allow button for the chosen sessio
   assert.equal(r.code, 0);
 });
 
-test('a prompt of a session that is not the chosen one gets no decision from the hook', { timeout: 20000 }, async (t) => {
+test('a prompt of a session that is not the selected one gets no decision from the hook', { timeout: 20000 }, async (t) => {
   const c = await setup(t, { permissionWaitMs: 700 });
-  assert.equal(await c.runner.choose(c.a.id), true);
+  c.server.select(c.a.id);
+  await c.working(c.a.id);
   await c.working(c.b.id);
   const h = runHook(c.server.port, { ...C2[3], session_id: c.b.id });
-  assert.ok(await c.waitFor(async () => (await c.state()).view === 'permission'), 'prompt on the bar');
+  // the bar stays on the selected A; B's prompt is only counted as elsewhere
+  assert.ok(await c.waitFor(async () => (await c.state()).elsewhere === 1), 'B prompt counted elsewhere');
   c.ctx.now += 1500;
   await c.key('F21', 'down');
   await c.key('F21', 'up');

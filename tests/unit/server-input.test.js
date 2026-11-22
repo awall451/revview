@@ -122,7 +122,10 @@ test('dev bridge: tap, hold, repeat, lost', async () => {
     assert.deepEqual(g.map((x) => [x.button, x.gesture, x.source]), [
       ['push-to-talk', 'tap', 'bridge'], ['read-aloud', 'hold', 'bridge'], ['up', 'tap', 'bridge'],
     ]);
-    assert.equal((await get(s, '/state')).seq, seq0, 'in-process gestures do not change seq');
+    // the only change is the list the F17 (up) tap opened; no gesture adds a seq of its own
+    const after = await get(s, '/state');
+    assert.equal(after.seq, seq0 + 1, 'in-process gestures change the board only through navigation');
+    assert.equal(after.state.nav.kind, 'list');
     assert.equal(s.gestures().length, 3);
   });
 });
@@ -213,10 +216,10 @@ test('GET /buttons headers and origin check', async () => {
 });
 
 test('parseArgs', () => {
-  assert.deepEqual(parseArgs([]), { port: 8138, inputPath: null, devBridge: false, sessions: false, start: [] });
-  assert.deepEqual(parseArgs(['9000', '--dev-bridge']), { port: 9000, inputPath: null, devBridge: true, sessions: false, start: [] });
-  assert.deepEqual(parseArgs(['--sessions']), { port: 8138, inputPath: null, devBridge: false, sessions: true, start: [] });
-  assert.deepEqual(parseArgs(['--start', '/a', '--start', '/b', '7']), { port: 7, inputPath: null, devBridge: false, sessions: true, start: ['/a', '/b'] });
+  assert.deepEqual(parseArgs([]), { port: 8138, inputPath: null, devBridge: false, sessions: false, start: [], projects: null });
+  assert.deepEqual(parseArgs(['9000', '--dev-bridge']), { port: 9000, inputPath: null, devBridge: true, sessions: false, start: [], projects: null });
+  assert.deepEqual(parseArgs(['--sessions']), { port: 8138, inputPath: null, devBridge: false, sessions: true, start: [], projects: null });
+  assert.deepEqual(parseArgs(['--start', '/a', '--start', '/b', '7']), { port: 7, inputPath: null, devBridge: false, sessions: true, start: ['/a', '/b'], projects: null });
   assert.throws(() => parseArgs(['--start']), /--start needs a directory/);
   assert.throws(() => parseArgs(['--start', '--dev-bridge']), /--start needs a directory/);
   assert.equal(parseArgs(['--input']).inputPath, DEFAULT_CONFIG_PATH);

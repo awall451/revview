@@ -7,7 +7,7 @@ session, see `src/state/README.md`), reduces every event with `reduceBoard` and 
 No persistence: a fresh or restarted server shows `unknown` (a restored state could not be trusted, and hooks
 posted while the server was down are lost).
 
-Run: `npm start` or `node src/server/index.js [port] [--input [path]] [--dev-bridge] [--sessions] [--start dir]...` (port default **8138**, or env `REVVIEW_PORT`).
+Run: `npm start` or `node src/server/index.js [port] [--input [path]] [--dev-bridge] [--sessions] [--start dir]... [--projects file]` (port default **8138**, or env `REVVIEW_PORT`).
 `--input` reads the wheel buttons in this process (config `config/buttons.json`, or the path given); a bad config or
 unknown flag prints the message to stderr and exits with code 2 before listening. `--dev-bridge` (or `npm run start:dev`) turns on `POST /dev/key`. SIGTERM and SIGINT close the server (stopping the grab helper) and exit 0.
 It binds to **127.0.0.1 only**; there is deliberately no way to change the host from the CLI.
@@ -87,11 +87,14 @@ for each (a throwing callback is caught and logged).
   process without an Origin header could otherwise forge a press or fake NO BUTTONS. With the bridge, `RevviewButton` takes the
   normal path (204, `seq += 1`, the board ignores it) and, when `button` matches `/^[a-z][a-z0-9-]{0,31}$/` and `gesture` is one
   of the three, is also logged with source `post`.
-- `POST /event` with `RevviewInterrupted` or `RevviewAnswered` is refused with **403 always**, even with `--dev-bridge`: it is the board's internal
-  event for a Escape/Ctrl+C that revview itself sent (`src/sessions/actions.js`).
-- With `--sessions` (or a `sessions` runner) gestures with source `device` or `bridge` (never `post`, never `dropped`) also go to
-  the actions: cancel tap = Escape, cancel long-hold = one Ctrl+C (not twice within 5 s), push-to-talk tap = Space, press tap =
-  allow, deny tap = deny, to the chosen session only (re-verified for each).
+- `POST /event` with `RevviewInterrupted`, `RevviewAnswered`, `RevviewSelect`, `RevviewNav`, `RevviewOwned` or `RevviewProjects` is refused with
+  **403 always**, even with `--dev-bridge`: they are the board's internal events (what revview itself sent or chose, the selection, the
+  list/menu, the owned sessions, the projects). Only `actions.js` and the server itself apply them; there is no HTTP route for `select`.
+- Gestures with source `device` or `bridge` (never `post`, never `dropped`) always go to the actions (`src/sessions/README.md`), with or
+  without a runner. A list or menu open on the board means navigation only. Normal view: cancel tap = Escape, cancel long-hold = one
+  Ctrl+C (not twice within 5 s), push-to-talk tap = Space, to the board's selected session only (re-verified for each); press tap =
+  allow when NEEDS PERMISSION is shown (it never opens the list then), else opens the list; deny tap = deny. Without a runner keys and
+  answers are refused (`no sessions`) and `owned` stays `null`.
 - With `--input` and `--dev-bridge` together the bridge shares the device's detector (dev only; sources are told apart per key event).
 - `POST /dev/key` (**dev only**): body `{code, type: 'down'|'up'|'lost', repeat?}` (`code` is a `KeyboardEvent.code`; `lost` = the
   page lost focus, like a vanished device). It feeds the same detector as the device (the one from `--input` when given,
@@ -109,11 +112,14 @@ for each (a throwing callback is caught and logged).
 - At most **8** SSE clients (`MAX_SSE_CLIENTS`); the ninth `GET /events` gets 503. A client whose unread backlog
   passes 256 KiB (it never reads) is dropped.
 
-`--sessions` makes the session runner on the private tmux socket (`-L revview`); at boot, if exactly one revview session
-exists it is chosen. `--start <dir>` (repeatable, implies `--sessions`) starts `claude` there at boot; the last one started is
-chosen. The tmux server is never killed by the live server (sessions outlive a restart).
+`--sessions` makes the session runner on the private tmux socket (`-L revview`); at boot `--start <dir>` (repeatable, implies `--sessions`) starts `claude` there and the last one started is selected
+(through `select(id)`); else exactly one existing revview session is selected. The selected id is printed. `--projects <file>`
+(default env `REVVIEW_PROJECTS`) is the New session project list (`src/sessions/README.md`, applied once at start as `RevviewProjects`).
+With a runner, `RevviewOwned` (the ids of `runner.list()`) is applied at start, after every session start and every `ownedPollMs`
+(default 5000; an unref'd timer; a failing `list()` is logged and the last value kept). The tmux server is never killed by the live server (sessions outlive a restart).
 
-Programmatic use (tests): `startLiveServer({ port: 0, viewDir, reduce, input, devBridge, inputDeps, inputRetryMs, onGesture, sessions, clock, permissionWaitMs, minShownMs })`
-(`sessions` is a runner (`target/chosen/send`), `clock`/`permissionWaitMs`/`minShownMs` go to the permission registry; `permissionsWaiting()` is a test seam)
+Programmatic use (tests): `startLiveServer({ port: 0, viewDir, reduce, input, devBridge, inputDeps, inputRetryMs, onGesture, sessions, clock, permissionWaitMs, minShownMs, projects, timers, navTimeoutMs, ownedPollMs })`
+(`sessions` is a runner (`list/target/send/start`), `clock`/`permissionWaitMs`/`minShownMs` go to the permission registry, `projects` is the
+validated path list, `timers`/`navTimeoutMs` go to the actions; `permissionsWaiting()` is a test seam)
 (`input` is a parsed config, `inputDeps`/`inputRetryMs` go to the device reader; `gestures()` returns a copy of the log) (`reduce` is a test seam for a failing state core; there is no host option) resolves to
-`{ url, port, close(), state() }` (`reduce` is `(board, event) => board`, default `reduceBoard`; `state()` returns `boardView(board)`).
+`{ url, port, close(), state(), select(id) }` (`select(id)` is the internal `RevviewSelect` for the boot path) (`reduce` is `(board, event) => board`, default `reduceBoard`; `state()` returns `boardView(board)`).

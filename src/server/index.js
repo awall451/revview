@@ -1,13 +1,13 @@
 // Live server: hook scripts POST raw Claude Code hook JSON to /event, the state core
 // (src/state) reduces it, and the new state is pushed to the page over Server-Sent Events.
 // It also serves the view. Binds to 127.0.0.1 only; see src/server/README.md.
-//   node src/server/index.js [port] [--input [path]] [--dev-bridge] [--sessions] [--start dir]...   (port default 8138, or REVVIEW_PORT)
+//   node src/server/index.js [port] [--input [path]] [--dev-bridge] [--sessions] [--start dir]... [--projects file]   (port default 8138, or REVVIEW_PORT)
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { initialBoard, reduceBoard, boardView, pendingPrompts, shownPrompt } from '../state/index.js';
-import { createSessionRunner, createActions, createPermissionRegistry } from '../sessions/index.js';
+import { createSessionRunner, createActions, createPermissionRegistry, loadProjects } from '../sessions/index.js';
 import { startInput, createInputPipeline } from '../input/index.js';
 import { loadConfig, ConfigError, DEFAULT_CONFIG_PATH } from '../input/keymap.js';
 import { BROWSER_CODES } from '../input/keys.js';
@@ -26,6 +26,8 @@ const MAX_DEV_BODY_BYTES = 1024;
 const GESTURE_LOG_MAX = 32;
 const BUTTON_RE = /^[a-z][a-z0-9-]{0,31}$/;
 const GESTURES = ['tap', 'hold', 'long-hold'];
+// made only by revview itself (the actions, the boot path): no POST may forge them, not even under --dev-bridge
+const INTERNAL_EVENTS = ['RevviewInterrupted', 'RevviewAnswered', 'RevviewSelect', 'RevviewNav', 'RevviewOwned', 'RevviewProjects'];
 export const MAX_SSE_CLIENTS = 8;
 export const MAX_CLIENT_BACKLOG_BYTES = 256 * 1024; // unread bytes after which a stalled SSE client is dropped
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -69,7 +71,7 @@ function serveStatic(req, res, root) {
 export async function startLiveServer({
   port = 0, viewDir = DEFAULT_VIEW_DIR, reduce: reduceEvent = reduceBoard,
   input = null, devBridge = false, inputDeps, inputRetryMs, onGesture,
-  sessions = null, clock, permissionWaitMs, minShownMs,
+  sessions = null, clock, permissionWaitMs, minShownMs, projects = [], timers, navTimeoutMs, ownedPollMs = 5000,
 } = {}) {
   const root = path.resolve(viewDir);
   let board = initialBoard();
@@ -77,9 +79,21 @@ export async function startLiveServer({
   const clients = new Set();
   let ownPort = 0;
   const registry = createPermissionRegistry({ clock, waitMs: permissionWaitMs, minShownMs });
-  const actions = sessions
-    ? createActions({ runner: sessions, registry, getBoard: () => board, apply, clock, log: (m) => console.error(m) })
-    : null;
+  let closed = false;
+  // owned = the sessions revview itself started (the runner's windows); null without a runner (the old look)
+  async function refreshOwned() {
+    if (!sessions) return;
+    try {
+      const ids = (await sessions.list()).map((x) => x.id);
+      if (!closed) apply({ hook_event_name: 'RevviewOwned', ids }, true);
+    } catch (e) {
+      console.error('owned sessions: list failed:', e instanceof Error ? e.message : e);
+    }
+  }
+  const actions = createActions({
+    runner: sessions, registry, getBoard: () => board, apply, projects, clock, timers, navTimeoutMs,
+    log: (m) => console.error(m), onOwnedChanged: refreshOwned,
+  });
 
   const message = () => `data: ${JSON.stringify({ seq, state: boardView(board) })}\n\n`;
   const broadcast = () => {
@@ -128,7 +142,7 @@ export async function startLiveServer({
     }
     // the actions never throw into the reader (handle() catches), the extra catch is a belt
     try {
-      actions?.handle({ ...entry }).catch((e) => console.error('action failed:', e));
+      actions.handle({ ...entry }).catch((e) => console.error('action failed:', e));
     } catch (e) {
       console.error('action failed:', e);
     }
@@ -235,7 +249,7 @@ export async function startLiveServer({
         return text(res, 403, `${event.hook_event_name} is not accepted over HTTP (dev bridge only)`);
       }
       // internal only: it makes a screen state from a key revview sent itself, so no POST may forge it
-      if (event.hook_event_name === 'RevviewInterrupted' || event.hook_event_name === 'RevviewAnswered') {
+      if (INTERNAL_EVENTS.includes(event.hook_event_name)) {
         return text(res, 403, `${event.hook_event_name} is internal and not accepted over HTTP`);
       }
       if (!apply(event)) return text(res, 500, 'state core failed; event ignored');
@@ -411,7 +425,18 @@ export async function startLiveServer({
   });
   ownPort = server.address().port;
 
+  apply({ hook_event_name: 'RevviewProjects', paths: projects }, true);
+  let ownedTimer = null;
+  if (sessions) {
+    await refreshOwned();
+    ownedTimer = setInterval(refreshOwned, ownedPollMs);
+    ownedTimer.unref();
+  }
+
   return {
+    // internal: the boot path picks the session the buttons act on (no HTTP route reaches it)
+    select: (id) => apply({ hook_event_name: 'RevviewSelect', session_id: id }, true),
+    refreshOwned,
     url: `http://${DEFAULT_HOST}:${ownPort}`,
     port: ownPort,
     state: () => boardView(board),
@@ -419,7 +444,10 @@ export async function startLiveServer({
     permissionsWaiting: () => registry.size(), // test seam: waiting PermissionRequest hook calls
     close: () =>
       new Promise((resolve) => {
+        closed = true;
         inputHandle?.stop();
+        actions.close();
+        if (ownedTimer !== null) clearInterval(ownedTimer);
         registry.close(); // leaves the tmux server alone: sessions outlive a server restart
         clearInterval(timer);
         server.close(() => resolve());
@@ -431,7 +459,7 @@ export async function startLiveServer({
 }
 
 export function parseArgs(argv) {
-  const out = { port: null, inputPath: null, devBridge: false, sessions: false, start: [] };
+  const out = { port: null, inputPath: null, devBridge: false, sessions: false, start: [], projects: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--dev-bridge') out.devBridge = true;
@@ -443,7 +471,12 @@ export function parseArgs(argv) {
       out.sessions = true;
       i++;
     }
-    else if (a === '--input') {
+    else if (a === '--projects') {
+      const next = argv[i + 1];
+      if (next === undefined || next.startsWith('--')) throw new Error('--projects needs a file');
+      out.projects = next;
+      i++;
+    } else if (a === '--input') {
       const next = argv[i + 1];
       if (next !== undefined && !next.startsWith('--')) { out.inputPath = next; i++; } else out.inputPath = DEFAULT_CONFIG_PATH;
     } else if (a.startsWith('--')) throw new Error(`unknown option ${a}`);
@@ -451,6 +484,7 @@ export function parseArgs(argv) {
     else throw new Error(`unexpected argument ${a}`);
   }
   if (out.port === null) out.port = Number(process.env.REVVIEW_PORT || DEFAULT_PORT);
+  if (out.projects === null) out.projects = process.env.REVVIEW_PROJECTS || null;
   return out;
 }
 
@@ -477,24 +511,28 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     process.exit(2);
   }
   let runner = null;
+  let selectId = null; // the session the buttons act on at boot: the last one started, else the only one there is
   if (args.sessions) {
     runner = createSessionRunner({ socket: { name: 'revview' }, log: (m) => console.error(m) });
     try {
       const existing = await runner.list();
-      if (existing.length === 1) await runner.choose(existing[0].id);
-      for (const dir of args.start) await runner.start({ cwd: path.resolve(dir) }); // the last one started is chosen
+      if (existing.length === 1) selectId = existing[0].id;
+      for (const dir of args.start) selectId = (await runner.start({ cwd: path.resolve(dir) })).id;
     } catch (e) {
       console.error(`sessions: ${e instanceof Error ? e.message : String(e)}`);
       process.exit(2);
     }
   }
-  const live = await startLiveServer({ port: args.port, input, devBridge: args.devBridge, sessions: runner });
+  const projects = args.projects ? loadProjects(args.projects, { log: (m) => console.error(m) }) : [];
+  const live = await startLiveServer({ port: args.port, input, devBridge: args.devBridge, sessions: runner, projects });
+  if (selectId !== null) live.select(selectId);
   const { url } = live;
   installShutdown(live);
   console.log(`revview live server (127.0.0.1 only)`);
   console.log(`view:  ${url}/`);
   console.log(`post:  curl -s -X POST --data-binary @- ${url}/event < <(head -1 fixtures/sessions/working-turn.jsonl)`);
   if (input) console.log('input: reading wheel buttons (GET /buttons)');
-  if (runner) console.log('sessions: private tmux server (-L revview), chosen: ' + (runner.chosen() ?? 'none'));
+  if (runner) console.log('sessions: private tmux server (-L revview), selected: ' + (selectId ?? 'none'));
+  if (args.projects) console.log(`projects: ${projects.length} from ${args.projects}`);
   if (args.devBridge) console.log('dev bridge ON (POST /dev/key): never use this on the car');
 }

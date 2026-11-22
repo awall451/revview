@@ -1,0 +1,4 @@
+{
+  "note": "Copy to your own file and start the server with --projects <file> (or REVVIEW_PROJECTS). Format: {\"projects\": [absolute directory, ...]}, at most 32. Each must be an absolute, normalized path (no '..', no '//') without '#' or control characters; the directory must exist when New session starts there. Other keys are ignored.",
+  "projects": ["/home/me/code/first-project", "/home/me/code/second-project"]
+}
