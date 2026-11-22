@@ -37,7 +37,7 @@ const GESTURE_LOG_MAX = 32;
 const BUTTON_RE = /^[a-z][a-z0-9-]{0,31}$/;
 const GESTURES = ['tap', 'hold', 'long-hold'];
 // made only by revview itself (the actions, the boot path): no POST may forge them, not even under --dev-bridge
-const INTERNAL_EVENTS = ['RevviewInterrupted', 'RevviewAnswered', 'RevviewSelect', 'RevviewNav', 'RevviewOwned', 'RevviewProjects', 'RevviewNote'];
+const INTERNAL_EVENTS = ['RevviewInterrupted', 'RevviewAnswered', 'RevviewSelect', 'RevviewNav', 'RevviewOwned', 'RevviewProjects', 'RevviewNote', 'RevviewBootDone'];
 export const MAX_SSE_CLIENTS = 8;
 export const MAX_CLIENT_BACKLOG_BYTES = 256 * 1024; // unread bytes after which a stalled SSE client is dropped
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -167,10 +167,11 @@ export async function startLiveServer({
     return true;
   }
 
-  // Gestures: an in-memory log, never part of the board. Presses during 'starting' are dropped, not queued.
+  // Gestures: an in-memory log, never part of the board. Presses while the boot STARTING lasts are dropped, not
+  // queued. The phase check matters: a placeholder session that shows 'starting' after the boot must not drop presses.
   const gestureLog = [];
   function acceptGesture({ button, gesture, source }) {
-    const entry = { button, gesture, source, at: Date.now(), dropped: boardView(board).view === 'starting' };
+    const entry = { button, gesture, source, at: Date.now(), dropped: board.phase === 'starting' && boardView(board).view === 'starting' };
     gestureLog.push(entry);
     if (gestureLog.length > GESTURE_LOG_MAX) gestureLog.shift();
     try {
@@ -505,6 +506,8 @@ export async function startLiveServer({
   return {
     // internal: the boot path picks the session the buttons act on (no HTTP route reaches it)
     select: (id) => apply({ hook_event_name: 'RevviewSelect', session_id: id }, true),
+    // internal: the key-on boot is over (ends the boot STARTING; a no-op afterwards)
+    bootDone: (note) => apply({ hook_event_name: 'RevviewBootDone', ...(note ? { note } : {}) }, true),
     refreshOwned,
     whenUnlocked: () => whenUnlocked,
     dataLocked: () => (dataMonitor ? dataMonitor.locked() !== false : false),
@@ -587,32 +590,67 @@ export function parseArgs(argv) {
 
 // Key-on: after the server listens, make sure there is a session. No windows (tmux died with the power) ->
 // start one per dir; exactly one (a service restart) -> select it; several -> select none. Never throws.
-export async function bootSessions({ runner, live, dirs = [], log = () => {} }) {
+// Whatever happens the boot STARTING ends (live.bootDone, after any select: a select clears the note), so the bar's
+// buttons work; a failure leaves a short note. If it takes longer than bootLimitMs the STARTING ends with a note and
+// the start goes on (a later success still selects the session; a later bootDone is a no-op).
+export async function bootSessions({ runner, live, dirs = [], log = () => {}, timers = { setTimeout, clearTimeout }, bootLimitMs = 60000 }) {
+  const timer = timers.setTimeout(() => live.bootDone?.('Key-on session is slow to start: see the server log'), bootLimitMs);
+  timer?.unref?.();
+  let id = null;
+  let note;
   try {
     const existing = await runner.list();
     if (existing.length > 0) {
-      if (existing.length !== 1) return null;
-      live.select(existing[0].id);
-      return existing[0].id;
+      if (existing.length === 1) {
+        live.select(existing[0].id);
+        id = existing[0].id;
+      }
+    } else if (dirs.length === 0) {
+      note = 'No session yet: open the menu for New session';
+    } else {
+      const relative = dirs.find((d) => !path.isAbsolute(d));
+      if (relative !== undefined) {
+        log(`boot sessions: REVVIEW_START must be an absolute folder, got ${relative}`);
+        note = 'Key-on session not started: start folder must be an absolute path';
+      } else {
+        let last = null;
+        for (const dir of dirs) last = (await runner.start({ cwd: dir })).id;
+        await live.refreshOwned();
+        live.select(last);
+        id = last;
+      }
     }
-    let last = null;
-    for (const dir of dirs) last = (await runner.start({ cwd: path.resolve(dir) })).id;
-    if (last === null) return null;
-    await live.refreshOwned();
-    live.select(last);
-    return last;
   } catch (e) {
-    log(`boot sessions: ${e instanceof Error ? e.message : String(e)}`);
-    return null;
+    const msg = e instanceof Error ? e.message : String(e);
+    log(`boot sessions: ${msg}`);
+    note = msg.startsWith('cwd is not an existing directory')
+      ? 'Key-on session not started: start folder missing'
+      : 'Key-on session not started: see the server log';
   }
+  timers.clearTimeout(timer);
+  live.bootDone?.(note);
+  return id;
 }
 
 // Key-on with a data lock: the boot session waits for the unlock; never blocks the caller, never throws.
-export function bootAfterUnlock({ live, runner, dirs = [], log = () => {} }) {
+export function bootAfterUnlock({ live, runner, dirs = [], log = () => {}, timers, bootLimitMs }) {
   return live.whenUnlocked().then(() => {
     log('boot: data unlocked, starting the key-on session');
-    return bootSessions({ runner, live, dirs, log });
+    return bootSessions({ runner, live, dirs, log, timers, bootLimitMs });
   });
+}
+
+// The TCP probe target of --netmon from REVVIEW_NETMON_HOST (host or host:port). A bad value is logged and the
+// default is used: a typo in the environment must not stop the bar.
+export function netmonTarget(value, log = () => {}) {
+  const fallback = { host: 'api.anthropic.com', port: 443 };
+  if (!value) return fallback;
+  const m = /^([A-Za-z0-9._-]+)(?::(\d{1,5}))?$/.exec(value);
+  if (!m || (m[2] !== undefined && (Number(m[2]) < 1 || Number(m[2]) > 65535))) {
+    log(`REVVIEW_NETMON_HOST must be host or host:port, got ${value}; using api.anthropic.com:443`);
+    return fallback;
+  }
+  return { host: m[1], port: m[2] === undefined ? 443 : Number(m[2]) };
 }
 
 // SIGTERM/SIGINT: close the server (which stops the grab helper), then exit 0.
@@ -655,18 +693,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   let netmon = null;
   let netmonLine = null;
   if (args.netmon) {
-    let host = 'api.anthropic.com';
-    let port = 443;
-    const v = process.env.REVVIEW_NETMON_HOST;
-    if (v) {
-      const m = /^([A-Za-z0-9._-]+)(?::(\d{1,5}))?$/.exec(v);
-      if (!m || (m[2] !== undefined && (Number(m[2]) < 1 || Number(m[2]) > 65535))) {
-        console.error(`REVVIEW_NETMON_HOST must be host or host:port, got ${v}`);
-        process.exit(2);
-      }
-      host = m[1];
-      if (m[2] !== undefined) port = Number(m[2]);
-    }
+    const { host, port } = netmonTarget(process.env.REVVIEW_NETMON_HOST, (m) => console.error(m));
     netmon = { probe: createDefaultProbe({ host, port }) };
     netmonLine = `netmon: online = default route + TCP connect to ${host}:${port} every 10 s`;
   }
@@ -690,6 +717,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const log = (m) => console.error(m);
     bootAfterUnlock({ live, runner, dirs: args.start, log }).then(() => log('boot: key-on session step done'));
   } else if (args.boot && runner) selectId = await bootSessions({ runner, live, dirs: args.start, log: (m) => console.error(m) });
+  else if (args.boot) live.bootDone(); // no runner: nothing will ever start a session, so the boot STARTING ends now
   else if (selectId !== null) live.select(selectId);
   const selectedNow = selectId !== null && live.selected() === selectId;
   const { url } = live;

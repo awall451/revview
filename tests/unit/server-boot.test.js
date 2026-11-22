@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import path from 'node:path';
 import { startLiveServer, parseArgs, bootSessions } from '../../src/server/index.js';
 
 const A = '11111111-1111-4111-8111-111111111111';
@@ -35,17 +34,20 @@ test('boot with an owned window listed: that session shows, not starting', async
   const runner = fakeRunner([{ id: A, window: '@1', cwd: '/tmp', name: 'one' }]);
   const live = await startLiveServer({ port: 0, boot: true, sessions: runner });
   t.after(() => live.close());
+  // r6-06: the quiet placeholder stays STARTING until the boot is done (no "No session chosen" flash in between)
+  assert.equal(live.state().view, 'starting');
+  live.bootDone();
   assert.notEqual(live.state().view, 'starting');
 });
 
-test('bootSessions: no windows -> starts each dir (resolved), refreshes, selects the last', async (t) => {
+test('bootSessions: no windows -> starts each dir, refreshes, selects the last', async (t) => {
   const runner = fakeRunner();
   const live = await startLiveServer({ port: 0, boot: true, sessions: runner });
   t.after(() => live.close());
   assert.equal(live.state().view, 'starting');
-  const id = await bootSessions({ runner, live, dirs: ['rel-a', '/tmp'], log: () => {} });
+  const id = await bootSessions({ runner, live, dirs: ['/tmp/rel-a', '/tmp'], log: () => {} });
   assert.equal(id, B);
-  assert.deepEqual(runner.started, [path.resolve('rel-a'), '/tmp']);
+  assert.deepEqual(runner.started, ['/tmp/rel-a', '/tmp']);
   assert.equal(live.selected(), B);
   assert.notEqual(live.state().view, 'starting');
 });

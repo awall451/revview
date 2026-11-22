@@ -15,16 +15,25 @@ Open `http://127.0.0.1:8138/`.
 
 ## Key-on on the Pi: `--boot` and `--netmon`
 
-`--boot`: the bar shows STARTING from the first moment until a session is on the board. After the server is
+`--boot`: the bar shows STARTING from the first moment until the boot is done (see below). After the server is
 listening (so Claude's SessionStart hook reaches it) `bootSessions` looks at the tmux windows: none (the power was
 cut, tmux is gone) starts one session per `--start` directory, or the one in env `REVVIEW_START` when no `--start`
 was given (only used with `--sessions`), and selects the last; exactly one window (a service restart) selects it
-and starts nothing; several select none. A failure here is logged and never stops the bar. Without `--boot`,
+and starts nothing; several select none. A failure here is logged and never stops the bar. `bootSessions` always ends the boot
+STARTING (`live.bootDone(note)`, internal, no HTTP route; the board event `RevviewBootDone` is refused over HTTP with
+403), after any select, so the bar's buttons work and New session is reachable: nothing to start and no window ->
+note "No session yet: open the menu for New session"; a start folder that is not absolute is refused before trying
+(`REVVIEW_START must be an absolute folder, got <dir>` in the log; never resolved against the service's cwd) ->
+"Key-on session not started: start folder must be an absolute path"; the runner's "cwd is not an existing
+directory" -> "...: start folder missing"; any other failure -> "...: see the server log". If the boot has not
+finished within `bootLimitMs` (default 60000, with injectable `timers`) the STARTING ends with "Key-on session is
+slow to start: see the server log" and the start goes on (a later success still selects the session). With a data lock
+the limit starts after the unlock. `--boot` without `--sessions` ends STARTING at once, with no note. Without `--boot`,
 `REVVIEW_START` is ignored and `--start` works as before.
 
 `--netmon`: "online" means a default route on any interface (`/proc/net/route`, `/proc/net/ipv6_route`, so the
 phone hotspot over Wi-Fi counts) plus a TCP connect to the Claude API host (`api.anthropic.com:443`; env
-`REVVIEW_NETMON_HOST` = `host` or `host:port` changes it, a bad value exits with code 2). It checks every 10 s
+`REVVIEW_NETMON_HOST` = `host` or `host:port` changes it; a bad value is logged (`REVVIEW_NETMON_HOST must be host or host:port, got <v>; using api.anthropic.com:443`) and the default is used, the server still starts; `netmonTarget` parses it). It checks every 10 s
 (every 5 s while offline). Two failures in a row make the bar show OFFLINE; one success brings it back. Without
 a default route nothing is sent at all. Nothing depends on Ethernet. Code: `src/server/netmon.js`.
 
@@ -35,7 +44,7 @@ a default route nothing is sent at all. Nothing depends on Ethernet. Code: `src/
 when the topmost mount on `dir` is ext4 from `/dev/mapper/revview-data`, as `/proc/self/mountinfo` says. The server
 reads it at start, every 3 s, and when poked. While locked the bar shows INSERT KEY, the key-on session (`--boot`)
 waits, and New session from the menu is refused; the bar, the buttons, the menu and read aloud keep working. When the
-data unlocks, the bar goes on to STARTING and the key-on session starts once. Code: `src/server/datalock.js`.
+data unlocks, the key-on session starts once and the boot STARTING ends as above. Code: `src/server/datalock.js`.
 `pi/data-setup.sh` writes `/etc/revview/data.env` with the variable; the unit reads it.
 
 **The poke rule.** With `--data-lock`, a posted `RevviewDataLock` does NOT set the lock: its `locked` value is
@@ -109,7 +118,7 @@ With `--input` the device reader (`src/input`) runs inside the server. Its prese
 `{hook_event_name:'RevviewInput', present}` (only counted when it changed; the page shows the quiet NO BUTTONS tag).
 Gestures (`tap`, `hold`, `long-hold`) are kept in an in-memory log of the last 32, **not** in the board: `seq` and the
 state do not change for them. Each entry is `{button, gesture, source: 'device'|'bridge'|'post', at, dropped}`;
-`dropped` is true when the view was `starting` (presses then are dropped, not queued). `onGesture(entry)` is called
+`dropped` is true while the boot STARTING lasts (board phase `starting` and view `starting`; presses then are dropped, not queued). Under INSERT KEY or after the boot is done presses are not dropped. `onGesture(entry)` is called
 for each (a throwing callback is caught and logged).
 
 - `GET /buttons`: `{"buttons": "unknown"|"present"|"missing", "gestures": [oldest first]}`, `no-store`.

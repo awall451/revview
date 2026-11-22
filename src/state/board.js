@@ -367,6 +367,14 @@ function reduceInner(b, event) {
         && b.selected === null && b.want === want && b.nav === null) return b;
       return { ...b, phase: 'starting', sessions: {}, ended: [], selected: null, want, nav: null };
     }
+    case 'RevviewBootDone': {
+      // the key-on boot is over (a session came, or none will: nothing to start, or the start failed): the bar
+      // leaves STARTING for the initial phase so its buttons work. Outside the boot STARTING it changes nothing.
+      if (b.phase !== 'starting') return b;
+      const note = event.note;
+      const ok = typeof note === 'string' && note.length >= 1 && note.length <= 120;
+      return { ...b, phase: 'unknown', note: ok ? note : b.note };
+    }
     case 'RevviewSelect': {
       if (!isStr(event.session_id)) return b;
       const sid = event.session_id;
@@ -722,7 +730,7 @@ function extrasOf(b, shownKey) {
     position: b.owned === null || i < 0 ? null : { index: i + 1, count: order.length },
     elsewhere: order.filter((k) => k !== shownKey && b.sessions[k].pending.length > 0).length,
     nav: navView(b),
-    note: typeof b.note === 'string' ? b.note : voice !== 'none' && shownKey !== null && b.sessions[shownKey].quiet === true ? 'No events from this session yet' : null,
+    note: typeof b.note === 'string' ? b.note : voice !== 'none' && shownKey !== null && b.sessions[shownKey].quiet === true && b.phase !== 'starting' ? 'No events from this session yet' : null,
     answered: answeredOf(shownKey === null ? null : b.sessions[shownKey]),
   };
 }
@@ -760,7 +768,8 @@ export function boardView(board) {
   // the call revview answered (nothing pending): the bar shows that call, not the state's last tool/command
   const ans = ask === null && shown.answer !== undefined ? shown.answer : null;
   const ownOutput = ans === null || (ans.tool === 'Bash' && ans.command !== null && s.command === ans.command);
-  const activity = act(shown);
+  // while the boot STARTING lasts a quiet placeholder (no hook yet) is still STARTING, not UNKNOWN
+  const activity = b.phase === 'starting' && shown.quiet === true ? 'starting' : act(shown);
   // a failed turn (StopFailure, QA r3-05): the old call's tool, command and output do not sit under the message
   const failed = ask === null && ans === null && s.failed ? s.failed : null;
   const repo = s.repo ?? b.context.repo;
