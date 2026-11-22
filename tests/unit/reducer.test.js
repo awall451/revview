@@ -485,3 +485,14 @@ test('StopFailure message: ANSI stripped, cut by code points (no split surrogate
   assert.equal(s.failed.message.includes('['), false);
   assert.equal(s.failed.message.includes('\uFFFD'), false);
 });
+
+// QA r6-05: a StopFailure message that is cut ends with an ellipsis, within the 200 code point limit
+test('StopFailure message: 330 chars is cut to 199 + an ellipsis; 199 and 200 are unchanged; 201 is cut', () => {
+  const msg = (n) => run([e('StopFailure', { error: 'x', last_assistant_message: 'a'.repeat(n) })]).failed.message;
+  const cut = msg(330);
+  assert.equal(Array.from(cut).length, 200);
+  assert.equal(cut, 'a'.repeat(199) + '\u2026');
+  assert.equal(msg(200), 'a'.repeat(200));
+  assert.equal(msg(199), 'a'.repeat(199));
+  assert.equal(msg(201), 'a'.repeat(199) + '\u2026');
+});

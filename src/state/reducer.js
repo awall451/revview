@@ -86,8 +86,10 @@ const ERROR_WORD = /^[a-z_]{1,40}$/;
 
 function failedOf(event) {
   const error = typeof event.error === 'string' && ERROR_WORD.test(event.error) ? event.error : 'unknown';
-  const text = typeof event.last_assistant_message === 'string'
-    ? Array.from(stripAnsi(event.last_assistant_message).replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim()).slice(0, 200).join('').trim() : '';
+  // up to 200 code points; a longer message is cut to 199 and ends with an ellipsis (as command and output rows do)
+  const cps = typeof event.last_assistant_message === 'string'
+    ? Array.from(stripAnsi(event.last_assistant_message).replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim()) : [];
+  const text = cps.length > 200 ? cps.slice(0, 199).join('').trim() + '…' : cps.join('');
   return { error, message: text === '' ? null : text };
 }
 

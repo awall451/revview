@@ -45,7 +45,15 @@ and `audio`. The older set-up's `revview` system user is no longer used.
 4. **Node 22 or newer**: `node --version`. If it is missing or older than 22, install Node 22 system-wide (outside
    your home; for example from NodeSource *(from memory)*). The installer checks it and never installs it.
 5. **The repository**: put it in `/opt/revview` (outside the home: part B will encrypt the home's data, and the bar
-   must run while that is locked), owned by root and readable by everyone, then `cd /opt/revview && sudo npm ci`.
+   must run while that is locked), owned by root and readable by everyone. The Pi does not need Ethernet for this.
+   - With the Pi on Wi-Fi (home Wi-Fi or the phone's hotspot): `sudo apt install git` if `git` is missing, then
+     `sudo git clone https://github.com/awall451/revview /opt/revview`. Cloned with `sudo`, it is already owned by root.
+   - With no network on the Pi: copy the repository from a laptop (a USB stick, or `scp`/`rsync` over Wi-Fi into your
+     home, then `sudo mv` it to `/opt/revview`) and make it root-owned and not writable by others:
+     `sudo chown -R root:root /opt/revview && sudo chmod -R a+rX,go-w /opt/revview`.
+
+   There is no `npm ci` step: the server, the hooks and the installer use only Node's standard library. `npm ci` would
+   only install the dev tools for the checks (Playwright, ESLint), which the Pi never runs.
 6. **Claude Code**, as the kiosk user (not root): install it with Anthropic's native installer *(from memory:
    `curl -fsSL https://claude.ai/install.sh | bash`, which puts `claude` in `~/.local/bin`)*, then run `claude` once
    in a terminal and sign in with your claude.ai account. Set up `/voice` and its key as in `docs/BUTTONS.md`.
@@ -80,16 +88,28 @@ and `audio`. The older set-up's `revview` system user is no longer used.
 
    Every file it changes that existed before is copied once to `<file>.revview-backup`. Files are written through a
    temporary file in the same directory and a rename (on the FAT boot partition that is still the best available).
-   It never writes through a symlink: a target that is a symlink (also `~/.config/labwc/autostart`) is skipped, a
-   warning is printed and the exit code is 1. `REVVIEW_DIR` must match `^/[A-Za-z0-9._/-]+$`; a `--root` that only
-   resolves to `/` is refused (pass `/`). `/etc/lightdm/lightdm.conf` gets the autologin in every `[Seat:*]` section.
-   When packages are missing it runs `apt-get update` first. Exit codes: 0 done, 2 bad arguments (nothing written),
-   1 a file was refused (the rest is done).
+   It never writes through a symlink: if any part of a target's path is a symlink (the file itself, `~/.config` or
+   `~/.config/labwc`, the home directory, `/boot/firmware`, `/etc/udev/rules.d` and so on; below `--root` with a fake
+   root), that file is skipped, a warning is printed and the exit code is 1. `REVVIEW_DIR` must match
+   `^/[A-Za-z0-9._/-]+$`; a `--root` that only resolves to `/` is refused (pass `/`). `/etc/lightdm/lightdm.conf` gets
+   the autologin in every `[Seat:*]` section; a missing `lightdm.conf` is only a note. `--root` as an ordinary user
+   does not chown. When packages are missing it runs `apt-get update` first. Exit codes:
+   - 0: done.
+   - 1: a file was refused or skipped (a symlink, `cmdline.txt` or `config.txt` missing, a `cmdline.txt` with several
+     lines or no `root=`, or hooks skipped): the rest is done; fix it and re-run.
+   - 2: bad arguments, or a read-only root (nothing written).
+   - 3: `setup.mjs` failed part way: nothing after that point was done, the hooks were not installed, and there is no
+     "done" line.
 8. **Settings** (optional), in `/etc/revview/server.env` (one `KEY=value` per line, no quotes):
-   - `REVVIEW_START=/home/NAME/my-repo`: at key-on a Claude session starts there by itself. Without it, start one from
-     the bar's menu (New session) once you are parked;
+   - `REVVIEW_START=/home/NAME/my-repo`: at key-on a Claude session starts there by itself. It must be an absolute
+     folder. Without it (the default), with `--boot` the bar leaves STARTING once the boot is done and says "No session
+     yet: open the menu for New session": start one from the menu once you are parked. A `REVVIEW_START` that is
+     relative, missing, or whose Claude fails to start leaves a short note ("Key-on session not started: ...") and the
+     menu works. A session revview starts (key-on or New session) shows STARTING until its first hook, at most 30 s
+     (then UNKNOWN "No events from this session yet"); push-to-talk is not sent while it says STARTING;
    - `REVVIEW_PROJECTS=/path/to/projects.json`: the folders the menu offers (`config/projects.example.json`);
-   - `REVVIEW_NETMON_HOST=host:port`: what the network check connects to (default `api.anthropic.com:443`).
+   - `REVVIEW_NETMON_HOST=host:port`: what the network check connects to (default `api.anthropic.com:443`). A bad value
+     is logged and the default is used (IPv6 literals like `[::1]:443` are not accepted).
 9. **Reboot**: `sudo reboot`. Expected: a quiet boot, the desktop logs in by itself, the bar shows NO LINK for a
    moment, then STARTING, then your session.
 10. **Dongle ids**, once the real dongle exists: read them with `lsusb` and `/proc/bus/input/devices` (bench W1, D5),
@@ -182,7 +202,8 @@ makes no sense under the overlay)*. Run this step LAST, after the install, the d
 1. `sudo bash /opt/revview/pi/readonly.sh disable` (round 1: turns the overlay off). Reboot.
 2. `sudo bash /opt/revview/pi/readonly.sh disable` again (round 2: turns the read-only boot partition off).
 3. `sudo apt update && sudo apt full-upgrade`.
-4. `sudo git -C /opt/revview pull && cd /opt/revview && sudo npm ci` (or however the repository got there). The
+4. `sudo git -C /opt/revview pull` if you cloned it (Wi-Fi needed), or copy the new version over `/opt/revview` from a
+   laptop as in step 5 and run the `chown`/`chmod` there again. No `npm ci`. The
    repository must stay owned by root and not writable by your user: the unlock runs `pi/unlock.sh` from it as root,
    and `data-setup.sh` refuses a path your user could change. Never `chown` it to your user.
 5. `claude update`, as the kiosk user, with the data unlocked (the stick in). Claude's own auto-updater is off
@@ -218,7 +239,23 @@ need changing. The paths in that file are the ones above.
   that is running); remove the file to bring it back (within about 5 s). If you cannot get to a terminal: put the
   SD card in another computer and create an empty file `revview-kiosk-paused` in its boot partition.
 - Change rotation or user: run the installer again with the new options; it rewrites only what differs.
-- Undo: the `.revview-backup` copies are the files as they were before the first install.
+- Undo (UNTESTED; do it with the overlay off, see Updating). Stop the server first, as the kiosk user:
+  `systemctl --user disable --now revview`. Then, as root, remove what the installer created:
+  - `/etc/udev/rules.d/70-revview-dongle.rules`, `71-revview-touch.rules` (and `72-revview-key.rules` if you did the
+    data set-up);
+  - `/etc/systemd/user/revview.service` and `/etc/systemd/user/default.target.wants/revview.service` (the link);
+  - `/var/lib/systemd/linger/NAME` (or `loginctl disable-linger NAME`);
+  - `/etc/revview/server.env` (and `/etc/revview/` if empty);
+  - `~/.config/labwc/autostart`: on a fresh Pi it had no backup, so just delete it (the desktop's own autostart
+    applies again); if `autostart.revview-backup` exists, move it back over it;
+  - the hooks: `node /opt/revview/hooks/install.mjs --remove` as the kiosk user (it removes only revview's entries
+    from `~/.claude/settings.json` and keeps the rest; `--dry-run` shows first);
+  - the data set-up, if you did it (`docs/REVOKE.md` for the data itself): `/etc/revview/data.conf`, `data.env`,
+    `/etc/profile.d/revview-claude.sh`, `/etc/systemd/system/revview-unlock.service` and `revview-unlock-stick.service`
+    and `/etc/systemd/system/multi-user.target.wants/revview-unlock.service`; `sudo systemctl daemon-reload`.
+  - Files the installer edited and backed up (`cmdline.txt`, `config.txt`, `lightdm.conf`): put each
+    `<file>.revview-backup` back over the file. Without a backup the file was not there before.
+  - `udevadm control --reload` (or reboot) afterwards. Packages and group memberships (`input`, `audio`) stay.
 
 ## How it fits together
 

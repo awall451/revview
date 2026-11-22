@@ -8,7 +8,7 @@
 #   --rotate  90 (normal mount, default) or 270 (mount flipped 180 degrees)
 #   --root    act on this directory tree instead of / (a fake root for tests; no root needed, no apt,
 #             no usermod, no systemctl, no udevadm)
-#   REVVIEW_DIR defaults to this repository; it should live outside the home (e.g. /opt/revview), with npm ci done.
+#   REVVIEW_DIR defaults to this repository; it should live outside the home (e.g. /opt/revview); no npm ci is needed (Node's standard library only).
 #             Its path must match ^/[A-Za-z0-9._/-]+$ (it goes into a shell line and a systemd unit).
 #   --root    must not merely resolve to / (a symlink): give exactly / for a real install.
 # Exit: 0 done; 2 bad arguments, or the root is read-only (overlay on) or /boot/firmware is ro (nothing written);
