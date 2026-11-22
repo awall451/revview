@@ -1031,3 +1031,98 @@ QA r3-05: after an API error the bar showed a plain WAITING FOR ME, like a turn 
 - **Small:** `cleanText` also strips bidi/zero-width characters; `displayTool` output is cleaned and cut to 64 code points;
   the StopFailure message loses ANSI and is cut by code points; WebFetch prompts are spoken with the host, WebSearch with the
   query cut by words; `--remove` writes no backup (QA r5b-03).
+
+## 2026-11-22: stage 4A, the Pi appliance set-up (written; tested against a fake root only, nothing run on a Pi)
+
+Files: `pi/install.sh` (root steps), `pi/setup.mjs` (every file edit and generated file, pure functions + a CLI),
+`pi/kiosk.sh` (respawn loop), `pi/revview.service` (now a user unit), `src/server/netmon.js`, `--boot` and
+`--netmon` in `src/server/index.js`. Tests: `tests/unit/pi-setup.test.js`, `pi-install.test.js`, `pi-kiosk.test.js`,
+`server-boot.test.js`, `netmon.test.js`; fixtures `tests/unit/fixtures/pi/` (stock Trixie files WRITTEN FROM MEMORY).
+Owner steps: `pi/README.md`. Bench items P1-P14 in `docs/BENCH-TEST.md`, all untested.
+
+- **One login user runs everything** (lead's default, kept). The ordinary user the desktop auto-logs in as (name given
+  with `pi/install.sh --user NAME`, never assumed to be `pi`) runs the kiosk Chromium, the revview server and the Claude
+  sessions (tmux). Reason: Claude Code's claude.ai sign-in (`~/.claude.json`, `~/.claude/`), its settings and hooks
+  and the repositories live in that user's home, and Claude's `/voice` needs that user's audio session for the mic.
+  The WB6 `revview` system user is dropped: it had no sign-in and no audio session. `install.sh` removes the old system
+  unit `/etc/systemd/system/revview.service` if it finds it and prints `userdel revview` (it deletes no user). The user
+  gets groups `input` (wheel buttons) and `audio`; it must exist already and must not be root.
+- **The server is a systemd USER unit**, `/etc/systemd/user/revview.service` with `ConditionUser=<user>`, enabled by a
+  symlink in `/etc/systemd/user/default.target.wants/` and started at boot through lingering
+  (`/var/lib/systemd/linger/<user>`, the file `loginctl enable-linger` writes). Why a user unit and not a system unit
+  with `User=`: a system unit gets no `XDG_RUNTIME_DIR` and no PipeWire session, so Claude's mic (inside the tmux
+  sessions the server starts, which inherit its environment) and read aloud would likely have no audio; with lingering
+  it still starts at boot without waiting for the desktop. Why in `/etc/systemd/user` and not in the home: part B moves
+  the user's data onto the encrypted partition, and the server must run while that is locked (to show INSERT KEY).
+  `User=` and `SupplementaryGroups=` do not belong in user units, so the groups come from the account. The unit keeps
+  `--input --sessions`, never `--dev-bridge`, and no ordering lines (the WB6 test still holds unchanged); it adds
+  `--boot --netmon` and `PATH=%h/.local/bin:...` (Claude Code's native install puts `claude` in `~/.local/bin`, from
+  memory). Logs: `journalctl --user -u revview` as that user. `KillMode=process` stays (bench D3).
+- **The repository lives outside the home** (`/opt/revview` suggested), readable by the user. Node is checked (22 or
+  newer; a warning when missing, older or inside a home), never installed: the unit uses `command -v node` as found.
+- **Kiosk.** `~/.config/labwc/autostart` (DESIGN) is generated: `wlr-randr --output HDMI-A-1 --transform 90`, then
+  `<repo>/pi/kiosk.sh &`. A user autostart replaces the system `/etc/xdg/labwc/autostart` (from memory), so there is no
+  desktop, panel or icons: that is the "black desktop, no icons". A foreign existing autostart is backed up once.
+  `kiosk.sh` is the respawn loop: Chromium on `file://<repo>/src/view/boot.html?port=8138` (the boot page shows NO
+  LINK until the server answers, then goes to `http://127.0.0.1:8138/`; src/view README "Boot page"), flags for
+  Wayland (`--ozone-platform=wayland`) and against first-run, restore and crash bubbles, keyring prompts
+  (`--password-store=basic`), translate, pinch and swipe-back. The profile is in `$XDG_RUNTIME_DIR` (tmpfs): fresh at
+  every boot, so no restore prompt after a power cut and no browser writes to the SD card; the crash marks in
+  `Preferences` are cleared before each respawn. Respawn after 1 s, doubling up to 30 s while Chromium dies in under
+  10 s. Pause markers: `~/.config/revview/kiosk-paused` or `/boot/firmware/revview-kiosk-paused` (the second can be
+  made from another computer on the SD card). All flag behaviour is from memory (no Chromium docs reachable).
+- **Rotation, all three** (DESIGN "three things must agree"): `video=HDMI-A-1:400x1280M@60,rotate=90` on the kernel
+  command line, `wlr-randr --transform 90` in the autostart, the touch udev rule
+  `/etc/udev/rules.d/71-revview-touch.rules` with matrix `0 -1 1 1 0 0`. `--rotate 270` (mount flipped 180 degrees)
+  gives `rotate=270`, transform 270 and matrix `0 1 0 -1 0 1`; `rotate=270` for the console is our inference, DESIGN
+  only names the transform and matrix. `--output` changes the connector name in both places.
+- **Quiet boot** exactly as DESIGN: `config.txt` gets `disable_splash=1` in a marked `[all]` block at the end (any
+  other `disable_splash=` line is removed, so ours is the only one; a warning when no `dtoverlay=vc4-kms-v3d` is
+  active); `cmdline.txt` loses `splash` and gets `quiet loglevel=0 logo.nologo vt.global_cursor_default=0` (old
+  copies of these tokens and of `video=<output>:` are removed first, so every run gives the same file). cmdline.txt
+  stays one line; a cmdline.txt with several lines is refused and left alone. The first change copies a file once to
+  `<file>.revview-backup`.
+- **Autologin**: `autologin-user=<user>` in `[Seat:*]` of `/etc/lightdm/lightdm.conf` (from memory: Pi OS with labwc
+  still uses lightdm). Without that file the installer says to use raspi-config's Desktop Autologin and changes nothing.
+- **Hooks**: `hooks/install.mjs` runs as that user (`runuser -u <user>`), so they land in `~/.claude/settings.json`
+  owned by the user.
+- **Testable here**: `install.sh --root <dir>` acts on a fake root (no root needed; no apt, usermod, systemctl or
+  udevadm there) and `--dry-run` writes nothing. The tests run the real script against a temp root twice (the second
+  run changes no byte) and run shellcheck on the generated autostart. `tools/check` lints `install.sh` and `kiosk.sh`
+  (bash shebang); `setup.mjs` is linted by eslint. The generated autostart is not in git, so only the test lints it.
+- **Packages**: `chromium tmux python3 espeak-ng wlr-randr` (only the missing ones, `--no-install-recommends`). No new
+  npm dependency. Package names are from memory for Trixie (`chromium`, not `chromium-browser`; the loop tries both).
+- **RevviewStarting: the server sends it itself, in-process, with `--boot`.** Right after listening, before the first
+  tmux listing. Why the server: a curl from the autostart could run before the server is up and be lost, and the
+  server knows when it is up. Before it listens the kiosk shows NO LINK (the boot page); after that, STARTING until
+  the first session is on the board. `--boot` also starts the key-on Claude session itself, AFTER listening (so that
+  session's SessionStart reaches the bar), in `REVVIEW_START` (one directory, from `/etc/revview/server.env`; unset =
+  none, the driver starts one from the menu), and only when tmux has no revview window (a power cut killed them; after
+  a service restart the surviving window is selected and nothing new starts). A failed start is logged and the bar
+  stays up. Known gap: once the started window is listed it shows as a quiet placeholder (UNKNOWN, "No events from
+  this session yet") until Claude's SessionStart hook, not as STARTING; making a quiet placeholder read STARTING during
+  the boot phase is a state-core change, left to core (it must not trap the driver if SessionStart is lost). Without
+  `REVVIEW_START` and with no surviving window the bar says STARTING until the driver starts a session.
+- **RevviewNetwork: the server sends it, in-process, with `--netmon`** (`src/server/netmon.js`, injected probe and
+  timers). "Online" = a default route on any interface (`/proc/net/route` or `/proc/net/ipv6_route`; no interface
+  name, nothing about Ethernet) AND a TCP connect to `api.anthropic.com:443` within 3 s (`REVVIEW_NETMON_HOST`
+  overrides it). Why that host: Claude Code needs it anyway, so no extra service is contacted, and a hotspot whose
+  Wi-Fi link is up while the phone has no signal (a tunnel) still counts as offline. No route = offline with no
+  traffic at all. Every 10 s while online, 5 s while offline; OFFLINE after 2 failures in a row (one lost connect does
+  not flash the bar), back after 1 success. Cost: one DNS lookup and one TCP handshake per 10 s. Not chosen:
+  NetworkManager's state (says nothing about the phone's own signal), ping (ICMP needs a capability), an HTTP request
+  (more bytes). Whether the host answers a bare connect from the car and how fast OFFLINE shows is bench P11/P12.
+  Both events are also accepted over HTTP (they are not in the 403 list); the server does not need that.
+- **RevviewDataLock** is part B (not sent by anything yet).
+- **Where part B hooks in** (nothing here blocks it):
+  - The home holds the sign-in. Part B mounts the LUKS data partition and puts `~/.claude`, `~/.claude.json`, the
+    repositories and the push credentials there (bind mounts or symlinks). Recommended: keep `~/.config/labwc` and
+    `~/.config/revview` on the root file system, so the kiosk starts while the data is locked; or install the
+    autostart as `/etc/xdg/labwc/autostart` instead. Decide in part B.
+  - The server and its unit live outside the home (`/opt/revview`, `/etc/systemd/user`), so the bar runs while locked.
+    The unlock step sends `RevviewDataLock` (accepted over HTTP: a curl to 127.0.0.1:8138, or an in-process flag like
+    `--netmon`), and the key-on session must start only after unlock: today `--boot` starts `REVVIEW_START` at server
+    start, so part B either moves that start behind the unlock or has the unlock step trigger it.
+  - Read-only root: the kiosk profile is already in tmpfs; the linger file, units, udev rules, `server.env` and the
+    `/boot/firmware` edits are written once by the installer (run it with the overlay off). tmux sockets are in `/tmp`.
+  - Piper install, `docs/REVOKE.md`, power-cut behaviour: part B.
