@@ -39,8 +39,9 @@ gesture.
 - **A list or menu is open (`board.nav !== null`): navigation only.** No button sends a key or answers a permission
   request. Every gesture is applied as `RevviewNav`, except press tap in the New session list: the project is
   `projects[row]` (the controller's own validated list; refused if missing or different from the board's row label),
-  the list closes, `runner.start({ cwd })` runs, then the internal `RevviewSelect` makes the board select the new
-  session when its first hook event arrives, and owned is refreshed. A refused start leaves the selection alone.
+  the list closes, `runner.start({ cwd })` runs, then owned is refreshed (the new window goes on the board as a quiet
+  placeholder) and the internal `RevviewSelect` selects it at once. A refused or failed start leaves the selection alone and sets
+  a fixed board note ('project folder missing', 'see the server log' or 'no such project'), never the error text.
 - **Normal view:**
   - cancel tap = Escape, cancel long-hold = one Ctrl+C (refused for 5000 ms after one was sent: two Ctrl+C in that
     window exit Claude), push-to-talk tap = Space (tap mode only), all to `selectedKey(board)` (none: refused
@@ -59,7 +60,7 @@ and the registry's prompt key includes the session. So a selection change, or a 
 or by timeout), restarts the 1500 ms shown time of the prompt.
 
 The server (`src/server/index.js`) wires it to every device/bridge gesture, `POST /permission` feeds the registry, and
-applies `RevviewOwned` (from `runner.list()`) and `RevviewProjects`.
+applies `RevviewOwned` (from `runner.list()`; also at once when a key send fails with 'selected session gone') and `RevviewProjects`.
 
 ## Why targeting is safe
 

@@ -114,7 +114,7 @@ permission prompts, `pre` = the open PreToolUse calls per agent (at most 32); `f
   computes the same rule without storing it.
 - `boardView` branch: `s.branch`, else `board.context.branch` only when `board.context.repo` is the repo shown.
 
-`boardView(board)` is the flat state the page renders, always with exactly these keys: `view, activity,
+`boardView(board)` is the flat state the page renders, always with exactly these keys (the list omits `note` and `answered`, added later: `note` = the board note or the shown quiet session's note; `answered` as above): `view, activity,
 offline, locked, repo, branch, tool, file, diff {added, removed}, command, output, outputLines, others, diffIncomplete, buttons, voice, position, elsewhere, nav` (`buttons`: `'unknown'` | `'present'` | `'missing'`, from the board whatever session is shown).
 With a shown session these are its fields (`others` = other live sessions, `diffIncomplete` = its `dropped`,
 repo/branch fall back to `board.context`). With no live session `activity` is the board phase
@@ -131,13 +131,13 @@ session. The server feeds it after sending the key and refuses it over HTTP.
 
 Internal event `RevviewAnswered {session_id, agent, since, decision: 'allow'|'deny'}`: revview answered that permission
 request through the hook. The pending entry with that exact `agent` and `since` in that session is removed (tick
-advances, focus re-picked); no other entry, no activity change. No match, an unknown session or a malformed event
+advances, focus re-picked); no other entry, no activity change. The decision is stored on the session and `boardView` carries it as `answered` (`'allow'|'deny'|null`) while the shown call is the answered one; it is cleared by that session's next `PreToolUse`, `PermissionRequest` / permission `Notification`, `SessionStart` or driver prompt. No match, an unknown session or a malformed event
 returns the same board. Refused over HTTP like `RevviewInterrupted`.
 
 **Driver-chosen selection (WB4).** New board fields: `selected` (live session id or null), `want` (a session revview
 started that is not on the board yet: the first event that creates it sets `selected = want`, `want = null`),
-`owned` (ids revview owns; null = the server runs without sessions), `nav` (null or `{kind, row}`, kind `list|menu|new|projects|settings`),
-`projects` (config-file paths, display only); each session has `born` (the board tick that created it, kept on updates).
+`owned` (ids revview owns; null = the server runs without sessions), `nav` (null or `{kind, row, id}`, kind `list|menu|new|projects|settings`; in the list `id` is the highlighted session and the highlight follows it; if it ends the list closes with the note 'Highlighted session ended: list closed'; an open new/projects view closes when the projects list changes),
+`projects` (config-file paths, display only), `note` (null or a fixed text from `RevviewNote`); each session has `born` (the board tick that created it, kept on updates).
 The shown session is `selected` when live; only when it is null do the heuristics above decide. Other sessions' events never move
 `selected`; when the selected session ends it falls to `homeKey`; the cap never drops `selected` or `want`'s session.
 Exports: `sessionOrder(board)` (sessions other than `''`, by `born` then id), `homeKey(board)` (needs permission 4 > waiting 3 > done 2 >
@@ -145,7 +145,8 @@ working 1 > rest; oldest ask first: smallest `pending[0].since`, else smallest `
 unlike the cap's priority), `selectedKey(board)`.
 
 Internal events (the server refuses them over HTTP): `RevviewSelect {session_id}` (known -> `selected`, unknown -> `want`),
-`RevviewOwned {ids}` (<= 64 ids of <= 200 chars, deduplicated), `RevviewProjects {paths}` (<= 32 strings of <= 4096),
+`RevviewOwned {ids}` (<= 64 ids of <= 200 chars, deduplicated; `names` are display text only: control chars rejected, trimmed to 64) puts each owned id that is not on the board and not in `ended` there as a quiet placeholder (`state` unknown, note 'No events from this session yet', in owned order), removed when no longer owned while still quiet; its first hook event makes it a normal session (a placeholder counts as the one live session for id-less events, and `RevviewSelect` selects it at once; the cap drops sessions not in `owned` before owned ones),
+`RevviewNote {text}` (one of a fixed set of texts; cleared by the next `RevviewNav` button gesture or a selection change), `RevviewProjects {paths}` (<= 32 strings of <= 4096),
 `RevviewNav {button, gesture}` (does not touch `tick` or sessions): normal view left/right tap step through the order (wrapping),
 back hold = home, up/down/press tap open the list on the shown session, menu tap opens the menu; inside a view up/down move the row
 (clamped), press chooses/opens, back tap goes up one level, back hold = home and close, menu tap toggles, button `timeout`

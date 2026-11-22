@@ -87,7 +87,7 @@ for each (a throwing callback is caught and logged).
   process without an Origin header could otherwise forge a press or fake NO BUTTONS. With the bridge, `RevviewButton` takes the
   normal path (204, `seq += 1`, the board ignores it) and, when `button` matches `/^[a-z][a-z0-9-]{0,31}$/` and `gesture` is one
   of the three, is also logged with source `post`.
-- `POST /event` with `RevviewInterrupted`, `RevviewAnswered`, `RevviewSelect`, `RevviewNav`, `RevviewOwned` or `RevviewProjects` is refused with
+- `POST /event` with `RevviewInterrupted`, `RevviewAnswered`, `RevviewSelect`, `RevviewNav`, `RevviewOwned`, `RevviewProjects` or `RevviewNote` is refused with
   **403 always**, even with `--dev-bridge`: they are the board's internal events (what revview itself sent or chose, the selection, the
   list/menu, the owned sessions, the projects). Only `actions.js` and the server itself apply them; there is no HTTP route for `select`.
 - Gestures with source `device` or `bridge` (never `post`, never `dropped`) always go to the actions (`src/sessions/README.md`), with or
@@ -113,7 +113,7 @@ for each (a throwing callback is caught and logged).
   passes 256 KiB (it never reads) is dropped.
 
 `--sessions` makes the session runner on the private tmux socket (`-L revview`); at boot `--start <dir>` (repeatable, implies `--sessions`) starts `claude` there and the last one started is selected
-(through `select(id)`); else exactly one existing revview session is selected. The selected id is printed. `--projects <file>`
+(through `select(id)`); else exactly one existing revview session is selected (it is on the board at once as a quiet placeholder). The boot log says 'selected' only when the board did select it, else 'wanted'. `--projects <file>`
 (default env `REVVIEW_PROJECTS`) is the New session project list (`src/sessions/README.md`, applied once at start as `RevviewProjects`).
 With a runner, `RevviewOwned` (the ids of `runner.list()`) is applied at start, after every session start and every `ownedPollMs`
 (default 5000; an unref'd timer; a failing `list()` is logged and the last value kept). The tmux server is never killed by the live server (sessions outlive a restart).

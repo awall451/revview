@@ -706,7 +706,8 @@ tested in the emulator and with a stand-in; nothing was tried on the Pi or the p
   when the server runs without `--sessions` (then the old look stays).
 - **When the selection changes.** Only by: driver gestures (left/right step through the sessions in the order first
   seen, with wrap; back hold = home; a row chosen in the list); a session revview started (New session, `--start`,
-  or the only existing window at boot), which is selected when its first hook event puts it on the board (`want`);
+  or the only existing window at boot), which is selected at once because it is already on the board as a quiet
+  placeholder (see the fix round below; `want` only covers the gap before the first `RevviewOwned`);
   the selected session ending or being dropped (it falls to home). Never by another session's events. A prompt in
   another session shows only as the `+N` hint with a triangle (`elsewhere`). The old focus heuristics (pending
   prompt pre-empts, sticky focus, working beats idle) apply only while nothing is selected.
@@ -725,7 +726,7 @@ tested in the emulator and with a stand-in; nothing was tried on the Pi or the p
   injected in tests; it is re-armed after every gesture). Back closes one level: new, projects or settings go to
   the menu, the list and the menu go to the normal view. The menu button opens the menu from the list and closes
   the menu and its screens (it toggles). Up and down move the row (no wrap); back hold = home from anywhere.
-- **Internal events.** `RevviewSelect`, `RevviewNav`, `RevviewOwned` and `RevviewProjects` get 403 on `POST /event`
+- **Internal events.** `RevviewSelect`, `RevviewNav`, `RevviewOwned`, `RevviewProjects` and `RevviewNote` get 403 on `POST /event`
   always, also under `--dev-bridge` (stricter than `RevviewButton`, which `--dev-bridge` accepts). The dev bridge
   reaches the list and menu only through `/dev/key` gestures. Dropped gestures and posted ones (source `post`) do
   nothing.
@@ -736,8 +737,8 @@ tested in the emulator and with a stand-in; nothing was tried on the Pi or the p
   and free of `#` and control characters (the same rule as `runner.start`, which checks again and also that the
   directory exists). A bad entry is logged and skipped; a missing or malformed file gives an empty list and the
   bar still runs. **New session** = menu, New session, a project row, press: it starts `claude` in that directory
-  in tmux and the board selects it when its first hook arrives. **Projects** is the read-only list of those paths
-  (press does nothing). **Settings** is a read-only screen of four facts (voice tap mode, wheel buttons found or
+  in tmux and the board selects it at once (it is on the board as a quiet placeholder before its first hook). **Projects** is the read-only list of those paths
+  (press does nothing). **Settings** is a read-only screen of four facts (voice needs tap mode, wheel buttons found or
   not, session counts, projects count); it changes nothing.
 - **Bar looks** (view only; all at `TYPE_MM`, no new size). A mic mark and the position ("2/3") in the band, only
   when the server runs with sessions; without, the old look is unchanged. A crossed mic and a note row at the
@@ -753,7 +754,8 @@ Residual risks and what is not proven:
 - `owned` is polled: the mic mark can be up to 5 s stale. Actions re-verify, so a stale mark never sends a key to
   the wrong window.
 - A hand-started `claude` (not in revview's tmux) can be selected and shown, but the buttons do nothing for it; the
-  bar says so (crossed mic and note).
+  bar says so (crossed mic and note). Home may still land on such a session (r4-06; design question, home
+  ranking is unchanged).
 - Positions renumber when a session ends.
 - The list and menu can distract the driver; that is the owner's choice (BUTTONS question 8). Only the 10 s
   auto-close limits it.
@@ -763,3 +765,39 @@ Residual risks and what is not proven:
   it is the same session.
 - Not tried: the list, menu, switch and New session on the Pi, the pods or in the car; reading the 3.55 mm rows and
   the mic glyph in daylight; a real PermissionRequest after a switch. See bench V1-V9.
+
+### Fix round (QA r4)
+
+Code: `src/state/board.js`, `src/sessions/actions.js`, `src/server/index.js`, `src/view/view.js`. Issues
+`docs/agents/issues/qa-20261122-r4-*.md`. Emulator only, like the rest.
+
+- **List highlight is a session.** `nav.id` is the id of the highlighted session; the highlight follows that
+  session when others come and go (r4-02), not the row number. If it ends while the list is open, the list closes
+  with the note 'Highlighted session ended: list closed'. A prompt that becomes visible then starts its 1500 ms
+  clock at that moment, because nothing is shown as a prompt while nav is open. An open New session or Projects
+  view closes if the projects list changes.
+- **Board `note`** (`RevviewNote`, internal, 403 over HTTP). Fixed texts only, never text from outside. Cleared by
+  the next button gesture or by a selection.
+- **Owned sessions are on the board at once** (r4-01, r4-03). Every `RevviewOwned` puts each owned window (valid
+  UUID `@revview_id`, reported by revview's private tmux server) that is not on the board and not in `ended` as a
+  quiet placeholder: state UNKNOWN, note 'No events from this session yet', in owned order. It is removed when it is
+  no longer owned while still quiet. The first hook event makes it a normal session. So after a restart and after
+  New session the session is on the board and selected immediately; the boot log says 'selected' only when that is
+  true, else 'wanted'. An id-less hook event goes to the one live session when there is exactly one; a placeholder
+  counts as one. New risk: session ids and names now also come from tmux windows. Only windows with a valid
+  `@revview_id` UUID on revview's private tmux server count. Names are display text only (control characters
+  rejected, trimmed to 64) and are never sent anywhere.
+- **Refused or failed New session** shows a fixed note: 'project folder missing', 'see the server log' or 'no such
+  project'. Never the error text.
+- **The 8-session cap** drops sessions revview does not own before its own (r4-08).
+- **Answers in words** (r4-04). `RevviewAnswered` stores the answer on the session. While the shown call is the
+  answered one, the tool row says 'Denied: <tool>' or 'Allowed: <tool>'. This lasts until that session's next
+  `PreToolUse`, `PermissionRequest` or permission `Notification`, `SessionStart`, or driver prompt. So DONE after a
+  deny says Denied, never a denied command as if it ran.
+- **Mic marks** (r4-09, r4-06). Crossed mic on list rows the buttons cannot drive; crossed mic on the band when
+  offline or when no wheel buttons were found. Not-owned note: 'Buttons do nothing here: not a revview session'.
+  The Settings voice row reads 'Voice: needs tap mode (/voice tap in Claude Code)': a requirement, not a detected
+  value (r4-11). STARTING has one note row (r4-11).
+- **A key send failing with 'selected session gone'** refreshes `owned` at once (not after up to 5 s).
+- **Still open:** r4-05 (band numbers ambiguous), r4-07 (refused press is silent), r4-10 (band and row cuts), and
+  home may still land on a session the buttons cannot drive (r4-06, part).
