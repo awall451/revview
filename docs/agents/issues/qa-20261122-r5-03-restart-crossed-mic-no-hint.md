@@ -1,5 +1,5 @@
-status: closed (2026-11-22, work/qa5-fixes: voice `none` wins over the quiet placeholder note)
 ---
+status: closed (2026-11-22, work/qa5-fixes: voice `none` wins over the quiet placeholder note, so "Push-to-talk goes nowhere: no session chosen" shows after a restart; it does not say how to choose, see the list)
 id: qa-20261122-r5-03
 title: After a restart with several revview sessions the bar shows one of them with a crossed mic and no word on why or what to do
 severity: minor

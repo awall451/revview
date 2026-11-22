@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-22, work/qa5-fixes: the answer is tied to the answered request; "Denied/Allowed: <tool>" for any tool after an earlier Bash, showing the answered call only; not yet re-run by QA)
 id: qa-20261122-r5-01
 title: The Allowed/Denied mark (r4-04 fix) never shows for a non-Bash request when a Bash command ran earlier in the turn; the denied Edit then reads as done, with the old command's "2 passed" under it
 severity: major

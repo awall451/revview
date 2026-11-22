@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-22, work/qa5-fixes: OFFLINE keeps the "Denied/Allowed: <tool>" row above "Claude: ...")
 id: qa-20261122-r5-02
 title: A button deny while OFFLINE gives no confirmation: the bar goes from NEEDS PERMISSION straight to OFFLINE "Claude: working"
 severity: minor
