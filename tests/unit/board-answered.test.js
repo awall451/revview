@@ -32,6 +32,16 @@ test('a deny stays through Stop: done shows the same command, answered deny', ()
   assert.equal(v.command, 'npm test');
 });
 
+test('a repeated identical PreToolUse after an answer clears the mark', () => {
+  for (const decision of ['allow', 'deny']) {
+    const b = answeredAfter(decision);
+    assert.equal(boardView(b).answered, decision);
+    const again = reduceBoard(b, ev('PreToolUse', { ...A, ...BASH, tool_use_id: 't1' }));
+    assert.equal(boardView(again).answered, null);
+    assert.equal(again.sessions.A.answer, undefined);
+  }
+});
+
 test('an allow shows until the next PreToolUse', () => {
   const b = answeredAfter('allow');
   assert.equal(boardView(b).answered, 'allow');

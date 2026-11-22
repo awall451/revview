@@ -106,9 +106,9 @@ test.describe('commands break at spaces, not after "--" (QA r3-09)', () => {
       await openView({ ...perm, tool: 'Bash', command: cmd });
       const lines = await commandLines(page);
       expect(lines.length).toBeGreaterThan(1);
-      for (const l of lines.slice(0, -1)) expect(l.replaceAll(WJ, '').trimEnd(), `line ends with "-": ${l}`).not.toMatch(/-$/);
+      for (const l of lines.slice(0, -1)) expect(l.replaceAll(WJ, '').replaceAll('\u200B', '').trimEnd(), `line ends with "-": ${l}`).not.toMatch(/-$/);
       const text = await page.locator('#command').textContent();
-      expect(text.replaceAll(WJ, '')).toBe(cmd);
+      expect(text.replaceAll(WJ, '').replaceAll('\u200B', '')).toBe(cmd);
       await expect(page.locator('#command')).toHaveAttribute('data-full', cmd);
       await expectFits(page);
     });
@@ -121,6 +121,32 @@ test.describe('commands break at spaces, not after "--" (QA r3-09)', () => {
     const text = await page.locator('#command').textContent();
     expect(text.endsWith('…')).toBe(true);
     expect(await page.locator('#command').evaluate((e) => e.getBoundingClientRect().height)).toBeLessThanOrEqual(240);
+  });
+});
+
+test.describe('a long path token breaks after a separator, not inside a word (QA r5-06)', () => {
+  test('lines end after "/" or "-" where the path allows it', async ({ openView, page }) => {
+    const path = '/tmp/qa5-run/test-results-with-a-very-long-directory-name';
+    const cmd = `npx playwright test tests/emulator.spec.js --workers=2 --reporter=line --output=${path} --grep something`;
+    for (const pad of ['', 'x'.repeat(23) + ' ', 'xx '.repeat(7)]) {
+      await openView({ ...perm, tool: 'Bash', command: pad + cmd });
+      const lines = (await commandLines(page)).map((l) => l.replaceAll(WJ, '').replaceAll('\u200B', ''));
+      expect(lines.length).toBeGreaterThan(1);
+      for (const l of lines.slice(0, -1)) {
+        const t = l.trimEnd();
+        // a line that ends inside the path ends right after a separator, never between letters
+        const i = (pad + cmd).indexOf(path);
+        const joined = lines.join('');
+        if (joined.indexOf(t) + t.length > i && joined.indexOf(t) + t.length < i + path.length) expect(t, `mid-word break: ${t}`).toMatch(/[/-]$/);
+      }
+      expect((await page.locator('#command').textContent()).replaceAll(WJ, '').replaceAll('\u200B', '')).toBe(pad + cmd);
+      await expectFits(page);
+    }
+  });
+  test('data-full has no zero width characters', async ({ openView, page }) => {
+    const cmd = 'ls /tmp/qa5-run/test-results-with-a-very-long-directory-name';
+    await openView({ ...perm, tool: 'Bash', command: cmd });
+    await expect(page.locator('#command')).toHaveAttribute('data-full', cmd);
   });
 });
 

@@ -409,7 +409,7 @@ function reduceInner(b, event) {
       const same = b.owned !== null && owned.length === b.owned.length && owned.every((x) => b.owned.includes(x))
         && missing.length === (b.missing ?? []).length && missing.every((x) => (b.missing ?? []).includes(x));
       if (same && sessions === b.sessions && gone === b) return b;
-      sessions = capSessions(sessions, null, b.selected ?? b.focus, b.selected, b.want, owned);
+      sessions = capSessions(sessions, null, b.selected ?? b.focus, b.selected, b.want, [...owned, ...missing]);
       return { ...gone, owned, missing, sessions, tick };
     }
     case 'RevviewProjects': {
@@ -567,7 +567,7 @@ function applyToSession(b, live, id, event) {
     if (stopped === prevStopped && closed === prevClosed && state === prev && sameList(open, prevOpen) && (live === null || dropped === live.dropped)
       && pending === prevPending && pre === prevPre && answer === (live === null ? undefined : live.answer)) return b;
     const tick = b.tick + 1;
-    const sessions = capSessions(withSession(b.sessions, id, { state, open, touched: tick, born: live === null ? tick : live.born, dropped, pending, pre, ...(closed.length === 0 ? {} : { closed }), ...(stopped ? { stopped } : {}), ...(answer === undefined ? {} : { answer }) }), id, b.selected ?? b.focus, b.selected, b.want, b.owned);
+    const sessions = capSessions(withSession(b.sessions, id, { state, open, touched: tick, born: live === null ? tick : live.born, dropped, pending, pre, ...(closed.length === 0 ? {} : { closed }), ...(stopped ? { stopped } : {}), ...(answer === undefined ? {} : { answer }) }), id, b.selected ?? b.focus, b.selected, b.want, b.owned === null ? null : [...b.owned, ...(b.missing ?? [])]);
     const ended = b.ended.includes(id) ? b.ended.filter((x) => x !== id) : b.ended;
     return { ...b, sessions, ended, tick };
   };

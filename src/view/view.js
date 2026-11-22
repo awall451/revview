@@ -127,19 +127,40 @@ function fitFile(full) {
 // The row height is the computed line-height of #command (40 px from view.css), read at run time.
 // The displayed text has a U+2060 WORD JOINER after each '-' that is followed by a non-space, so a line breaks
 // at spaces and not after "--" (QA r3-09); a token longer than a row still breaks inside (overflow-wrap).
-// data-full and the cut itself work on the plain text.
+// data-full and the cut itself work on the plain text (the visible text minus U+2060 and U+200B is the command).
 const MAX_ROWS = 6;
 const WORD_JOINER = '\u2060';
+const ZWSP = '\u200B';
 const noBreakAfterHyphen = (t) => t.replace(/-(?=\S)/gu, `-${WORD_JOINER}`);
+// QA r5-06: a token longer than LONG_TOKEN characters (a path, a long flag) may break after '/', '-', '_', '.', '=' or ':'
+// (a ZERO WIDTH SPACE after it, when a letter or digit follows; never after '--'), so a row ends after a separator and
+// not between letters ("…very-long-director / y-name"). Short tokens keep the r3-09 behaviour (a flag moves whole).
+const LONG_TOKEN = 24;
+const SEPARATOR = /(?<=[\p{L}\p{N}.~][/_.=:]|\/)(?=[\p{L}\p{N}])/gu;
+const HYPHEN = /(?<=[\p{L}\p{N}.~]-)\u2060(?=[\p{L}\p{N}])/gu;
+export const displayCommand = (t) => t.split(/(\s+)/u).map((w) => (w.length > LONG_TOKEN
+  ? noBreakAfterHyphen(w).replace(HYPHEN, ZWSP).replace(SEPARATOR, ZWSP) : noBreakAfterHyphen(w))).join('');
+// Rows below row A: 6. The message takes all of them but the other rows shown (outRows counts those, without the message).
+function fitFailedMessage(full, otherRows) {
+  const o = el.out3;
+  o.dataset.wrap = '1';
+  const rowPx = parseFloat(getComputedStyle(o).lineHeight) || 40;
+  const fits = (t) => {
+    o.textContent = displayCommand(t);
+    return o.offsetHeight <= (MAX_ROWS - otherRows) * rowPx;
+  };
+  o.textContent = displayCommand(fitPrefix(full, fits));
+}
+
 function fitCommand(full, outRows) {
   const c = el.command;
   c.dataset.full = full;
   const rowPx = parseFloat(getComputedStyle(c).lineHeight) || 40;
   const fits = (t) => {
-    c.textContent = noBreakAfterHyphen(t);
+    c.textContent = displayCommand(t);
     return c.offsetHeight <= (MAX_ROWS - outRows) * rowPx;
   };
-  c.textContent = noBreakAfterHyphen(fitPrefix(full, fits));
+  c.textContent = displayCommand(fitPrefix(full, fits));
 }
 
 // Up to the last 3 output lines, oldest first. outputLines is used only when it agrees with `output`
@@ -172,6 +193,7 @@ export function render(input) {
   for (const k of ['tool', 'file', 'note1', 'note2', 'command', 'out1', 'out2', 'out3', 'offline-note', 'voice-note']) set(el[k], '');
   el.cmdbox.hidden = true;
   el.diff.hidden = true;
+  delete el.out3.dataset.wrap;
 
   const where = view === 'no-link' ? '' : [str(s.repo), str(s.branch)].filter(Boolean).join(' · ');
   const others = Number.isInteger(s.others) && s.others > 0 && !NO_OTHERS.has(view) ? s.others : 0;
@@ -284,6 +306,8 @@ export function render(input) {
 
   // fitting needs layout, so it comes after the fields are in place
   if (!el.cmdbox.hidden) fitCommand(str(s.command), outRows);
+  // the failed turn's message wraps over the free rows (QA r5b-02), cut with an ellipsis only beyond them
+  if (!note && failedWord !== '' && str(s.failed.message) !== '' && el.out3.dataset.full === str(s.failed.message)) fitFailedMessage(str(s.failed.message), outRows - 1);
   fitFile(file);
   set(el.where, where);
   el.where.hidden = false;

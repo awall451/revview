@@ -232,6 +232,22 @@ test('failed-turn: WAITING FOR ME says "Turn failed: server error" and shows the
   await shot(page, 'wb4-failed-turn');
 });
 
+test('failed-turn with a long message: it wraps over the free rows and its end is readable (QA r5b-02)', async ({ openView, page }) => {
+  const message = 'API Error: Connection refused - a firewall or proxy may be blocking it, check your network and try again later (ECONNREFUSED)';
+  const base = wb4State('failed-turn');
+  await openView({ ...base, failed: { ...base.failed, message }, output: message, outputLines: [message] });
+  const out = page.locator('#out3');
+  expect((await out.textContent()).replaceAll('\u2060', '').replaceAll('\u200B', '')).toBe(message);
+  expect(await out.evaluate((e) => e.getBoundingClientRect().height)).toBeGreaterThan(40);
+  await expectFits(page);
+  // beyond the free rows (5 with the note, 6 without) it is cut with an ellipsis at the end
+  const huge = `${'word '.repeat(200)}(ECONNREFUSED)`;
+  await openView({ ...base, failed: { ...base.failed, message: huge }, output: huge, outputLines: [huge] });
+  expect((await out.textContent()).endsWith('…')).toBe(true);
+  expect(await out.evaluate((e) => e.getBoundingClientRect().bottom)).toBeLessThanOrEqual(400);
+  await expectFits(page);
+});
+
 test('offline-failed: OFFLINE keeps "Turn failed: server error" on the tool row (QA r3-05)', async ({ openView, page }, testInfo) => {
   await openView(wb4State('offline-failed'));
   await expect(page.locator('#state-word')).toHaveText('OFFLINE');

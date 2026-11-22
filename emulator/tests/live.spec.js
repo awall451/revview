@@ -66,7 +66,7 @@ async function expectShows(page, state) {
   const command = state.command || '';
   await expect(page.locator('#command')).toHaveAttribute('data-full', command);
   // the displayed command has a U+2060 after each '-' (no line break after "--"); data-full does not
-  const shownCmd = (await page.locator('#command').textContent()).replaceAll('\u2060', '').replace(/…$/, '');
+  const shownCmd = (await page.locator('#command').textContent()).replaceAll('\u2060', '').replaceAll('\u200B', '').replace(/…$/, '');
   expect(command.startsWith(shownCmd.trimEnd())).toBe(true);
   // output: up to 3 lines, newest in #out3 (outputLines when it agrees with output, else output alone)
   const o = state.output || '';
@@ -286,7 +286,7 @@ test.describe('live', () => {
       await expectSeq(page, 4);
       await expect(page.locator('#state-word')).toHaveText('NEEDS PERMISSION');
       await expect(page.locator('#command')).toHaveAttribute('data-full', 'rm -rf build');
-      expect((await page.locator('#command').textContent()).replaceAll('\u2060', '')).toBe('rm -rf build');
+      expect((await page.locator('#command').textContent()).replaceAll('\u2060', '').replaceAll('\u200B', '')).toBe('rm -rf build');
       await expect(page.locator('#others')).toHaveText('+1');
     });
   });

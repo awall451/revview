@@ -122,6 +122,33 @@ test('owned-gone: a window really gone ends after the second listing, and a flap
   assert.ok(f.sessions[U1]);
 });
 
+test('owned-gone: a session missing from ONE listing is not evicted at the cap', () => {
+  const ids = Array.from({ length: 8 }, (_, i) => `${String(i + 1).repeat(8)}-1111-4111-8111-111111111111`);
+  // ids[0] is started last (most recently touched): only being treated as owned keeps it from being the victim
+  let b = run([owned(...ids), ...ids.slice(1).map((id, i) => start(id, `r${i + 1}`)), start(ids[0], 'r0')]);
+  assert.equal(Object.keys(b.sessions).length, 8);
+  b = reduceBoard(b, owned(...ids.slice(1))); // ids[0] missing from one listing
+  assert.deepEqual(b.missing, [ids[0]]);
+  b = reduceBoard(b, start(C, 'gamma')); // an unowned session pushes over the cap
+  assert.ok(b.sessions[ids[0]], 'the missing session survives the cap');
+});
+
+// KNOWN LIMIT (docs/agents/STATE.md "Known limits"): the late hook is not dropped. The id is not remembered in
+// `ended`, so a late hook of an ended owned session puts it back on the board as a live (non-quiet) session.
+test('owned-gone: KNOWN LIMIT: a late hook of an ended owned session shows it again', () => {
+  let b = twoWorking();
+  b = run([owned(B), owned(B)], b);
+  assert.equal(b.sessions[A], undefined);
+  for (const e of [
+    ev('PostToolUse', { session_id: A, cwd: '/w/alpha', tool_name: 'Bash', tool_use_id: 't1' }),
+    ev('UserPromptSubmit', { session_id: A, cwd: '/w/alpha' }),
+  ]) {
+    const after = reduceBoard(b, e);
+    assert.ok(after.sessions[A], `${e.hook_event_name} brings it back`);
+    assert.notEqual(after.sessions[A].quiet, true);
+  }
+});
+
 test('a capacity eviction is not announced as "<repo> ended"', () => {
   const ids = Array.from({ length: 9 }, (_, i) => `${String(i + 1).repeat(8)}-1111-4111-8111-111111111111`);
   let b = run([owned(...ids.slice(0, 1)), start(ids[0], 'first'), ev('RevviewSelect', { session_id: ids[0] })]);

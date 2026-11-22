@@ -184,6 +184,8 @@ span:empty { display: none; }
   text-overflow: ellipsis;
 }
 #offline-note, #voice-note { color: var(--grey); }
+/* the failed turn's message: wraps over the free rows (view.js cuts it with an ellipsis beyond them) */
+#outarea > #out3[data-wrap] { height: auto; white-space: normal; overflow-wrap: anywhere; overflow: visible; }
 
 /* List and menu: replace #lower. A title row and up to 6 rows of 40 px (7 rows in all, like #lower).
    The selected row is inverted (black on white) and has a solid white bar at the left edge. */
