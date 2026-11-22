@@ -87,7 +87,7 @@ permission prompts, `pre` = the last PreToolUse per agent; `focus` = id of the s
   list, phase `starting`. `RevviewContext`: applied to its live session if it has a `session_id` of one,
   otherwise to `board.context`.
 - `RevviewDropped` (internal, sent by the server when an event body was too large to read): marks that live
-  session `dropped` (the diff may be incomplete). A late `PostToolUse` of Edit/Write/MultiEdit after `Stop` that cannot be placed (no `tool_use_id`, or one not open) also marks it, since its lines are lost, or every live session without a usable id; an id the board
+  session `dropped` (the diff may be incomplete). Without a session id it marks the live sessions that are in a turn (working, asking, or a tool open), or the shown one if none is, never all of them. A late `PostToolUse` of Edit/Write/MultiEdit after `Stop` that cannot be placed (no `tool_use_id`, or one not open) also marks it, since its lines are lost, or, without a usable id, the live sessions in a turn (else the shown one); an id the board
   does not know marks nothing. Reset by a driver `UserPromptSubmit` (not by an injected one).
 - `SessionEnd` of a session the board never saw only remembers its id in `ended` (not `''`); the phase is not
   touched (an `unknown`/`starting` board stays so: one end proves nothing about the others).

@@ -397,6 +397,12 @@ Not solved here: after an Esc'd main-thread prompt the bar stays at NEEDS PERMIS
 prompt (Claude Code sends no hook for the rejection); a DONE session stays shown over a working one for the
 ~60 s until its `idle_prompt`; the bar still does not say which repo a `+N` session is in (issue 03, view).
 
+- **Id-less lost event (11, state half).** The lost Edit/Write can only come from a session in a turn, so the
+  `≥` mark goes to the live sessions in a turn (working, asking, a tool open); if none is, to the shown session
+  (a late result after Stop); never to all. Claude Code writes `session_id` first, so this is a fallback for a
+  garbled prefix; a wrong guess shows one session exact when it was not, which the wide rule would have avoided
+  at the cost of marking sessions that lost nothing.
+
 ## View and server polish (QA round 2026-11-22: 03 08 09 10 11 12 13 14)
 
 - **Which session (03).** The band has no room for `repo` next to WAITING FOR ME or NEEDS PERMISSION plus `+N`.
@@ -411,8 +417,7 @@ prompt (Claude Code sends no hook for the rejection); a DONE session stays shown
   before `view.js` runs. (Static fixture pages also start NO LINK for a moment; they are for tests and the
   developer page.)
 - **Lower bound of zero (11, view half).** `diffIncomplete` with nothing counted shows `+? −?` (unknown), not
-  `≥ +0 −0`. With some count the `≥` form stays. The state half (an id-less lost event marks every session) is a
-  state-core question and stays open.
+  `≥ +0 −0`. With some count the `≥` form stays. The state half (an id-less lost event) is decided above.
 - **`+N` from ten on (12)** reads `9+`; the exact number is in `data-full`.
 - **Branch stub (13).** When no cut of the branch fits, the repo alone is shown unless at least two letters of
   the branch stay readable after the end cut.

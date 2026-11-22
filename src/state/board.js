@@ -180,8 +180,17 @@ function reduceInner(b, event) {
     case 'RevviewDropped': {
       // an id the board does not know marks nothing (it is none of the sessions on the board)
       if (isStr(event.session_id) && live === null) return b;
+      // without an id the lost Edit/Write came from a session that is in a turn (working, asking, a tool open);
+      // if none is, from the shown one (a late result after Stop). Never from every session on the board.
       const live1 = isStr(event.session_id) && live !== null;
-      const sessions = mapSessions(b.sessions, (s) => (s.dropped || (live1 && s !== live) ? s : { ...s, dropped: true }));
+      let hit = (s) => s === live;
+      if (!live1) {
+        const inTurn = (s) => act(s) === 'working' || act(s) === 'permission' || s.open.length > 0;
+        const some = Object.keys(b.sessions).some((k) => inTurn(b.sessions[k]));
+        const shownKey = b.focus !== null && has(b.sessions, b.focus) ? b.focus : pickFocus(b, null);
+        hit = some ? inTurn : (s) => shownKey !== null && s === b.sessions[shownKey];
+      }
+      const sessions = mapSessions(b.sessions, (s) => (s.dropped || !hit(s) ? s : { ...s, dropped: true }));
       return sessions === b.sessions ? b : { ...b, sessions };
     }
     case 'SessionEnd': {

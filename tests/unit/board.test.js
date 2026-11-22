@@ -108,13 +108,13 @@ test('late Post after Stop keeps done, updates fields; unknown id ignored; Pre a
   assert.equal(boardView(reduceBoard(b, ev('PreToolUse', { ...A, ...BASH, tool_use_id: 'W' }))).view, 'working');
 });
 
-test('RevviewDropped marks the session, UserPromptSubmit resets; without id marks all', () => {
+test('RevviewDropped marks the session, UserPromptSubmit resets; without id marks the sessions in a turn', () => {
   let b = run([ev('SessionStart', A), ev('SessionStart', B), ev('RevviewDropped', A)]);
   assert.equal(b.sessions.A.dropped, true);
   assert.equal(b.sessions.B.dropped, false);
   b = reduceBoard(b, ev('UserPromptSubmit', A));
   assert.equal(b.sessions.A.dropped, false);
-  b = reduceBoard(b, ev('RevviewDropped'));
+  b = reduceBoard(reduceBoard(b, ev('UserPromptSubmit', B)), ev('RevviewDropped'));
   assert.ok(b.sessions.A.dropped && b.sessions.B.dropped);
   assert.equal(boardView(b).diffIncomplete, true);
   const empty = initialBoard();
@@ -310,6 +310,21 @@ test('waiting after Stop with no open tool still ignores late Posts and permissi
   assert.equal(boardView(b).view, 'waiting');
   assert.equal(reduceBoard(b, POST('t1')), b);
   assert.equal(reduceBoard(b, ev('Notification', { ...A, notification_type: 'permission_prompt' })), b);
+});
+
+test('an id-less RevviewDropped marks only sessions in a turn, else only the shown one (QA 11)', () => {
+  // A works, B is waiting at its prompt, C is done: the lost Edit/Write can only come from A
+  let b = run([ev('SessionStart', B), ev('SessionStart', { session_id: 'C' }), ev('UserPromptSubmit', { session_id: 'C' }),
+    ev('Stop', { session_id: 'C' }), ev('SessionStart', A), ev('UserPromptSubmit', A)]);
+  b = reduceBoard(b, ev('RevviewDropped'));
+  assert.equal(b.sessions.A.dropped, true);
+  assert.equal(b.sessions.B.dropped, false);
+  assert.equal(b.sessions.C.dropped, false);
+  // nobody in a turn: the shown (focus) session only, never nothing and never everyone
+  let c = run([ev('SessionStart', B), ev('SessionStart', A), ev('UserPromptSubmit', A), ev('Stop', A)]);
+  c = reduceBoard(c, ev('RevviewDropped'));
+  assert.equal(c.sessions.A.dropped, true);
+  assert.equal(c.sessions.B.dropped, false);
 });
 
 test('RevviewDropped with an id the board does not know marks nothing', () => {
