@@ -29,7 +29,7 @@ Screenshots: one `<state>.png` per state, exactly 1280x400 px, written to `out/s
 | `fixtures/<state>.json` | One state per view: the board's view state (`boardView`) for each reducer state; `no-link.json` is just `{"view":"no-link"}` (drawn by the page when its link is down). |
 | `fixtures/recipes.js` | The events each fixture is produced from (recorded sessions + synthetic `Revview*` events). |
 | `serve.js` | Dependency-free static server for the repository root (`node:http`). |
-| `playwright.config.js`, `tests/` | Config and specs (`mm`, `layout`, `screenshots`, `devpage`, `live`); `live` is the end-to-end test: it starts the live server (`src/server`), POSTs the recorded sessions in `fixtures/sessions/` to it and checks what the page shows, plus the starting, late-join, reconnect and malformed-POST cases; `tests/harness.js` starts a server per worker on a free port. |
+| `playwright.config.js`, `tests/` | Config and specs (`mm`, `layout`, `screenshots`, `buttons-tag`, `devpage`, `live`); `live` is the end-to-end test: it starts the live server (`src/server`), POSTs the recorded sessions in `fixtures/sessions/` to it and checks what the page shows, plus the starting, late-join, reconnect and malformed-POST cases; `tests/harness.js` starts a server per worker on a free port. |
 | `worst-case/` | Stress content for the renderer (see Worst cases). |
 | `dev/` | The developer page. |
 
@@ -67,6 +67,8 @@ so calibrate once (saved in the browser's localStorage): either enter the monito
 its resolution in CSS px (prefilled from the screen; with OS scaling, the CSS resolution is the physical one
 divided by the device pixel ratio shown), or hold a credit card (85.60 x 53.98 mm) to the screen and adjust
 the outline until it matches. Check the 100 mm ruler with a real ruler.
+
+`tests/buttons-tag.spec.js`: the NO BUTTONS tag (`buttons: 'missing'` over every fixture: shown except starting and no-link, band unchanged, size and fit, the worst band without overlap); screenshots `out/shots/no-buttons.png` and `no-buttons-permission.png`.
 
 ## Worst cases
 

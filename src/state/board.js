@@ -23,6 +23,7 @@ export function initialBoard() {
     tick: 0,
     focus: null,
     spokenTo: null,
+    buttons: null, // wheel buttons present: null = not known yet, true, false (RevviewInput)
   };
 }
 
@@ -36,6 +37,7 @@ function isValidBoard(b) {
   return isObj(b) && typeof b.phase === 'string' && isObj(b.context) && isObj(b.sessions)
     && Array.isArray(b.ended) && Number.isInteger(b.tick) && (b.focus === null || typeof b.focus === 'string')
     && (b.spokenTo === null || typeof b.spokenTo === 'string')
+    && (b.buttons === null || typeof b.buttons === 'boolean')
     && Object.keys(b.sessions).every((k) => isValidSession(b.sessions[k]));
 }
 
@@ -172,6 +174,10 @@ function reduceInner(b, event) {
       return typeof event.online === 'boolean' && b.offline === event.online ? { ...b, offline: !event.online } : b;
     case 'RevviewDataLock':
       return typeof event.locked === 'boolean' && b.locked !== event.locked ? { ...b, locked: event.locked } : b;
+    case 'RevviewInput':
+      return typeof event.present === 'boolean' && b.buttons !== event.present ? { ...b, buttons: event.present } : b;
+    case 'RevviewButton': // a gesture is for the server's actions, never for the screen
+      return b;
     case 'RevviewStarting':
       if (b.phase === 'starting' && b.ended.length === 0 && Object.keys(b.sessions).length === 0) return b;
       return { ...b, phase: 'starting', sessions: {}, ended: [] };
@@ -351,8 +357,11 @@ function applyToSession(b, live, id, event) {
   return commit(state, open, dropped);
 }
 
+const buttonsView = (b) => (b.buttons === null ? 'unknown' : b.buttons ? 'present' : 'missing');
+
 export function boardView(board) {
   const b = isValidBoard(board) ? board : initialBoard();
+  const buttons = buttonsView(b);
   const shownKey = b.focus !== null && has(b.sessions, b.focus) ? b.focus : pickFocus(b, null);
   const shown = shownKey === null ? null : b.sessions[shownKey];
   const overlay = (activity) => (b.locked ? 'insert-key' : b.offline ? 'offline' : activity);
@@ -372,6 +381,7 @@ export function boardView(board) {
       outputLines: [],
       others: 0,
       diffIncomplete: false,
+      buttons,
     };
   }
   const s = shown.state;
@@ -395,6 +405,7 @@ export function boardView(board) {
     outputLines: ask === null ? s.outputLines : ask.outputLines,
     others: Object.keys(b.sessions).filter((k) => k !== '').length - (shownKey === '' ? 0 : 1),
     diffIncomplete: shown.dropped,
+    buttons,
   };
 }
 

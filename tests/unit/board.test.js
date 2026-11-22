@@ -26,13 +26,13 @@ test('fresh board is unknown; RevviewStarting -> starting and clears sessions; S
 test('initialBoard shape', () => {
   assert.deepEqual(initialBoard(), {
     phase: 'unknown', offline: false, locked: false, context: { repo: null, branch: null },
-    sessions: {}, ended: [], tick: 0, focus: null, spokenTo: null,
+    sessions: {}, ended: [], tick: 0, focus: null, spokenTo: null, buttons: null,
   });
 });
 
 test('boardView always has exactly the same keys', () => {
   const keys = Object.keys(boardView(initialBoard())).sort();
-  assert.deepEqual(keys, ['activity', 'branch', 'command', 'diff', 'diffIncomplete', 'file', 'locked', 'offline',
+  assert.deepEqual(keys, ['activity', 'branch', 'buttons', 'command', 'diff', 'diffIncomplete', 'file', 'locked', 'offline',
     'others', 'output', 'outputLines', 'repo', 'tool', 'view']);
   const b = run([ev('SessionStart', A), ev('PreToolUse', { ...A, ...BASH })]);
   assert.deepEqual(Object.keys(boardView(b)).sort(), keys);
@@ -353,6 +353,56 @@ test('a malformed board is replaced, never throws', () => {
     assert.doesNotThrow(() => reduceBoard(b, ev('SessionStart', A)));
     assert.equal(boardView(reduceBoard(b, ev('SessionStart', A))).view, 'waiting');
   }
+});
+
+test('RevviewInput sets buttons (null unknown, true, false); invalid or repeated values keep the reference', () => {
+  const b0 = initialBoard();
+  assert.equal(b0.buttons, null);
+  assert.equal(boardView(b0).buttons, 'unknown');
+  const up = reduceBoard(b0, ev('RevviewInput', { present: true }));
+  assert.equal(up.buttons, true);
+  assert.equal(boardView(up).buttons, 'present');
+  assert.equal(reduceBoard(up, ev('RevviewInput', { present: true })), up);
+  const down = reduceBoard(up, ev('RevviewInput', { present: false }));
+  assert.equal(down.buttons, false);
+  assert.equal(boardView(down).buttons, 'missing');
+  assert.equal(reduceBoard(down, ev('RevviewInput', { present: false })), down);
+  for (const present of ['true', 1, 0, null, undefined, {}, []]) {
+    assert.equal(reduceBoard(down, ev('RevviewInput', { present })), down);
+    assert.equal(reduceBoard(b0, ev('RevviewInput', { present })), b0);
+  }
+  assert.equal(reduceBoard(b0, ev('RevviewInput')), b0);
+});
+
+test('hardware presence survives RevviewStarting and shows with any shown session', () => {
+  const b = run([ev('SessionStart', A), ev('RevviewInput', { present: false })]);
+  assert.equal(boardView(b).buttons, 'missing');
+  assert.equal(boardView(reduceBoard(b, ev('RevviewStarting'))).buttons, 'missing');
+  assert.equal(reduceBoard(b, ev('RevviewStarting')).buttons, false);
+  const c = run([ev('RevviewInput', { present: true }), ev('RevviewStarting'), ev('SessionStart', A)]);
+  assert.equal(boardView(c).buttons, 'present');
+});
+
+test('RevviewButton gestures are ignored: same reference, no session', () => {
+  const b0 = initialBoard();
+  const g = ev('RevviewButton', { button: 'left', gesture: 'press' });
+  assert.equal(reduceBoard(b0, g), b0);
+  assert.equal(reduceBoard(b0, { ...g, session_id: 'A' }), b0);
+  const b = run([ev('SessionStart', A), ev('UserPromptSubmit', A)]);
+  assert.equal(reduceBoard(b, g), b);
+  assert.equal(reduceBoard(b, { ...g, session_id: 'Z' }), b);
+  assert.deepEqual(Object.keys(reduceBoard(b0, { ...g, session_id: 'Z' }).sessions), []);
+  const up = reduceBoard(b0, ev('RevviewInput', { present: true }));
+  assert.equal(reduceBoard(up, g), up);
+});
+
+test('a board with a bad buttons field is replaced', () => {
+  const b = { ...initialBoard(), buttons: 'yes' };
+  assert.equal(boardView(b).buttons, 'unknown');
+  const noField = { ...initialBoard() };
+  delete noField.buttons;
+  assert.equal(boardView(noField).buttons, 'unknown');
+  assert.equal(reduceBoard(b, ev('RevviewInput', { present: true })).buttons, true);
 });
 
 // QA round 2: focus, pending permission prompts per session, branch context, unseen SessionEnd.

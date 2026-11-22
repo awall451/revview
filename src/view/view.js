@@ -57,7 +57,7 @@ function offlineNote(activity) {
 
 const $ = (id) => document.getElementById(id);
 const str = (v) => (typeof v === 'string' ? v : '');
-const ids = ['band', 'shape', 'state-word', 'others', 'where', 'tool', 'file', 'note1', 'note2', 'diff', 'diff-approx', 'diff-added',
+const ids = ['band', 'shape', 'state-word', 'others', 'where', 'buttons-tag', 'tool', 'file', 'note1', 'note2', 'diff', 'diff-approx', 'diff-added',
   'diff-removed', 'session', 'cmdbox', 'command', 'out1', 'out2', 'out3'];
 const el = Object.fromEntries(ids.map((id) => [id, $(id)]));
 
@@ -180,8 +180,12 @@ export function render(input) {
   set(el.others, others > 9 ? '9+' : others ? `+${others}` : '');
   el.others.dataset.full = others ? `${others} more Claude session${others === 1 ? '' : 's'}` : '';
   // with the longest word (NEEDS PERMISSION) the hint does not fit inside the band's padding: tighten it
+  // the "NO BUTTONS" tag (only when the wheel buttons are known to be missing; not while starting, not on NO LINK)
+  // sits at the band's right end; it never shrinks, so the room it takes is not available to the hint
+  el['buttons-tag'].hidden = !(s.buttons === 'missing' && view !== 'starting' && view !== 'no-link');
   el.band.classList.remove('tight');
-  if (others && el.others.getBoundingClientRect().right > el.band.clientWidth - 24) el.band.classList.add('tight');
+  const tagPx = el['buttons-tag'].hidden ? 0 : el['buttons-tag'].offsetWidth + 24;
+  if (others && el.others.getBoundingClientRect().right > el.band.clientWidth - 24 - tagPx) el.band.classList.add('tight');
 
   // fitting needs layout, so it comes after the fields are in place
   if (!el.cmdbox.hidden) fitCommand(str(s.command), outRows);

@@ -53,6 +53,8 @@ Pure logic that turns Claude Code hook events into the view state (no DOM, no I/
 | `RevviewStarting` (synthetic) | `starting`; clears per-turn fields like UserPromptSubmit |
 | `RevviewNetwork` `{online: boolean}` (synthetic) | `offline = !online` |
 | `RevviewDataLock` `{locked: boolean}` (synthetic) | `locked` |
+| `RevviewInput` `{present: boolean}` (synthetic, from the server's input reader) | board `buttons` = `present` (wheel buttons found or not); a non-boolean is ignored; `RevviewStarting` does not clear it |
+| `RevviewButton` `{button, gesture}` (synthetic) | ignored by the board (same reference, never makes a session) |
 
 `repo` is never renamed by other events, so a hook fired from a subdirectory keeps the repo name. On `Stop`
 (and `StopFailure`/idle) tool, file, command, output and outputLines are kept on purpose: at `done` the driver can still
@@ -64,7 +66,7 @@ offline/locked overlays and shows again when they clear.
 
 `reduceBoard` keeps many sessions (key = `session_id`; an event without a usable one goes to the only live session if there is exactly one, else to the anonymous `''` session, which `others` never counts; subagent events carry
 the parent's `session_id`, so they never make a second session). Pure, never throws, returns the SAME reference
-when nothing changes. Board: `{phase, offline, locked, context: {repo, branch}, sessions, ended, tick, focus}`;
+when nothing changes. Board: `{phase, offline, locked, context: {repo, branch}, sessions, ended, tick, focus, spokenTo, buttons}`; `buttons` = `null` (not known yet) | `true` | `false`, set only by `RevviewInput`;
 `sessions[id] = {state, open, touched, dropped, pending, pre}` (`state` from `reduce`, `open` = tool_use_ids
 with a PreToolUse and no Post yet, `touched` = board tick of the last applied event, `pending` = unanswered
 permission prompts, `pre` = the open PreToolUse calls per agent (at most 32); `focus` = id of the session the bar shows, or null; `spokenTo` = id of the session the driver last spoke to (a real driver prompt only), or null).
@@ -114,7 +116,7 @@ permission prompts, `pre` = the open PreToolUse calls per agent (at most 32); `f
 - `boardView` branch: `s.branch`, else `board.context.branch` only when `board.context.repo` is the repo shown.
 
 `boardView(board)` is the flat state the page renders, always with exactly these keys: `view, activity,
-offline, locked, repo, branch, tool, file, diff {added, removed}, command, output, outputLines, others, diffIncomplete`.
+offline, locked, repo, branch, tool, file, diff {added, removed}, command, output, outputLines, others, diffIncomplete, buttons` (`buttons`: `'unknown'` | `'present'` | `'missing'`, from the board whatever session is shown).
 With a shown session these are its fields (`others` = other live sessions, `diffIncomplete` = its `dropped`,
 repo/branch fall back to `board.context`). With no live session `activity` is the board phase
 (`unknown`, `starting`, `ended`), repo/branch come from `board.context`, the rest is null/0/false.

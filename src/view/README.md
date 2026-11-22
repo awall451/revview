@@ -34,6 +34,7 @@ Files: `index.html`, `boot.html` (kiosk start page, see Boot page), `view.css`, 
   gives way first; next to NEEDS PERMISSION the band's padding is tightened, class `tight`). Not shown in
   no-link, unknown, starting, insert-key. From 10 on it reads `9+` (two digits next to NEEDS PERMISSION ran off the panel; the state core may exceed its
   session cap with pending permissions); `data-full` always has the real number.
+- **NO BUTTONS tag**: `#buttons-tag` at the right end of the band, shown only when `state.buttons === 'missing'` and the view is neither `starting` nor `no-link` (any other value: hidden). `data-full` is `Wheel buttons not found: the buttons do nothing`. Not a state takeover: band colour, shape, word and rows are unchanged. Detail size (`--detail-font`), bold, 2 px outline in the band's text colour, transparent fill, vertically centred; it never shrinks (`#where` gives way first, and `tight` is also set when the hint would reach the tag).
 - **Diff lower bound**: when `diffIncomplete` is `true` (an event of the turn was too large to read) the diff
   shows a white bold `≥` (`#diff-approx`) before `+A −R`, and `#diff` `data-full` is `at least +A −R`. With no
   counted lines (a lower bound of zero says nothing) it shows `+? −?` without `≥` and `data-full` is
