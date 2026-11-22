@@ -7,11 +7,26 @@ session, see `src/state/README.md`), reduces every event with `reduceBoard` and 
 No persistence: a fresh or restarted server shows `unknown` (a restored state could not be trusted, and hooks
 posted while the server was down are lost).
 
-Run: `npm start` or `node src/server/index.js [port] [--input [path]] [--dev-bridge] [--sessions] [--start dir]... [--projects file] [--speech file]` (port default **8138**, or env `REVVIEW_PORT`).
+Run: `npm start` or `node src/server/index.js [port] [--input [path]] [--dev-bridge] [--sessions] [--start dir]... [--projects file] [--speech file] [--boot] [--netmon]` (port default **8138**, or env `REVVIEW_PORT`).
 `--input` reads the wheel buttons in this process (config `config/buttons.json`, or the path given); a bad config or
 unknown flag prints the message to stderr and exits with code 2 before listening. `--dev-bridge` (or `npm run start:dev`) turns on `POST /dev/key`. SIGTERM and SIGINT close the server (stopping the grab helper) and exit 0.
 It binds to **127.0.0.1 only**; there is deliberately no way to change the host from the CLI.
 Open `http://127.0.0.1:8138/`.
+
+## Key-on on the Pi: `--boot` and `--netmon`
+
+`--boot`: the bar shows STARTING from the first moment until a session is on the board. After the server is
+listening (so Claude's SessionStart hook reaches it) `bootSessions` looks at the tmux windows: none (the power was
+cut, tmux is gone) starts one session per `--start` directory, or the one in env `REVVIEW_START` when no `--start`
+was given (only used with `--sessions`), and selects the last; exactly one window (a service restart) selects it
+and starts nothing; several select none. A failure here is logged and never stops the bar. Without `--boot`,
+`REVVIEW_START` is ignored and `--start` works as before.
+
+`--netmon`: "online" means a default route on any interface (`/proc/net/route`, `/proc/net/ipv6_route`, so the
+phone hotspot over Wi-Fi counts) plus a TCP connect to the Claude API host (`api.anthropic.com:443`; env
+`REVVIEW_NETMON_HOST` = `host` or `host:port` changes it, a bad value exits with code 2). It checks every 10 s
+(every 5 s while offline). Two failures in a row make the bar show OFFLINE; one success brings it back. Without
+a default route nothing is sent at all. Nothing depends on Ethernet. Code: `src/server/netmon.js`.
 
 ## POST /event
 

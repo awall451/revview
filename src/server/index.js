@@ -1,12 +1,15 @@
 // Live server: hook scripts POST raw Claude Code hook JSON to /event, the state core
 // (src/state) reduces it, and the new state is pushed to the page over Server-Sent Events.
 // It also serves the view. Binds to 127.0.0.1 only; see src/server/README.md.
-//   node src/server/index.js [port] [--input [path]] [--dev-bridge] [--sessions] [--start dir]... [--projects file] [--speech file]   (port default 8138, or REVVIEW_PORT)
+//   node src/server/index.js [port] [--input [path]] [--dev-bridge] [--sessions] [--start dir]... [--projects file] [--speech file] [--boot] [--netmon]   (port default 8138, or REVVIEW_PORT)
+//   --boot: key-on start: show STARTING until the first session is on the board; with no tmux windows, start one session in $REVVIEW_START (or each --start dir)
+//   --netmon: watch the network (default route + TCP connect to $REVVIEW_NETMON_HOST, default api.anthropic.com:443); offline after 2 failures, online after 1 success
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { initialBoard, reduceBoard, boardView, pendingPrompts, shownPrompt, selectedKey } from '../state/index.js';
+import { createNetMonitor, createDefaultProbe } from './netmon.js';
 import { createSessionRunner, createActions, createPermissionRegistry, loadProjects } from '../sessions/index.js';
 import { startInput, createInputPipeline } from '../input/index.js';
 import { loadConfig, ConfigError, DEFAULT_CONFIG_PATH } from '../input/keymap.js';
@@ -76,6 +79,7 @@ export async function startLiveServer({
   port = 0, viewDir = DEFAULT_VIEW_DIR, reduce: reduceEvent = reduceBoard,
   input = null, devBridge = false, inputDeps, inputRetryMs, onGesture,
   sessions = null, clock, permissionWaitMs, minShownMs, projects = [], timers, navTimeoutMs, ownedPollMs = 5000, speech = null,
+  boot = false, netmon = null,
 } = {}) {
   const root = path.resolve(viewDir);
   let board = initialBoard();
@@ -442,6 +446,14 @@ export async function startLiveServer({
   ownPort = server.address().port;
 
   apply({ hook_event_name: 'RevviewProjects', paths: projects }, true);
+  if (boot) apply({ hook_event_name: 'RevviewStarting' }, true);
+  let monitor = null;
+  if (netmon) {
+    monitor = createNetMonitor({
+      log: (m) => console.error(m), ...netmon,
+      onChange: (online) => { if (!closed) apply({ hook_event_name: 'RevviewNetwork', online }, true); },
+    });
+  }
   let ownedTimer = null;
   if (sessions) {
     await refreshOwned();
@@ -468,6 +480,7 @@ export async function startLiveServer({
       return new Promise((resolve) => {
         closed = true;
         inputHandle?.stop();
+        monitor?.stop();
         actions.close();
         if (ownedTimer !== null) clearInterval(ownedTimer);
         registry.close(); // leaves the tmux server alone: sessions outlive a server restart
@@ -487,6 +500,8 @@ export function parseArgs(argv) {
     const a = argv[i];
     if (a === '--dev-bridge') out.devBridge = true;
     else if (a === '--sessions') out.sessions = true;
+    else if (a === '--boot') out.boot = true;
+    else if (a === '--netmon') out.netmon = true;
     else if (a === '--start') {
       const next = argv[i + 1];
       if (next === undefined || next.startsWith('--')) throw new Error('--start needs a directory');
@@ -512,10 +527,33 @@ export function parseArgs(argv) {
     else throw new Error(`unexpected argument ${a}`);
   }
   if (out.port === null) out.port = Number(process.env.REVVIEW_PORT || DEFAULT_PORT);
+  if (out.boot && out.start.length === 0 && process.env.REVVIEW_START) out.start = [process.env.REVVIEW_START];
   if (out.projects === null) out.projects = process.env.REVVIEW_PROJECTS || null;
   // the key exists only when a speech file was named (flag or REVVIEW_SPEECH)
   if (out.speech === undefined && process.env.REVVIEW_SPEECH) out.speech = process.env.REVVIEW_SPEECH;
   return out;
+}
+
+// Key-on: after the server listens, make sure there is a session. No windows (tmux died with the power) ->
+// start one per dir; exactly one (a service restart) -> select it; several -> select none. Never throws.
+export async function bootSessions({ runner, live, dirs = [], log = () => {} }) {
+  try {
+    const existing = await runner.list();
+    if (existing.length > 0) {
+      if (existing.length !== 1) return null;
+      live.select(existing[0].id);
+      return existing[0].id;
+    }
+    let last = null;
+    for (const dir of dirs) last = (await runner.start({ cwd: path.resolve(dir) })).id;
+    if (last === null) return null;
+    await live.refreshOwned();
+    live.select(last);
+    return last;
+  } catch (e) {
+    log(`boot sessions: ${e instanceof Error ? e.message : String(e)}`);
+    return null;
+  }
 }
 
 // SIGTERM/SIGINT: close the server (which stops the grab helper), then exit 0.
@@ -544,14 +582,34 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   let selectId = null; // the session the buttons act on at boot: the last one started, else the only one there is
   if (args.sessions) {
     runner = createSessionRunner({ socket: { name: 'revview' }, log: (m) => console.error(m) });
-    try {
-      const existing = await runner.list();
-      if (existing.length === 1) selectId = existing[0].id;
-      for (const dir of args.start) selectId = (await runner.start({ cwd: path.resolve(dir) })).id;
-    } catch (e) {
-      console.error(`sessions: ${e instanceof Error ? e.message : String(e)}`);
-      process.exit(2);
+    if (!args.boot) {
+      try {
+        const existing = await runner.list();
+        if (existing.length === 1) selectId = existing[0].id;
+        for (const dir of args.start) selectId = (await runner.start({ cwd: path.resolve(dir) })).id;
+      } catch (e) {
+        console.error(`sessions: ${e instanceof Error ? e.message : String(e)}`);
+        process.exit(2);
+      }
     }
+  }
+  let netmon = null;
+  let netmonLine = null;
+  if (args.netmon) {
+    let host = 'api.anthropic.com';
+    let port = 443;
+    const v = process.env.REVVIEW_NETMON_HOST;
+    if (v) {
+      const m = /^([A-Za-z0-9._-]+)(?::(\d{1,5}))?$/.exec(v);
+      if (!m || (m[2] !== undefined && (Number(m[2]) < 1 || Number(m[2]) > 65535))) {
+        console.error(`REVVIEW_NETMON_HOST must be host or host:port, got ${v}`);
+        process.exit(2);
+      }
+      host = m[1];
+      if (m[2] !== undefined) port = Number(m[2]);
+    }
+    netmon = { probe: createDefaultProbe({ host, port }) };
+    netmonLine = `netmon: online = default route + TCP connect to ${host}:${port} every 10 s`;
   }
   const projects = args.projects ? loadProjects(args.projects, { log: (m) => console.error(m) }) : [];
   // a bad speech config means no voice, never no bar
@@ -568,8 +626,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     console.error(e.message);
     speechLine = 'speech: off (bad speech config, see the log)';
   }
-  const live = await startLiveServer({ port: args.port, input, devBridge: args.devBridge, sessions: runner, projects, speech });
-  if (selectId !== null) live.select(selectId);
+  const live = await startLiveServer({ port: args.port, input, devBridge: args.devBridge, sessions: runner, projects, speech, boot: args.boot, netmon });
+  if (args.boot && runner) selectId = await bootSessions({ runner, live, dirs: args.start, log: (m) => console.error(m) });
+  else if (selectId !== null) live.select(selectId);
   const selectedNow = selectId !== null && live.selected() === selectId;
   const { url } = live;
   installShutdown(live);
@@ -579,6 +638,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   if (input) console.log('input: reading wheel buttons (GET /buttons)');
   if (runner) console.log(`sessions: private tmux server (-L revview), ${selectId === null ? 'selected: none' : `${selectedNow ? 'selected' : 'wanted'}: ${selectId}`}`);
   console.log(speechLine);
+  if (netmonLine) console.log(netmonLine);
+  if (args.boot) console.log('boot: STARTING until the first session is on the board');
   if (args.projects) console.log(`projects: ${projects.length} from ${args.projects}`);
   if (args.devBridge) console.log('dev bridge ON (POST /dev/key): never use this on the car');
 }
