@@ -328,3 +328,44 @@ test('grab.py: missing path -> exit 3', () => {
   assert.equal(r.status, 3);
   assert.match(r.stderr, /revview-grab: cannot open/);
 });
+
+test('fake: open/grab failures back off (doubling to 30 s), reset on ready, not-found and start', async () => {
+  const delays = [];
+  const clock = fakeClock();
+  const { reader, state } = fixture({ setTimeout: (fn, ms) => { delays.push(ms); return clock.setTimeout(fn, ms); }, clearTimeout: clock.clearTimeout });
+  state.present = true;
+  reader.start();
+  await flush();
+  let n = 0;
+  const fail = async () => { state.streams[n++].emit('end', new Error('cannot grab: busy')); await flush(); };
+  const next = async () => { clock.fire(); await flush(); };
+  for (let i = 0; i < 8; i++) { await fail(); await next(); }
+  assert.deepEqual(delays, [1000, 2000, 4000, 8000, 16000, 30000, 30000, 30000]);
+  // success resets; a later loss retries at retryMs
+  state.streams[n].emit('ready');
+  state.streams[n++].emit('end', new Error('unplugged'));
+  await flush();
+  assert.equal(delays.at(-1), 1000);
+  await next();
+  await fail();
+  assert.equal(delays.at(-1), 1000);
+  await next();
+  await fail();
+  assert.equal(delays.at(-1), 2000);
+  await next();
+  state.present = false; // not found keeps retryMs and resets the backoff
+  await fail();
+  assert.equal(delays.at(-1), 4000);
+  await next();
+  assert.equal(delays.at(-1), 1000);
+  state.present = true;
+  await next();
+  await fail();
+  assert.equal(delays.at(-1), 1000, 'a fresh find after not-found starts from retryMs');
+  reader.stop();
+  reader.start();
+  await flush();
+  await fail();
+  assert.equal(delays.at(-1), 1000, 'start() resets');
+  reader.stop();
+});

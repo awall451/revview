@@ -58,6 +58,7 @@ above cover the key codes, repeat, the grab and replug. Ids `W1`... are new.
 | W2 | On the Pi: `uname -m`, `getconf LONG_BIT`, `python3 --version`, and `id` of the user that runs the server | `aarch64` and `64` (the 24-byte `input_event` layout and 64-bit `B: KEY=` words are assumed), a python3 (the grab helper uses only its standard library), and the user is in the `input` group or can otherwise read the node. On a 32-bit image the parser size must change to 16 | untested |
 | W3 | Run the server with `--input` and watch its stderr while unplugging and replugging the dongle 5 times | One `lost` / `device not found` line per unplug, no line repeated every second, no crash; `curl -s http://127.0.0.1:8138/state` shows `"buttons":"missing"` and `"present"` to match | untested |
 | W4 | In the car, tap and hold each pod button (cancel for over 1 s; back and read aloud for about half a second) | Taps are never read as holds and holds fire when expected (400 ms hold, 1000 ms long hold, 30 ms debounce). If not, change `timing` in `config/buttons.json` and note the values | untested |
+| W5 | Hold the grab (server running with `--input`), then `kill -9` the server (`pgrep -f grab.py` before and after) | The grab helper exits within about 1-2 s, the keys reach the console again, and a restarted server grabs without `cannot grab` | untested |
 
 ## Honest states (2026-11-22)
 

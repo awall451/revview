@@ -352,3 +352,48 @@ test('bounce (press, release, press 10 ms later) gives one gesture', () => {
   d.key(K.F16, 0);
   assert.equal(out.length, 1);
 });
+
+test('contact bounce: release within debounceMs is ignored, the hold continues and fires once, no tap', () => {
+  const { clock, out, d } = setup();
+  clock.advance(100);
+  d.key(K.F14, 1);
+  clock.advance(10);
+  d.key(K.F14, 0); // bounce
+  clock.advance(5);
+  d.key(K.F14, 1); // bounce re-press
+  clock.advance(400);
+  assert.deepEqual(out.map((e) => e.gesture), ['hold']);
+  clock.advance(100);
+  d.key(K.F14, 0);
+  assert.deepEqual(out.map((e) => e.gesture), ['hold']);
+});
+
+test('a press/release at +100 ms is still a tap; bounce release of a tap-on-press key does not stick it', () => {
+  const { clock, out, d } = setup();
+  clock.advance(100);
+  d.key(K.F14, 1);
+  clock.advance(100);
+  d.key(K.F14, 0);
+  assert.deepEqual(out.map((e) => e.gesture), ['tap']);
+  d.key(K.F13, 1);
+  clock.advance(10);
+  d.key(K.F13, 0);
+  clock.advance(100);
+  d.key(K.F13, 1);
+  assert.deepEqual(out.map((e) => e.button), ['read', 'ptt', 'ptt']);
+});
+
+test('a genuine press shorter than debounceMs on a hold button resolves as a tap, the key does not stick', () => {
+  const { clock, out, d } = setup();
+  clock.advance(100);
+  d.key(K.F14, 1);
+  clock.advance(10);
+  d.key(K.F14, 0); // provisional
+  assert.deepEqual(out, []);
+  clock.advance(50); // window over, no re-press: it was a real release
+  assert.deepEqual(out.map((e) => e.gesture), ['tap']);
+  clock.advance(100);
+  d.key(K.F14, 1);
+  clock.advance(500);
+  assert.deepEqual(out.map((e) => e.gesture), ['tap', 'hold']);
+});

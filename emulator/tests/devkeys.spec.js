@@ -109,7 +109,7 @@ test.describe('dev key bridge', () => {
 
 test.describe('NO BUTTONS end to end', () => {
   test('RevviewInput present:false shows the tag, present:true hides it', async ({ page }) => {
-    await withServer({}, async (server) => {
+    await withServer({ devBridge: true }, async (server) => {
       await openLive(page, server);
       const post = (present) => fetch(`${server.url}/event`, { method: 'POST', body: JSON.stringify({ hook_event_name: 'RevviewInput', present }) });
       await post(false);

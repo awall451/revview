@@ -6,7 +6,8 @@ import { open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { startLiveServer, parseArgs } from '../../src/server/index.js';
+import { EventEmitter } from 'node:events';
+import { startLiveServer, parseArgs, installShutdown } from '../../src/server/index.js';
 import { parseConfig, DEFAULT_CONFIG_PATH } from '../../src/input/keymap.js';
 import { encodeEvent, EV_KEY } from '../../src/input/evdev.js';
 import { KEY_CODES } from '../../src/input/keys.js';
@@ -144,7 +145,7 @@ test('dev bridge with input: one shared detector (modifier combo)', async () => 
 
 test('POST /event RevviewButton: counted, logged with source post; invalid ones not logged', async () => {
   const seen = [];
-  await withServer({ onGesture: (g) => { seen.push(g); throw new Error('boom'); } }, async (s) => {
+  await withServer({ devBridge: true, onGesture: (g) => { seen.push(g); throw new Error('boom'); } }, async (s) => {
     const seq0 = (await get(s, '/state')).seq;
     assert.equal((await postEvent(s, { hook_event_name: 'RevviewButton', button: 'cancel', gesture: 'long-hold' })).status, 204);
     assert.equal((await get(s, '/state')).seq, seq0 + 1);
@@ -158,8 +159,32 @@ test('POST /event RevviewButton: counted, logged with source post; invalid ones 
   });
 });
 
+test('POST /event RevviewButton / RevviewInput without the dev bridge: 403, no gesture, no onGesture, board unchanged', async () => {
+  const seen = [];
+  await withServer({ onGesture: (g) => seen.push(g) }, async (s) => {
+    const before = await get(s, '/state');
+    const r = await postEvent(s, { hook_event_name: 'RevviewButton', button: 'cancel', gesture: 'tap' });
+    assert.equal(r.status, 403);
+    assert.match(await r.text(), /RevviewButton is not accepted over HTTP \(dev bridge only\)/);
+    const r2 = await postEvent(s, { hook_event_name: 'RevviewInput', present: false });
+    assert.equal(r2.status, 403);
+    assert.match(await r2.text(), /RevviewInput is not accepted over HTTP/);
+    assert.deepEqual(await get(s, '/state'), before);
+    assert.deepEqual((await buttons(s)).gestures, []);
+    assert.equal(seen.length, 0);
+    assert.equal(s.gestures().length, 0);
+  });
+});
+
+test('POST /event RevviewInput with the dev bridge changes the board', async () => {
+  await withServer({ devBridge: true }, async (s) => {
+    assert.equal((await postEvent(s, { hook_event_name: 'RevviewInput', present: false })).status, 204);
+    assert.equal((await buttons(s)).buttons, 'missing');
+  });
+});
+
 test('log keeps the last 32, oldest first', async () => {
-  await withServer({}, async (s) => {
+  await withServer({ devBridge: true }, async (s) => {
     for (let i = 0; i < 40; i++) await postEvent(s, { hook_event_name: 'RevviewButton', button: `b${i}`, gesture: 'tap' });
     const g = (await buttons(s)).gestures;
     assert.equal(g.length, 32);
@@ -169,7 +194,7 @@ test('log keeps the last 32, oldest first', async () => {
 });
 
 test('a gesture during starting is dropped', async () => {
-  await withServer({}, async (s) => {
+  await withServer({ devBridge: true }, async (s) => {
     await postEvent(s, { hook_event_name: 'RevviewButton', button: 'up', gesture: 'tap' });
     await postEvent(s, { hook_event_name: 'RevviewStarting' });
     await postEvent(s, { hook_event_name: 'RevviewButton', button: 'down', gesture: 'tap' });
@@ -212,5 +237,20 @@ test('CLI: a bad config file exits 2 before listening, naming the file', () => {
     assert.match(r2.stderr, /--bogus/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('installShutdown: SIGTERM and SIGINT close the server, then exit 0', async () => {
+  for (const sig of ['SIGTERM', 'SIGINT']) {
+    const proc = new EventEmitter();
+    const exits = [];
+    proc.exit = (c) => exits.push(c);
+    const order = [];
+    installShutdown({ close: async () => { order.push('close'); } }, proc);
+    proc.emit(sig);
+    proc.emit(sig); // a second signal does not close twice
+    await sleep(10);
+    assert.deepEqual(order, ['close']);
+    assert.deepEqual(exits, [0]);
   }
 });

@@ -9,7 +9,7 @@ posted while the server was down are lost).
 
 Run: `npm start` or `node src/server/index.js [port] [--input [path]] [--dev-bridge]` (port default **8138**, or env `REVVIEW_PORT`).
 `--input` reads the wheel buttons in this process (config `config/buttons.json`, or the path given); a bad config or
-unknown flag prints the message to stderr and exits with code 2 before listening. `--dev-bridge` (or `npm run start:dev`) turns on `POST /dev/key`.
+unknown flag prints the message to stderr and exits with code 2 before listening. `--dev-bridge` (or `npm run start:dev`) turns on `POST /dev/key`. SIGTERM and SIGINT close the server (stopping the grab helper) and exit 0.
 It binds to **127.0.0.1 only**; there is deliberately no way to change the host from the CLI.
 Open `http://127.0.0.1:8138/`.
 
@@ -70,8 +70,12 @@ state do not change for them. Each entry is `{button, gesture, source: 'device'|
 for each (a throwing callback is caught and logged).
 
 - `GET /buttons`: `{"buttons": "unknown"|"present"|"missing", "gestures": [oldest first]}`, `no-store`.
-- `POST /event` with `{hook_event_name:'RevviewButton', button, gesture}` takes the normal path (204, `seq += 1`, the board
-  ignores it) and, when `button` matches `/^[a-z][a-z0-9-]{0,31}$/` and `gesture` is one of the three, is also logged with source `post`.
+- `POST /event` with `{hook_event_name:'RevviewButton'|'RevviewInput', ...}` is accepted **only with `--dev-bridge`**. Otherwise it
+  answers 403 (`... is not accepted over HTTP (dev bridge only)`), nothing is logged and the board is unchanged: any local
+  process without an Origin header could otherwise forge a press or fake NO BUTTONS. With the bridge, `RevviewButton` takes the
+  normal path (204, `seq += 1`, the board ignores it) and, when `button` matches `/^[a-z][a-z0-9-]{0,31}$/` and `gesture` is one
+  of the three, is also logged with source `post`.
+- With `--input` and `--dev-bridge` together the bridge shares the device's detector (dev only; sources are told apart per key event).
 - `POST /dev/key` (**dev only**): body `{code, type: 'down'|'up'|'lost', repeat?}` (`code` is a `KeyboardEvent.code`; `lost` = the
   page lost focus, like a vanished device). It feeds the same detector as the device (the one from `--input` when given,
   else one built from `config/buttons.json`). 204; unmapped code: 204 and ignored; bad body 400; over 1 KiB 413.

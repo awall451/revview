@@ -85,9 +85,12 @@ export function createDeviceReader({
     lastLog = null;
     safe(onPresence, p);
   }
-  function retry() {
+  const MAX_BACKOFF_MS = 30000;
+  let delay = retryMs; // next retry delay after an open/grab failure (doubles up to MAX_BACKOFF_MS)
+  let lastPath = null; // the path of the previous attempt
+  function retry(ms = retryMs) {
     if (stopped) return;
-    timer = d.setTimeout(() => { timer = null; attempt(); }, retryMs);
+    timer = d.setTimeout(() => { timer = null; attempt(); }, ms);
     timer?.unref?.();
   }
 
@@ -110,9 +113,13 @@ export function createDeviceReader({
     if (!path) {
       setPresence(false);
       say('device not found');
+      delay = retryMs;
+      lastPath = null;
       retry();
       return;
     }
+    if (path !== lastPath) delay = retryMs;
+    lastPath = path;
     const parser = createEventParser({ size: d.eventSize });
     let s;
     try {
@@ -121,13 +128,20 @@ export function createDeviceReader({
       safe(onLost);
       setPresence(false);
       say(`cannot open ${path}: ${e?.message ?? e}`);
-      retry();
+      retry(delay);
+      delay = Math.min(delay * 2, MAX_BACKOFF_MS);
       return;
     }
     stream = s;
     let over = false;
     const live = () => !stopped && my === gen && !over;
-    s.on('ready', () => { if (live()) setPresence(true); });
+    let ready = false;
+    s.on('ready', () => {
+      if (!live()) return;
+      ready = true;
+      delay = retryMs;
+      setPresence(true);
+    });
     s.on('data', (buf) => {
       if (!live()) return;
       for (const ev of parser.push(buf)) {
@@ -143,7 +157,8 @@ export function createDeviceReader({
       safe(onLost);
       setPresence(false);
       say(err ? `lost ${path}: ${err.message ?? err}` : `lost ${path}`);
-      retry();
+      if (ready) retry(retryMs);
+      else { retry(delay); delay = Math.min(delay * 2, MAX_BACKOFF_MS); }
     });
   }
 
@@ -151,6 +166,8 @@ export function createDeviceReader({
     start() {
       if (!stopped) return;
       stopped = false;
+      delay = retryMs;
+      lastPath = null;
       gen++;
       attempt();
     },

@@ -570,6 +570,16 @@ on Claude Code yet (WB3).
   The bridge feeds the same detector as the device. The Pi's server unit must never pass `--dev-bridge`.
 - Presses during `starting` are logged as `dropped` (WB3 must not act on them). The "bar briefly marks a
   dropped press" part of BUTTONS.md is not built.
+- **Gestures and presence are never accepted over HTTP outside `--dev-bridge`.** `POST /event` with
+  `RevviewButton` or `RevviewInput` answers 403 unless the server runs with `--dev-bridge`. Any local process
+  without an `Origin` header (for example a Bash command Claude Code runs: `curl 127.0.0.1:8138/event`) could
+  otherwise forge a button press and later answer its own permission prompt, or fake the NO BUTTONS state.
+  The device reader runs in-process (internal `apply()`), so the HTTP path has no production use.
+  Also: after an open or grab failure the reader backs off (delay doubles from 1 s to 30 s, reset on a
+  successful open, a changed path, `start()`; "device not found" stays at 1 s); the server handles
+  SIGTERM/SIGINT by closing (which stops the grab helper) and exiting 0, and `grab.py` exits within about 1 s
+  when its parent dies (`select` with a 1 s timeout and a `getppid` check); a release within 30 ms of a
+  hold/long-hold button's press is contact bounce and is ignored, so the hold continues as one press.
 
 ## 2026-11-22: QA round 3 (01 03 04 06 09 10)
 

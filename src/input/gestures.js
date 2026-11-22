@@ -22,12 +22,20 @@ export function createGestureDetector({ bindings, timing, clock, emit }) {
   function clearTimers(s) {
     if (s.holdTimer !== null) clock.clearTimeout(s.holdTimer);
     if (s.longTimer !== null) clock.clearTimeout(s.longTimer);
+    if (s.relTimer !== null) clock.clearTimeout(s.relTimer);
+    s.relTimer = null;
     s.holdTimer = null;
     s.longTimer = null;
   }
 
   function press(code) {
-    if (downKeys.has(code) || downMods.has(code)) return;
+    const cur = downKeys.get(code);
+    if (cur && cur.relTimer !== null) { // bounce: the release was provisional, the press continues
+      clock.clearTimeout(cur.relTimer);
+      cur.relTimer = null;
+      return;
+    }
+    if (cur || downMods.has(code)) return;
     if (code in MODIFIER_KIND) { downMods.add(code); return; }
     const now = clock.now();
     const last = lastRelease.get(code);
@@ -36,7 +44,7 @@ export function createGestureDetector({ bindings, timing, clock, emit }) {
       return;
     }
     const binding = table.get(`${heldKinds().join('+')}|${code}`) ?? null;
-    const s = { binding, at: now, holdTimer: null, longTimer: null, holdDone: false, longDone: false };
+    const s = { binding, at: now, holdTimer: null, longTimer: null, relTimer: null, holdDone: false, longDone: false };
     downKeys.set(code, s);
     if (!binding) return;
     if (!binding.hold && !binding.longHold) { fire(binding.button, 'tap'); return; }
@@ -60,9 +68,20 @@ export function createGestureDetector({ bindings, timing, clock, emit }) {
     if (code in MODIFIER_KIND) { downMods.delete(code); return; }
     const s = downKeys.get(code);
     if (!s) return;
-    downKeys.delete(code);
-    if (!s.binding) return; // ignored press (bounce or unbound)
+    if (!s.binding) { downKeys.delete(code); return; } // ignored press (bounce or unbound)
+    if (s.relTimer !== null) return; // already provisional
     const now = clock.now();
+    // Contact bounce: a release this soon after the press is provisional. If the key is pressed again
+    // within debounceMs of the press it was bounce and the press continues (hold timers keep running);
+    // otherwise it resolves as the real release when the window ends. A tap-on-press button already fired.
+    if ((s.binding.hold || s.binding.longHold) && now - s.at < debounceMs) {
+      s.relTimer = clock.setTimeout(() => {
+        s.relTimer = null;
+        if (downKeys.get(code) === s) release(code);
+      }, s.at + debounceMs - now);
+      return;
+    }
+    downKeys.delete(code);
     lastRelease.set(code, now);
     const b = s.binding;
     if (!b.hold && !b.longHold) return;

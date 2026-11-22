@@ -58,7 +58,7 @@ owner to confirm.
 
 **Gestures.** A pure function: timestamped press and release in, gestures out. **[proposal]**
 - Ignore kernel auto-repeat (event value 2).
-- Debounce: ignore a press within 30 ms of the last release. The firmware (ZMK) debounces too.
+- Debounce: ignore a press within 30 ms of the last release, and ignore a release within 30 ms of the press of a hold/long-hold button (contact bounce: such a release is provisional; a re-press inside the window continues the same press, otherwise it resolves as a tap when the window ends). The firmware (ZMK) debounces too.
 - Tap: released before 400 ms. Hold: fires at 400 ms while still held. Long hold: fires at 1000 ms, for cancel only.
 - A button with no hold action fires on press, for the lowest latency: push-to-talk, deny, up, down, left, right.
 

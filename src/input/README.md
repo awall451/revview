@@ -24,7 +24,7 @@ codes are not verified: bench items 27 and W1.
 
 ## Gestures
 
-- Kernel auto-repeat (value 2) is ignored. A press within `debounceMs` of the same key's release is ignored.
+- Kernel auto-repeat (value 2) is ignored. A press within `debounceMs` of the same key's release is ignored, and so is a release within `debounceMs` of the press of a `hold`/`longHold` button (contact bounce: that release is provisional; a re-press within the window continues the same press with the hold timers running, otherwise it resolves as the real release when the window ends).
 - A button with neither `hold` nor `longHold` fires `tap` on press (lowest latency).
 - Otherwise: released before `holdMs` is a `tap`; `hold` fires at `holdMs` while held; `long-hold` at
   `longHoldMs`. A release after `holdMs` gives no tap (a long-hold-only button released between the two gives

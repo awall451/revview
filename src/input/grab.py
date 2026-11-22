@@ -7,6 +7,7 @@ Standard library only. Node core cannot call ioctl, so this is the whole helper.
 import errno
 import fcntl
 import os
+import select
 import signal
 import sys
 
@@ -17,6 +18,7 @@ CHUNK = 24 * 64
 
 def main():
     path = sys.argv[1]
+    ppid = os.getppid()  # at startup; a different value later means the parent died
     signal.signal(signal.SIGTERM, lambda *_: os._exit(0))
     signal.signal(signal.SIGINT, lambda *_: os._exit(0))
     try:
@@ -35,6 +37,12 @@ def main():
     # The kernel releases the grab when the fd closes, so no explicit release is needed.
     while True:
         try:
+            # Wake every second to notice that the parent (the server) died, e.g. kill -9: exit, which
+            # closes the fd and releases the grab.
+            if not select.select([fd], [], [], 1.0)[0]:
+                if os.getppid() != ppid:
+                    return 0
+                continue
             data = os.read(fd, CHUNK)
         except OSError as e:  # ENODEV when unplugged
             sys.stderr.write("revview-grab: read %s: %s\n" % (path, e.strerror))
@@ -49,8 +57,6 @@ def main():
             if e.errno == errno.EPIPE:
                 return 0
             raise
-        except BrokenPipeError:
-            return 0
 
 
 if __name__ == "__main__":

@@ -214,6 +214,11 @@ export async function startLiveServer({
       if (event === null || typeof event !== 'object' || Array.isArray(event)) {
         return text(res, 400, 'body must be a JSON object');
       }
+      // Gestures and presence come only from the in-process reader (or the dev bridge): a local process
+      // without an Origin header must not be able to forge a press or the NO BUTTONS state.
+      if (!devBridge && (event.hook_event_name === 'RevviewButton' || event.hook_event_name === 'RevviewInput')) {
+        return text(res, 403, `${event.hook_event_name} is not accepted over HTTP (dev bridge only)`);
+      }
       if (!apply(event)) return text(res, 500, 'state core failed; event ignored');
       if (event.hook_event_name === 'RevviewButton' && typeof event.button === 'string'
         && BUTTON_RE.test(event.button) && GESTURES.includes(event.gesture)) {
@@ -375,6 +380,18 @@ export function parseArgs(argv) {
   return out;
 }
 
+// SIGTERM/SIGINT: close the server (which stops the grab helper), then exit 0.
+export function installShutdown(server, proc = process) {
+  let closing = false;
+  const stop = () => {
+    if (closing) return;
+    closing = true;
+    Promise.resolve().then(() => server.close()).catch(() => {}).finally(() => proc.exit(0));
+  };
+  proc.on('SIGTERM', stop);
+  proc.on('SIGINT', stop);
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   let args;
   let input = null;
@@ -385,7 +402,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     console.error(e instanceof ConfigError || e instanceof Error ? e.message : String(e));
     process.exit(2);
   }
-  const { url } = await startLiveServer({ port: args.port, input, devBridge: args.devBridge });
+  const live = await startLiveServer({ port: args.port, input, devBridge: args.devBridge });
+  const { url } = live;
+  installShutdown(live);
   console.log(`revview live server (127.0.0.1 only)`);
   console.log(`view:  ${url}/`);
   console.log(`post:  curl -s -X POST --data-binary @- ${url}/event < <(head -1 fixtures/sessions/working-turn.jsonl)`);
