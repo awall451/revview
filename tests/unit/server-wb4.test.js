@@ -137,3 +137,17 @@ test('parseArgs: --projects, and REVVIEW_PROJECTS as its default', () => {
   }
   assert.equal(parseArgs([]).projects, process.env.REVVIEW_PROJECTS ?? null);
 });
+
+test('after a restart an existing owned window is on the board and selectable before any hook event', async (t) => {
+  const runner = fakeRunner({ ids: [A] });
+  runner.list = async () => [{ id: A, window: '@1', cwd: '/w/a', name: 'alpha' }];
+  const c = await setup(t, { sessions: runner });
+  c.s.select(A);
+  assert.equal(c.s.selected(), A);
+  const v = (await c.state()).state;
+  assert.equal(v.voice, 'here');
+  assert.equal(v.view, 'unknown');
+  assert.equal(v.repo, 'alpha');
+  assert.equal(v.note, 'No events from this session yet');
+  assert.deepEqual(v.position, { index: 1, count: 1 });
+});

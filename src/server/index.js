@@ -6,7 +6,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { initialBoard, reduceBoard, boardView, pendingPrompts, shownPrompt } from '../state/index.js';
+import { initialBoard, reduceBoard, boardView, pendingPrompts, shownPrompt, selectedKey } from '../state/index.js';
 import { createSessionRunner, createActions, createPermissionRegistry, loadProjects } from '../sessions/index.js';
 import { startInput, createInputPipeline } from '../input/index.js';
 import { loadConfig, ConfigError, DEFAULT_CONFIG_PATH } from '../input/keymap.js';
@@ -84,8 +84,8 @@ export async function startLiveServer({
   async function refreshOwned() {
     if (!sessions) return;
     try {
-      const ids = (await sessions.list()).map((x) => x.id);
-      if (!closed) apply({ hook_event_name: 'RevviewOwned', ids }, true);
+      const list = await sessions.list();
+      if (!closed) apply({ hook_event_name: 'RevviewOwned', ids: list.map((x) => x.id), names: list.map((x) => x.name) }, true);
     } catch (e) {
       console.error('owned sessions: list failed:', e instanceof Error ? e.message : e);
     }
@@ -437,6 +437,7 @@ export async function startLiveServer({
     // internal: the boot path picks the session the buttons act on (no HTTP route reaches it)
     select: (id) => apply({ hook_event_name: 'RevviewSelect', session_id: id }, true),
     refreshOwned,
+    selected: () => selectedKey(board),
     url: `http://${DEFAULT_HOST}:${ownPort}`,
     port: ownPort,
     state: () => boardView(board),
@@ -526,13 +527,14 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const projects = args.projects ? loadProjects(args.projects, { log: (m) => console.error(m) }) : [];
   const live = await startLiveServer({ port: args.port, input, devBridge: args.devBridge, sessions: runner, projects });
   if (selectId !== null) live.select(selectId);
+  const selectedNow = selectId !== null && live.selected() === selectId;
   const { url } = live;
   installShutdown(live);
   console.log(`revview live server (127.0.0.1 only)`);
   console.log(`view:  ${url}/`);
   console.log(`post:  curl -s -X POST --data-binary @- ${url}/event < <(head -1 fixtures/sessions/working-turn.jsonl)`);
   if (input) console.log('input: reading wheel buttons (GET /buttons)');
-  if (runner) console.log('sessions: private tmux server (-L revview), selected: ' + (selectId ?? 'none'));
+  if (runner) console.log(`sessions: private tmux server (-L revview), ${selectId === null ? 'selected: none' : `${selectedNow ? 'selected' : 'wanted'}: ${selectId}`}`);
   if (args.projects) console.log(`projects: ${projects.length} from ${args.projects}`);
   if (args.devBridge) console.log('dev bridge ON (POST /dev/key): never use this on the car');
 }

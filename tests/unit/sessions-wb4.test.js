@@ -302,12 +302,13 @@ test('8. New session: menu, press, down, press starts in projects[1] and selects
   assert.deepEqual([r.action, r.done], ['new-session', true]);
   assert.deepEqual(t.runner.calls.start, [PROJECTS[1]]);
   assert.equal(t.nav(), null);
-  assert.equal(t.r.board.want, N);
-  assert.equal(t.sel(), A, 'still A until the new session says its first hook event');
+  assert.equal(t.r.board.want, null);
+  assert.equal(t.sel(), N, 'the new session is on the board and selected without any hook event');
   assert.ok(t.r.board.owned.includes(N), 'owned refreshed');
+  assert.deepEqual([t.view().view, t.view().note], ['unknown', 'No events from this session yet']);
   t.apply(ev('SessionStart', N));
   assert.equal(t.sel(), N);
-  assert.equal(t.r.board.want, null);
+  assert.equal(t.view().note, null);
 });
 
 test('8b. a refused start leaves the selection alone and logs', async () => {
@@ -319,6 +320,7 @@ test('8b. a refused start leaves the selection alone and logs', async () => {
   assert.equal(t.sel(), A);
   assert.equal(t.r.board.want, null);
   assert.equal(t.nav(), null);
+  assert.equal(t.r.board.note, 'New session not started: project folder missing');
   assert.ok(t.logs.some((l) => /new-session: not done/.test(l)));
 });
 
@@ -401,4 +403,21 @@ test('without a runner keys and answers are refused with "no sessions", navigati
   assert.equal(t.sel(), B);
   assert.equal((await t.tap('menu')).done, true);
   assert.equal(t.nav().kind, 'menu');
+});
+
+test('8d. a failed start for another reason notes a fixed text, never the error text', async () => {
+  const t = rig();
+  t.runner.start = async () => { throw new Error('tmux: secret detail'); };
+  await t.tap('menu');
+  await t.tap('press');
+  await t.tap('press');
+  assert.equal(t.r.board.note, 'New session not started: see the server log');
+});
+
+test('8e. no such project notes it on the bar', async () => {
+  const t = rig({ projects: [] });
+  await t.tap('menu');
+  await t.tap('press');
+  await t.tap('press');
+  assert.equal(t.r.board.note, 'New session not started: no such project');
 });

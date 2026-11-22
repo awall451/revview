@@ -43,9 +43,12 @@ export function createActions({
     return out('nav', true);
   };
 
-  const refreshOwned = () => {
-    try { onOwnedChanged?.(); } catch (e) { log(`owned refresh failed: ${String(e?.message ?? e)}`); }
+  // resolves when the refresh is done (the callback may return a promise); never rejects
+  const refreshOwned = async () => {
+    try { await onOwnedChanged?.(); } catch (e) { log(`owned refresh failed: ${String(e?.message ?? e)}`); }
   };
+  // a fixed text only: an error message never reaches the screen
+  const note = (text) => apply({ hook_event_name: 'RevviewNote', note: text });
 
   // Send one key to the selected session; `after(sent)` runs only when it was sent.
   async function send(action, key, after) {
@@ -54,7 +57,7 @@ export function createActions({
     if (id === null) return out(action, false, 'no session selected');
     const r = await runner.send(key, id);
     if (!r?.sent) {
-      if (r?.reason === 'selected session gone') refreshOwned();
+      if (r?.reason === 'selected session gone') await refreshOwned();
       return out(action, false, r?.reason ?? 'not sent');
     }
     after?.(r);
@@ -85,17 +88,23 @@ export function createActions({
     if (!runner) return out('new-session', false, 'no sessions');
     const nav = boardView(b).nav;
     const path = projects[nav.row];
-    if (typeof path !== 'string' || nav.rows[nav.row]?.label !== path) return out('new-session', false, 'no such project');
+    if (typeof path !== 'string' || nav.rows[nav.row]?.label !== path) {
+      note('New session not started: no such project');
+      return out('new-session', false, 'no such project');
+    }
     apply({ hook_event_name: 'RevviewNav', button: 'press', gesture: 'tap' }); // closes the list
     let s;
     try {
       s = await runner.start({ cwd: path });
     } catch (e) {
-      return out('new-session', false, String(e?.message ?? e));
+      const msg = String(e?.message ?? e);
+      note(msg.startsWith('cwd is not an existing directory')
+        ? 'New session not started: project folder missing' : 'New session not started: see the server log');
+      return out('new-session', false, msg);
     }
-    // the board selects it when its first hook event arrives
+    // the owned refresh puts it on the board (quiet, until its first hook event) and the want selects it
     apply({ hook_event_name: 'RevviewSelect', session_id: s.id });
-    refreshOwned();
+    await refreshOwned();
     return out('new-session', true);
   }
 

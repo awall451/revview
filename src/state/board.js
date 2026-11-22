@@ -57,6 +57,8 @@ function isValidBoard(b) {
     && Object.keys(b.sessions).every((k) => isValidSession(b.sessions[k]));
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const keyOf = (event) => (isStr(event.session_id) ? event.session_id : '');
 
 // An event without a usable session_id belongs to the one live session when there is exactly one (hand-posted
@@ -108,12 +110,14 @@ const need = (s) => PRIORITY[act(s)] ?? 0;
 // is never dropped: a pending prompt must not vanish. If every other session needs permission the newcomer is
 // still admitted and the cap is exceeded (the hint "+N" may then have two digits); showing every prompt beats
 // a tidy count.
-function capSessions(sessions, keepId, focus, selected, want) {
+function capSessions(sessions, keepId, focus, selected, want, owned = null) {
   let out = sessions;
   while (Object.keys(out).length > MAX_SESSIONS) {
     let victim = null;
-    for (const k of Object.keys(out)) {
-      if (k === keepId || k === selected || k === want || act(out[k]) === 'permission') continue;
+    const candidates = Object.keys(out).filter((k) => k !== keepId && k !== selected && k !== want && act(out[k]) !== 'permission');
+    // sessions revview owns are dropped only when no other candidate is left
+    const others = owned === null ? candidates : candidates.filter((k) => !owned.includes(k));
+    for (const k of others.length > 0 ? others : candidates) {
       if (victim === null) { victim = k; continue; }
       const kFocus = k === focus;
       const vFocus = victim === focus;
@@ -353,9 +357,32 @@ function reduceInner(b, event) {
     case 'RevviewOwned': {
       const ids = event.ids;
       if (!Array.isArray(ids) || ids.length > 64 || !ids.every((x) => isStr(x) && x.length <= 200)) return b;
+      const names = Array.isArray(event.names) && event.names.length === ids.length ? event.names : null;
+      const nameOf = new Map();
+      ids.forEach((id, i) => {
+        const n = names === null ? null : names[i];
+        // display text only: a name with control characters or an absurd length is not shown at all
+        const ok = typeof n === 'string' && n.length >= 1 && n.length <= 200 && !/[\u0000-\u001f\u007f-\u009f]/.test(n);
+        if (!nameOf.has(id)) nameOf.set(id, ok ? n.trim().slice(0, 64) || null : null);
+      });
       const owned = [...new Set(ids)];
-      if (b.owned !== null && owned.length === b.owned.length && owned.every((x) => b.owned.includes(x))) return b;
-      return { ...b, owned };
+      const tick = b.tick + 1;
+      let sessions = b.sessions;
+      for (const id of Object.keys(b.sessions)) {
+        if (b.sessions[id].quiet === true && !owned.includes(id)) sessions = withoutSession(sessions, id);
+      }
+      let added = 0;
+      for (const id of owned) {
+        if (!UUID.test(id) || has(sessions, id) || b.ended.includes(id)) continue;
+        sessions = withSession(sessions, id, {
+          state: { ...initialState(), repo: nameOf.get(id) ?? null }, open: [], pending: [], pre: [], touched: tick, born: tick, dropped: false, quiet: true,
+        });
+        added++;
+      }
+      const same = b.owned !== null && owned.length === b.owned.length && owned.every((x) => b.owned.includes(x));
+      if (same && sessions === b.sessions) return b;
+      sessions = capSessions(sessions, null, b.selected ?? b.focus, b.selected, b.want, owned);
+      return { ...b, owned, sessions, tick: added > 0 ? tick : b.tick };
     }
     case 'RevviewProjects': {
       const paths = event.paths;
@@ -491,7 +518,7 @@ function applyToSession(b, live, id, event) {
     if (state === prev && sameList(open, prevOpen) && (live === null || dropped === live.dropped)
       && pending === prevPending && pre === prevPre) return b;
     const tick = b.tick + 1;
-    const sessions = capSessions(withSession(b.sessions, id, { state, open, touched: tick, born: live === null ? tick : live.born, dropped, pending, pre }), id, b.selected ?? b.focus, b.selected, b.want);
+    const sessions = capSessions(withSession(b.sessions, id, { state, open, touched: tick, born: live === null ? tick : live.born, dropped, pending, pre }), id, b.selected ?? b.focus, b.selected, b.want, b.owned);
     const ended = b.ended.includes(id) ? b.ended.filter((x) => x !== id) : b.ended;
     return { ...b, sessions, ended, tick };
   };
@@ -625,7 +652,7 @@ function extrasOf(b, shownKey) {
     position: b.owned === null || i < 0 ? null : { index: i + 1, count: order.length },
     elsewhere: order.filter((k) => k !== shownKey && b.sessions[k].pending.length > 0).length,
     nav: navView(b),
-    note: typeof b.note === 'string' ? b.note : null,
+    note: typeof b.note === 'string' ? b.note : shownKey !== null && b.sessions[shownKey].quiet === true ? 'No events from this session yet' : null,
   };
 }
 

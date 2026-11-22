@@ -408,3 +408,69 @@ test('RevviewProjects changing the list closes an open New session / Projects vi
     assert.equal(reduceBoard(b, ev('RevviewProjects', { paths: ['/q'] })).nav, null);
   }
 });
+
+// ---- placeholders for owned sessions (QA r4-01, r4-03, r4-08)
+const U1 = '11111111-1111-4111-8111-111111111111';
+const U2 = '22222222-2222-4222-8222-222222222222';
+const U3 = '33333333-3333-4333-8333-333333333333';
+const owned = (ids, names) => ev('RevviewOwned', names === undefined ? { ids } : { ids, names });
+
+test('placeholders: an owned UUID session not on the board appears, quiet, UNKNOWN, named', () => {
+  const b = run([owned([U1, U2], ['alpha', null])]);
+  assert.deepEqual(sessionOrder(b), [U1, U2]);
+  assert.equal(b.sessions[U1].quiet, true);
+  assert.equal(b.sessions[U1].state.repo, 'alpha');
+  assert.equal(b.sessions[U2].state.repo, null);
+  const v = boardView(run([owned([U1], ['alpha']), select(U1)]));
+  assert.equal(v.view, 'unknown');
+  assert.equal(v.note, 'No events from this session yet');
+  assert.equal(v.voice, 'here');
+  const l = boardView(run([owned([U1, U2], ['alpha', null]), nav('press')]));
+  assert.deepEqual(l.nav.rows.map((r) => [r.label, r.word]), [['alpha', 'UNKNOWN'], ['', 'UNKNOWN']]);
+});
+
+test('placeholders: not for non-UUID ids, bad names are null, names trimmed to 64', () => {
+  const b = run([owned(['A', U1, U2, U3], ['x', 'bad\nname', 'y'.repeat(201), 'z'.repeat(100)])]);
+  assert.deepEqual(sessionOrder(b), [U1, U2, U3]);
+  assert.equal(b.sessions[U1].state.repo, null);
+  assert.equal(b.sessions[U2].state.repo, null);
+  assert.equal(b.sessions[U3].state.repo, 'z'.repeat(64));
+});
+
+test('placeholders: same board when nothing changes; come back after RevviewStarting; not for ended', () => {
+  const b = run([owned([U1], ['a'])]);
+  assert.equal(reduceBoard(b, owned([U1], ['a'])), b);
+  const c = run([ev('RevviewStarting'), owned([U1], ['a'])], b);
+  assert.deepEqual(sessionOrder(c), [U1]);
+  const d = run([owned([U1]), start(U1), end(U1), owned([U1])]);
+  assert.deepEqual(sessionOrder(d), []);
+});
+
+test('placeholders: removed when no longer owned; a real session is kept', () => {
+  const b = run([owned([U1, U2]), start(U2), owned([])]);
+  assert.deepEqual(sessionOrder(b), [U2]);
+});
+
+test('placeholders: the first hook event replaces it: normal session, same born, no quiet', () => {
+  const p = run([owned([U1, U2])]);
+  const b = reduceBoard(p, start(U2));
+  assert.equal(b.sessions[U2].quiet, undefined);
+  assert.equal(b.sessions[U2].born, p.sessions[U2].born);
+  assert.equal(b.sessions[U1].quiet, true);
+  assert.deepEqual(sessionOrder(b), [U1, U2]);
+});
+
+test('placeholders: a pending want becomes the selection when the owned list arrives', () => {
+  const b = run([select(U1), owned([U1])]);
+  assert.equal(selectedKey(b), U1);
+  assert.equal(b.want, null);
+});
+
+test('capSessions: sessions not owned go before owned ones', () => {
+  const ids = Array.from({ length: 6 }, (_, i) => `${String(i + 1).repeat(8)}-1111-4111-8111-111111111111`);
+  let b = run([start('h1'), work('h1'), start('h2'), start('h3')]);
+  b = run([owned(ids)], b);
+  assert.equal(Object.keys(b.sessions).length, MAX_SESSIONS);
+  assert.ok(ids.every((id) => b.sessions[id]), 'all owned kept');
+  assert.equal(Object.keys(b.sessions).filter((k) => !ids.includes(k)).length, 2);
+});
