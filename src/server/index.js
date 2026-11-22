@@ -1,12 +1,13 @@
 // Live server: hook scripts POST raw Claude Code hook JSON to /event, the state core
 // (src/state) reduces it, and the new state is pushed to the page over Server-Sent Events.
 // It also serves the view. Binds to 127.0.0.1 only; see src/server/README.md.
-//   node src/server/index.js [port] [--input [path]] [--dev-bridge]   (port default 8138, or REVVIEW_PORT)
+//   node src/server/index.js [port] [--input [path]] [--dev-bridge] [--sessions] [--start dir]...   (port default 8138, or REVVIEW_PORT)
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { initialBoard, reduceBoard, boardView } from '../state/index.js';
+import { initialBoard, reduceBoard, boardView, pendingPrompts, shownPrompt } from '../state/index.js';
+import { createSessionRunner, createActions, createPermissionRegistry } from '../sessions/index.js';
 import { startInput, createInputPipeline } from '../input/index.js';
 import { loadConfig, ConfigError, DEFAULT_CONFIG_PATH } from '../input/keymap.js';
 import { BROWSER_CODES } from '../input/keys.js';
@@ -68,12 +69,17 @@ function serveStatic(req, res, root) {
 export async function startLiveServer({
   port = 0, viewDir = DEFAULT_VIEW_DIR, reduce: reduceEvent = reduceBoard,
   input = null, devBridge = false, inputDeps, inputRetryMs, onGesture,
+  sessions = null, clock, permissionWaitMs, minShownMs,
 } = {}) {
   const root = path.resolve(viewDir);
   let board = initialBoard();
   let seq = 0;
   const clients = new Set();
   let ownPort = 0;
+  const registry = createPermissionRegistry({ clock, waitMs: permissionWaitMs, minShownMs });
+  const actions = sessions
+    ? createActions({ runner: sessions, registry, getBoard: () => board, apply, clock, log: (m) => console.error(m) })
+    : null;
 
   const message = () => `data: ${JSON.stringify({ seq, state: boardView(board) })}\n\n`;
   const broadcast = () => {
@@ -102,6 +108,9 @@ export async function startLiveServer({
     if (onlyIfChanged && next === board) return true;
     seq += 1;
     board = next;
+    // permission requests: drop those whose prompt is gone, then note what the bar shows now
+    registry.sweep(pendingPrompts(board));
+    registry.observe(shownPrompt(board));
     broadcast();
     return true;
   }
@@ -116,6 +125,12 @@ export async function startLiveServer({
       onGesture?.({ ...entry });
     } catch (e) {
       console.error('onGesture failed:', e);
+    }
+    // the actions never throw into the reader (handle() catches), the extra catch is a belt
+    try {
+      actions?.handle({ ...entry }).catch((e) => console.error('action failed:', e));
+    } catch (e) {
+      console.error('action failed:', e);
     }
   }
 
@@ -219,12 +234,60 @@ export async function startLiveServer({
       if (!devBridge && (event.hook_event_name === 'RevviewButton' || event.hook_event_name === 'RevviewInput')) {
         return text(res, 403, `${event.hook_event_name} is not accepted over HTTP (dev bridge only)`);
       }
+      // internal only: it makes a screen state from a key revview sent itself, so no POST may forge it
+      if (event.hook_event_name === 'RevviewInterrupted') {
+        return text(res, 403, 'RevviewInterrupted is internal and not accepted over HTTP');
+      }
       if (!apply(event)) return text(res, 500, 'state core failed; event ignored');
       if (event.hook_event_name === 'RevviewButton' && typeof event.button === 'string'
         && BUTTON_RE.test(event.button) && GESTURES.includes(event.gesture)) {
         acceptGesture({ button: event.button, gesture: event.gesture, source: 'post' });
       }
       res.writeHead(204).end();
+    });
+  }
+
+  // The PermissionRequest hook's long poll. The request is bound to the prompt this very event put on the
+  // board (matched by session, agent and the board tick); nothing the client sends can name another prompt,
+  // and no route answers it: only a wheel button (src/sessions/actions.js) can.
+  function postPermission(req, res) {
+    readBody(req, res, (body) => {
+      let ev;
+      try {
+        ev = JSON.parse(body);
+      } catch {
+        return text(res, 400, body.trim() === '' ? 'empty body' : 'malformed JSON');
+      }
+      if (ev === null || typeof ev !== 'object' || Array.isArray(ev) || ev.hook_event_name !== 'PermissionRequest'
+        || typeof ev.session_id !== 'string' || ev.session_id === '' || typeof ev.tool_name !== 'string') {
+        return text(res, 400, 'expected a PermissionRequest hook object');
+      }
+      const before = board;
+      if (!apply(ev)) return text(res, 500, 'state core failed; event ignored');
+      if (!sessions) return res.writeHead(204).end(); // no buttons can answer: the terminal dialog stays
+      const agent = typeof ev.agent_id === 'string' && ev.agent_id !== '' ? ev.agent_id : '';
+      // only an entry THIS event created (the board changed and the entry is from this tick) is bound, so its
+      // text on the bar is this request's own tool and command
+      const mine = board === before ? [] : pendingPrompts(board).filter((p) => p.session === ev.session_id
+        && p.agent === agent && p.since === board.tick);
+      let prompt;
+      if (mine.length === 1) prompt = mine[0];
+      else {
+        prompt = { session: ev.session_id, agent, since: null, tool: ev.tool_name, file: null, command: null };
+        console.error('permission request not bound to a prompt on the bar: buttons cannot answer it');
+      }
+      let over = false;
+      const id = registry.add(prompt, (decision) => {
+        if (over || res.writableEnded) return;
+        over = true;
+        if (decision === null) return res.writeHead(204).end();
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(decision));
+      });
+      if (id === null) return text(res, 503, 'too many waiting permission requests');
+      res.on('close', () => {
+        over = true;
+        registry.remove(id);
+      });
     });
   }
 
@@ -300,6 +363,7 @@ export async function startLiveServer({
 
   const ROUTES = {
     '/event': { POST: postEvent },
+    '/permission': { POST: postPermission },
     '/events': { GET: events },
     '/buttons': { GET: (req, res) => res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify({ buttons: boardView(board).buttons, gestures: gestureLog })) },
     '/state': { GET: (req, res) => res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify({ seq, state: boardView(board) })) },
@@ -352,9 +416,11 @@ export async function startLiveServer({
     port: ownPort,
     state: () => boardView(board),
     gestures: () => gestureLog.map((g) => ({ ...g })),
+    permissionsWaiting: () => registry.size(), // test seam: waiting PermissionRequest hook calls
     close: () =>
       new Promise((resolve) => {
         inputHandle?.stop();
+        registry.close(); // leaves the tmux server alone: sessions outlive a server restart
         clearInterval(timer);
         server.close(() => resolve());
         for (const c of clients) c.end();
@@ -365,10 +431,18 @@ export async function startLiveServer({
 }
 
 export function parseArgs(argv) {
-  const out = { port: null, inputPath: null, devBridge: false };
+  const out = { port: null, inputPath: null, devBridge: false, sessions: false, start: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--dev-bridge') out.devBridge = true;
+    else if (a === '--sessions') out.sessions = true;
+    else if (a === '--start') {
+      const next = argv[i + 1];
+      if (next === undefined || next.startsWith('--')) throw new Error('--start needs a directory');
+      out.start.push(next);
+      out.sessions = true;
+      i++;
+    }
     else if (a === '--input') {
       const next = argv[i + 1];
       if (next !== undefined && !next.startsWith('--')) { out.inputPath = next; i++; } else out.inputPath = DEFAULT_CONFIG_PATH;
@@ -402,12 +476,25 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     console.error(e instanceof ConfigError || e instanceof Error ? e.message : String(e));
     process.exit(2);
   }
-  const live = await startLiveServer({ port: args.port, input, devBridge: args.devBridge });
+  let runner = null;
+  if (args.sessions) {
+    runner = createSessionRunner({ socket: { name: 'revview' }, log: (m) => console.error(m) });
+    try {
+      const existing = await runner.list();
+      if (existing.length === 1) await runner.choose(existing[0].id);
+      for (const dir of args.start) await runner.start({ cwd: path.resolve(dir) }); // the last one started is chosen
+    } catch (e) {
+      console.error(`sessions: ${e instanceof Error ? e.message : String(e)}`);
+      process.exit(2);
+    }
+  }
+  const live = await startLiveServer({ port: args.port, input, devBridge: args.devBridge, sessions: runner });
   const { url } = live;
   installShutdown(live);
   console.log(`revview live server (127.0.0.1 only)`);
   console.log(`view:  ${url}/`);
   console.log(`post:  curl -s -X POST --data-binary @- ${url}/event < <(head -1 fixtures/sessions/working-turn.jsonl)`);
   if (input) console.log('input: reading wheel buttons (GET /buttons)');
+  if (runner) console.log('sessions: private tmux server (-L revview), chosen: ' + (runner.chosen() ?? 'none'));
   if (args.devBridge) console.log('dev bridge ON (POST /dev/key): never use this on the car');
 }

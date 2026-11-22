@@ -17,6 +17,16 @@ Design: `docs/BUTTONS.md` section 3. The wheel buttons type keys into the chosen
 
 `socket` is `{ name }` (`-L`) or `{ path }` (`-S`, for tests). Every call passes `-f /dev/null` (no user config).
 
+## Actions (`actions.js`) and wiring
+
+`createActions({ runner, registry, getBoard, apply, log, clock, ctrlCGapMs })` -> `handle(entry)`, one gesture at a time.
+Only `source` `device`/`bridge` and not `dropped` act. cancel tap = Escape, cancel long-hold = one Ctrl+C (refused for
+5000 ms after one was sent: two Ctrl+C in that window exit Claude), push-to-talk tap = Space (tap mode only); a sent
+Escape/Ctrl+C then applies the internal `RevviewInterrupted` (Claude fires no hook for it). press tap / deny tap call
+`registry.answer(kind, shownPrompt(board), target.id)` with the target re-verified by `runner.target()` and the board read
+after that await. The server (`src/server/index.js`) wires it to every device/bridge gesture, `POST /permission` feeds the
+registry, and a button can answer only the prompt that has been on the bar for 1.5 s in the chosen session.
+
 ## Why targeting is safe
 
 - The socket is private: `-L` sockets live in `/tmp/tmux-UID/` (mode 0700), so only this user reaches the server.

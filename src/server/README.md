@@ -7,7 +7,7 @@ session, see `src/state/README.md`), reduces every event with `reduceBoard` and 
 No persistence: a fresh or restarted server shows `unknown` (a restored state could not be trusted, and hooks
 posted while the server was down are lost).
 
-Run: `npm start` or `node src/server/index.js [port] [--input [path]] [--dev-bridge]` (port default **8138**, or env `REVVIEW_PORT`).
+Run: `npm start` or `node src/server/index.js [port] [--input [path]] [--dev-bridge] [--sessions] [--start dir]...` (port default **8138**, or env `REVVIEW_PORT`).
 `--input` reads the wheel buttons in this process (config `config/buttons.json`, or the path given); a bad config or
 unknown flag prints the message to stderr and exits with code 2 before listening. `--dev-bridge` (or `npm run start:dev`) turns on `POST /dev/key`. SIGTERM and SIGINT close the server (stopping the grab helper) and exit 0.
 It binds to **127.0.0.1 only**; there is deliberately no way to change the host from the CLI.
@@ -39,6 +39,18 @@ regex, omitted if not found): `seq += 1`, broadcast, and that session's diff bec
 Anything else (no hook event name, or a huge Bash/Read output, a PreToolUse) counts no diff and changes nothing.
 When only `Content-Length` is over the limit, the server
 reads up to 64 KiB of the body (waiting at most 2 s) to get the prefix, then answers 413; memory stays bounded.
+
+## POST /permission (the PermissionRequest hook's long poll)
+
+Body (same 1 MiB limit): a JSON object with `hook_event_name === 'PermissionRequest'`, a non-empty string `session_id` and a
+string `tool_name`, else 400. The event is applied like a `/event` one (the bar shows the prompt, `seq += 1`). The request is
+then bound to the board entry **this event created** (same `session_id`, agent = `agent_id` or none, `since === board.tick`);
+if there is none (e.g. nothing was added) it is bound to nothing and no button can ever answer it (logged). Without
+`sessions`: 204 at once. Else it waits: 200 `application/json` `{"behavior":"allow"}` or `{"behavior":"deny","message":...}` when a
+wheel button answers it, 204 when the prompt is gone (answered in the terminal, interrupted, timeout `permissionWaitMs`,
+default 540 s, or server close). 503 when 16 are already waiting. A client that disconnects is forgotten. There is no route that
+answers a request and the client cannot pass an id: only the buttons act (see `src/sessions/README.md`). After every
+board change the registry drops requests whose prompt left the board and notes which prompt the bar shows.
 
 ## GET /events (SSE)
 
@@ -75,6 +87,11 @@ for each (a throwing callback is caught and logged).
   process without an Origin header could otherwise forge a press or fake NO BUTTONS. With the bridge, `RevviewButton` takes the
   normal path (204, `seq += 1`, the board ignores it) and, when `button` matches `/^[a-z][a-z0-9-]{0,31}$/` and `gesture` is one
   of the three, is also logged with source `post`.
+- `POST /event` with `RevviewInterrupted` is refused with **403 always**, even with `--dev-bridge`: it is the board's internal
+  event for a Escape/Ctrl+C that revview itself sent (`src/sessions/actions.js`).
+- With `--sessions` (or a `sessions` runner) gestures with source `device` or `bridge` (never `post`, never `dropped`) also go to
+  the actions: cancel tap = Escape, cancel long-hold = one Ctrl+C (not twice within 5 s), push-to-talk tap = Space, press tap =
+  allow, deny tap = deny, to the chosen session only (re-verified for each).
 - With `--input` and `--dev-bridge` together the bridge shares the device's detector (dev only; sources are told apart per key event).
 - `POST /dev/key` (**dev only**): body `{code, type: 'down'|'up'|'lost', repeat?}` (`code` is a `KeyboardEvent.code`; `lost` = the
   page lost focus, like a vanished device). It feeds the same detector as the device (the one from `--input` when given,
@@ -92,6 +109,11 @@ for each (a throwing callback is caught and logged).
 - At most **8** SSE clients (`MAX_SSE_CLIENTS`); the ninth `GET /events` gets 503. A client whose unread backlog
   passes 256 KiB (it never reads) is dropped.
 
-Programmatic use (tests): `startLiveServer({ port: 0, viewDir, reduce, input, devBridge, inputDeps, inputRetryMs, onGesture })`
+`--sessions` makes the session runner on the private tmux socket (`-L revview`); at boot, if exactly one revview session
+exists it is chosen. `--start <dir>` (repeatable, implies `--sessions`) starts `claude` there at boot; the last one started is
+chosen. The tmux server is never killed by the live server (sessions outlive a restart).
+
+Programmatic use (tests): `startLiveServer({ port: 0, viewDir, reduce, input, devBridge, inputDeps, inputRetryMs, onGesture, sessions, clock, permissionWaitMs, minShownMs })`
+(`sessions` is a runner (`target/chosen/send`), `clock`/`permissionWaitMs`/`minShownMs` go to the permission registry; `permissionsWaiting()` is a test seam)
 (`input` is a parsed config, `inputDeps`/`inputRetryMs` go to the device reader; `gestures()` returns a copy of the log) (`reduce` is a test seam for a failing state core; there is no host option) resolves to
 `{ url, port, close(), state() }` (`reduce` is `(board, event) => board`, default `reduceBoard`; `state()` returns `boardView(board)`).

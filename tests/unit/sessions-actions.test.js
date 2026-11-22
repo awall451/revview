@@ -1,0 +1,177 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createActions } from '../../src/sessions/index.js';
+import { initialBoard, reduceBoard } from '../../src/state/index.js';
+
+const SID = '7de4c978-52e0-4e1a-ad17-826801362ee2';
+const ev = (name, extra = {}) => ({ session_id: SID, hook_event_name: name, ...extra });
+
+function permissionBoard() {
+  let b = initialBoard();
+  for (const e of [
+    ev('UserPromptSubmit', { prompt: 'x' }),
+    ev('PreToolUse', { tool_name: 'Bash', tool_use_id: 't1', tool_input: { command: 'ls' } }),
+    ev('PermissionRequest', { tool_name: 'Bash', tool_input: { command: 'ls' } }),
+  ]) b = reduceBoard(b, e);
+  return b;
+}
+
+function setup({ target = { id: SID, window: '@1' }, sendResult, board = permissionBoard() } = {}) {
+  const sent = [];
+  const applied = [];
+  const answers = [];
+  const logs = [];
+  let now = 0;
+  const waiters = [];
+  const runner = {
+    chosen: () => 'WRONG-chosen-id',
+    target: async () => (typeof target === 'function' ? target() : target),
+    send: async (k) => {
+      sent.push(k);
+      if (waiters.length) await waiters.shift();
+      return sendResult ?? { sent: true, id: SID, window: '@1' };
+    },
+  };
+  const registry = {
+    answer: (kind, shown, chosen) => {
+      answers.push({ kind, shown, chosen });
+      return { ok: true };
+    },
+  };
+  const a = createActions({
+    runner, registry, getBoard: () => board, apply: (e) => applied.push(e), log: (m) => logs.push(m), clock: () => now,
+  });
+  return {
+    a, sent, applied, answers, logs, board,
+    at: (t) => { now = t; },
+    gate: () => { let f; waiters.push(new Promise((r) => { f = r; })); return f; },
+  };
+}
+const dev = (button, gesture, extra = {}) => ({ button, gesture, source: 'device', dropped: false, ...extra });
+
+test('dropped and post-source gestures never act', async () => {
+  const s = setup();
+  assert.equal((await s.a.handle(dev('cancel', 'tap', { dropped: true }))).done, false);
+  assert.equal((await s.a.handle(dev('cancel', 'tap', { source: 'post' }))).done, false);
+  assert.equal((await s.a.handle(dev('press', 'tap', { source: 'post' }))).done, false);
+  assert.equal((await s.a.handle(dev('cancel', 'tap', { source: undefined }))).done, false);
+  assert.deepEqual(s.sent, []);
+  assert.deepEqual(s.answers, []);
+});
+
+test('cancel tap: Escape, then RevviewInterrupted with the sent id; bridge source acts too', async () => {
+  const s = setup();
+  const r = await s.a.handle(dev('cancel', 'tap', { source: 'bridge' }));
+  assert.equal(r.done, true);
+  assert.deepEqual(s.sent, ['Escape']);
+  assert.deepEqual(s.applied, [{ hook_event_name: 'RevviewInterrupted', session_id: SID }]);
+});
+
+test('not sent: nothing applied, reason reported', async () => {
+  const s = setup({ sendResult: { sent: false, reason: 'no session chosen' } });
+  const r = await s.a.handle(dev('cancel', 'tap'));
+  assert.deepEqual(r, { action: 'cancel-escape', done: false, reason: 'no session chosen' });
+  assert.deepEqual(s.applied, []);
+  assert.ok(s.logs.length >= 1);
+});
+
+test('cancel hold does nothing', async () => {
+  const s = setup();
+  const r = await s.a.handle(dev('cancel', 'hold'));
+  assert.equal(r.done, false);
+  assert.deepEqual(s.sent, []);
+});
+
+test('long-hold: one Ctrl+C per 5000 ms; refused ones send nothing', async () => {
+  const s = setup();
+  s.at(1000);
+  assert.equal((await s.a.handle(dev('cancel', 'long-hold'))).done, true);
+  s.at(1000 + 4999);
+  const r = await s.a.handle(dev('cancel', 'long-hold'));
+  assert.deepEqual([r.done, r.reason], [false, 'ctrl-c too soon']);
+  assert.deepEqual(s.sent, ['C-c']);
+  assert.equal(s.applied.length, 1);
+  s.at(1000 + 5000);
+  assert.equal((await s.a.handle(dev('cancel', 'long-hold'))).done, true);
+  assert.deepEqual(s.sent, ['C-c', 'C-c']);
+  assert.equal(s.applied.length, 2);
+});
+
+test('a Ctrl+C that was not sent does not start the gap', async () => {
+  const s = setup({ sendResult: { sent: false, reason: 'gone' } });
+  s.at(10);
+  await s.a.handle(dev('cancel', 'long-hold'));
+  s.at(11);
+  await s.a.handle(dev('cancel', 'long-hold'));
+  assert.deepEqual(s.sent, ['C-c', 'C-c']);
+});
+
+test('push-to-talk tap sends Space; its hold does nothing', async () => {
+  const s = setup();
+  assert.equal((await s.a.handle(dev('push-to-talk', 'tap'))).done, true);
+  assert.equal((await s.a.handle(dev('push-to-talk', 'hold'))).done, false);
+  assert.deepEqual(s.sent, ['Space']);
+  assert.deepEqual(s.applied, []);
+});
+
+test('press/deny pass the re-verified target id (not chosen()) and the shown prompt', async () => {
+  const s = setup();
+  assert.equal((await s.a.handle(dev('press', 'tap'))).done, true);
+  assert.equal((await s.a.handle(dev('deny', 'tap'))).done, true);
+  assert.deepEqual(s.answers.map((x) => [x.kind, x.chosen]), [['allow', SID], ['deny', SID]]);
+  assert.equal(s.answers[0].shown.session, SID);
+  assert.equal(s.answers[0].shown.command, 'ls');
+  assert.deepEqual(s.sent, []);
+});
+
+test('no target: the registry is not asked (no session), nothing sent', async () => {
+  const s = setup({ target: null });
+  const r = await s.a.handle(dev('press', 'tap'));
+  assert.deepEqual([r.done, r.reason], [false, 'no session chosen']);
+  assert.deepEqual(s.answers, []);
+});
+
+test('press hold, other buttons: no action', async () => {
+  const s = setup();
+  for (const [b, g] of [['press', 'hold'], ['press', 'long-hold'], ['up', 'tap'], ['menu', 'tap'], ['read-aloud', 'tap']]) {
+    const r = await s.a.handle(dev(b, g));
+    assert.deepEqual([r.done, r.reason], [false, 'no action']);
+  }
+  assert.deepEqual(s.sent, []);
+  assert.deepEqual(s.answers, []);
+});
+
+test('the board is read after the target await', async () => {
+  let board = initialBoard();
+  const answers = [];
+  const a = createActions({
+    runner: { target: async () => { board = permissionBoard(); return { id: SID }; }, send: async () => ({ sent: false }) },
+    registry: { answer: (k, shown) => { answers.push(shown); return { ok: false, reason: 'x' }; } },
+    getBoard: () => board, apply: () => {},
+  });
+  await a.handle(dev('press', 'tap'));
+  assert.equal(answers[0]?.session, SID);
+});
+
+test('gestures are serialized: a second one waits for the first', async () => {
+  const s = setup();
+  const release = s.gate();
+  const p1 = s.a.handle(dev('push-to-talk', 'tap'));
+  const p2 = s.a.handle(dev('cancel', 'tap'));
+  await new Promise((r) => setTimeout(r, 30));
+  assert.deepEqual(s.sent, ['Space'], 'second waits for the first');
+  release();
+  await Promise.all([p1, p2]);
+  assert.deepEqual(s.sent, ['Space', 'Escape']);
+});
+
+test('a throwing runner is reported, not thrown, and the next gesture still runs', async () => {
+  let n = 0;
+  const a = createActions({
+    runner: { target: async () => null, send: async () => { if (n++ === 0) throw new Error('boom'); return { sent: true, id: SID }; } },
+    registry: {}, getBoard: initialBoard, apply: () => {},
+  });
+  const r1 = await a.handle(dev('push-to-talk', 'tap'));
+  assert.deepEqual([r1.done, r1.reason], [false, 'boom']);
+  assert.equal((await a.handle(dev('push-to-talk', 'tap'))).done, true);
+});

@@ -213,8 +213,12 @@ test('GET /buttons headers and origin check', async () => {
 });
 
 test('parseArgs', () => {
-  assert.deepEqual(parseArgs([]), { port: 8138, inputPath: null, devBridge: false });
-  assert.deepEqual(parseArgs(['9000', '--dev-bridge']), { port: 9000, inputPath: null, devBridge: true });
+  assert.deepEqual(parseArgs([]), { port: 8138, inputPath: null, devBridge: false, sessions: false, start: [] });
+  assert.deepEqual(parseArgs(['9000', '--dev-bridge']), { port: 9000, inputPath: null, devBridge: true, sessions: false, start: [] });
+  assert.deepEqual(parseArgs(['--sessions']), { port: 8138, inputPath: null, devBridge: false, sessions: true, start: [] });
+  assert.deepEqual(parseArgs(['--start', '/a', '--start', '/b', '7']), { port: 7, inputPath: null, devBridge: false, sessions: true, start: ['/a', '/b'] });
+  assert.throws(() => parseArgs(['--start']), /--start needs a directory/);
+  assert.throws(() => parseArgs(['--start', '--dev-bridge']), /--start needs a directory/);
   assert.equal(parseArgs(['--input']).inputPath, DEFAULT_CONFIG_PATH);
   assert.equal(parseArgs(['--input', '--dev-bridge']).inputPath, DEFAULT_CONFIG_PATH);
   assert.equal(parseArgs(['--input', '/x/y.json', '7']).inputPath, '/x/y.json');
