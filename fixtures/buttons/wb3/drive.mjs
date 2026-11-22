@@ -34,7 +34,7 @@ for (const l of fs.readFileSync('/etc/agent-kit/auth.env', 'utf8').split('\n')) 
 process.env.CLAUDE_CONFIG_DIR = CFG;
 process.env.TERM = 'xterm-256color';
 
-const scrub = (s) => String(s).replaceAll('/home/agent/', '/home/user/').replaceAll(ROOT, '$REVVIEW_DIR');
+const scrub = (s) => String(s).replaceAll(ROOT, '$REVVIEW_DIR').replaceAll('/home/agent/', '/home/user/');
 const hhmmss = () => new Date().toISOString().slice(11, 19);
 
 // ---- throwaway config dir and repo

@@ -13,7 +13,7 @@ action push-to-talk: done
 # 09:37:26 typed into 17216e15: Run date > out.txt with the Bash tool, nothing else.
 action allow: not done (session)
 # 09:37:30 pressed F21 (held 60 ms)
-# 09:37:31 hook processes before the terminal answer: 736434       3 /bin/sh -c REVVIEW_PORT=8199 node /home/user/revview/.claude/worktrees/agent-abb33f77d708b7009/hooks/permission-request.mjs
- 736435       3 node /home/user/revview/.claude/worktrees/agent-abb33f77d708b7009/hooks/permission-request.mjs
+# 09:37:31 hook processes before the terminal answer: 736434       3 /bin/sh -c REVVIEW_PORT=8199 node $REVVIEW_DIR/hooks/permission-request.mjs
+ 736435       3 node $REVVIEW_DIR/hooks/permission-request.mjs
 # 09:37:32 terminal key 1 into 17216e15
 # 09:37:35 hook processes after the terminal answer: (none)
