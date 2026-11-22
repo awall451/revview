@@ -1,0 +1,22 @@
+{
+  "_comment": "Read aloud (wheel button F14). The first engine whose programs and files all exist is used. A stage is one program and its arguments; the text is written to the first stage's stdin and each stage's output goes to the next one's stdin. Arguments are used exactly as written: nothing is substituted, and the spoken text is never in an argument or a shell.",
+  "engines": [
+    {
+      "name": "piper",
+      "_comment": "FROM MEMORY AND UNTESTED: these Piper options and the raw 22050 Hz output are not checked against a real Piper. The paths are where pi/install would put the program and the voice.",
+      "stages": [
+        ["/opt/piper/piper", "--model", "/opt/piper/voices/en_US-lessac-medium.onnx", "--output-raw"],
+        ["aplay", "-q", "-r", "22050", "-f", "S16_LE", "-t", "raw", "-"]
+      ],
+      "needs": ["/opt/piper/voices/en_US-lessac-medium.onnx"]
+    },
+    {
+      "name": "espeak-ng",
+      "_comment": "Fallback. espeak-ng reads the text from stdin when it gets no text argument.",
+      "stages": [
+        ["espeak-ng", "-v", "en-us", "-s", "165"]
+      ]
+    }
+  ],
+  "speakOnStop": false
+}
