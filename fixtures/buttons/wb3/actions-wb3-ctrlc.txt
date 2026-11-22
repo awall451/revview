@@ -1,0 +1,8 @@
+# 09:36:44 session main = db04bba5-01a5-4ed0-9df5-bc9fb4d23112
+# 09:36:45 typed into db04bba5: Run node -e "setTimeout(()=>{},40000)" with the Bash tool, nothing else.
+action cancel-ctrl-c: done
+# 09:36:54 pressed F15 (held 1200 ms)
+# 09:36:55 view 300 ms after the long-hold: waiting
+action cancel-ctrl-c: not done (ctrl-c too soon)
+# 09:36:57 pressed F15 (held 1200 ms)
+# 09:36:59 sessions listed: ["db04bba5-01a5-4ed0-9df5-bc9fb4d23112"]

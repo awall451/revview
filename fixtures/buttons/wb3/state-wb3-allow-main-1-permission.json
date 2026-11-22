@@ -1,0 +1,20 @@
+{
+ "view": "permission",
+ "activity": "permission",
+ "offline": false,
+ "locked": false,
+ "repo": "repo",
+ "branch": null,
+ "tool": "Bash",
+ "file": null,
+ "diff": {
+  "added": 0,
+  "removed": 0
+ },
+ "command": "date > out.txt",
+ "output": null,
+ "outputLines": [],
+ "others": 0,
+ "diffIncomplete": false,
+ "buttons": "unknown"
+}

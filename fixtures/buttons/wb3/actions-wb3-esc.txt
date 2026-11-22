@@ -1,0 +1,7 @@
+# 09:35:18 session main = 81af3476-df56-40df-9427-c50e50b2f78a
+# 09:35:19 typed into 81af3476: Run node -e "setTimeout(()=>{},40000)" with the Bash tool, nothing else.
+# 09:35:27 view before: working
+# 09:35:27 pressed F15 (held 60 ms)
+action cancel-escape: done
+# 09:35:27 view 300 ms after the press: waiting
+# 09:35:29 events after the press: SessionStart,UserPromptSubmit,PreToolUse

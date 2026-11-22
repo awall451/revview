@@ -86,3 +86,58 @@ The long command was `node -e "setTimeout(()=>{},40000)"` (allowed by `Bash(node
   whether its 40 s node process really kept running.
 - Cleanup: `claude stop` then `claude rm` for both ids (`stopped`, `removed`); `claude agents --json --all`
   then printed `[]`.
+
+# WB3 (revview-owned sessions, real hook, real server): `wb3/`
+
+Recorded 2026-11-22 with Claude Code 2.1.330 (`--model haiku`) started by revview's real session runner
+(`createSessionRunner({ socket: { path }, claude: ['claude', '--model', 'haiku'] })`, a private tmux server on a
+temp socket per scenario, 150x45 windows via `resize-window`), driven by `wb3/drive.mjs` (not run by the gate or the
+tests), which runs the real `startLiveServer({ devBridge: true, sessions: runner })` in-process on port 8199.
+Buttons were pressed with `POST /dev/key` down/up (same gesture detector as the device: F15 cancel, F21 allow,
+F16 deny, F13 push-to-talk; long-hold = 1.2 s). Prompts were typed by the harness with `tmux send-keys -l` + Enter
+(it stands in for the driver's voice). The hook is the real `hooks/permission-request.mjs` with `REVVIEW_PORT=8199`,
+timeout 600; a logging command hook on SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PermissionRequest,
+Notification, Stop, SubagentStop, SessionEnd appends stdin to the events file and posts every event except
+PermissionRequest to `/event`. Throwaway repo `/tmp/rvwb3/repo`, `CLAUDE_CONFIG_DIR=/tmp/rvwb3/cfg` (settings and
+trust copied from the earlier config, no history; auth from the agent-kit auth env, not copied). Project settings:
+`permissions.defaultMode: "default"` and allow `Bash(node:*)`. The first try of scenario 1 had no permission
+dialog at all: this config's default mode is auto mode (`auto mode on` in the footer; "Auto mode is now Claude
+Code's default permission mode"), the command ran with no hook; adding `defaultMode: "default"` fixed it
+(that run was discarded; the panes show `manual mode on`). Sanitised: `/home/agent/` -> `/home/user/`, the repo
+path of the harness is `$REVVIEW_DIR`; grepped for tokens, e-mail, account and org ids (only the words "tokens" in
+Claude's own cost line and `subagent_tokens` remain). Files per scenario: `events-<name>.jsonl` (hook stdin, one
+JSON per line; the SessionEnd at the end is the tmux server being killed), `pane-<name>-<n>-<what>.txt`,
+`state-<name>-<n>.json` (`GET /state`), `actions-<name>.txt` (the server's stderr action lines, with `# ` lines
+from the harness). Replayed by `tests/unit/wb3-recordings.test.js` (no claude, network or tmux).
+
+- `wb3-allow-main`: `Run date > out.txt with the Bash tool, nothing else.` The bar went to `permission` and the
+  dialog was on the pane. A press of allow (F21) right away did nothing: `action allow: not done
+  (not-shown-long-enough)`, dialog still there (`pane-...-1-early-press.txt`). After 2 more seconds a second press:
+  `action allow: done`, the pane shows `Allowed by PermissionRequest hook`, `out.txt` exists. Events: the turn also
+  has an earlier PreToolUse/PostToolUse pair: haiku first ran `date >` into the session scratchpad dir (no prompt for that path), then the asked-for `date > out.txt`, which raised the PermissionRequest.
+- `wb3-deny-main`: same prompt, 2 s on the bar, deny (F16): `action deny: done`; the pane shows `Not run ·
+  permission denied`, `Reason: Denied with the wheel button.`, `Denied by PermissionRequest hook`; `out.txt` does
+  not exist; Claude says it was denied and did not retry.
+- `wb3-allow-subagent`: `Use the Agent tool once with a general-purpose subagent ... touch marker.txt && echo made`.
+  First try worked. Claude backgrounds the agent (`Backgrounded agent`), the main turn ends (Stop), and the
+  subagent's Bash PermissionRequest (with `agent_id`) arrives afterwards. The bar showed `permission` with the
+  command, but the MAIN pane shows no dialog at all while it waits (`pane-...-1-before-allow.txt`: the footer lists
+  the background agent): the hook is the only way to answer it. Press allow after 2 s: `action allow: done`,
+  `marker.txt` exists, PostToolUse and SubagentStop of the agent follow and Claude reports `made`.
+- `wb3-esc`: long node timer (allowed), 6 s in the pane shows `Running node script ... (6s)`, the bar was
+  `working`. Cancel tap (F15): `action cancel-escape: done`, `/state` was `waiting` 300 ms later (the internal
+  RevviewInterrupted; Claude fired no hook), the pane shows `Interrupted · What should Claude do instead?`.
+- `wb3-ctrlc`: same, cancel long-hold: `action cancel-ctrl-c: done`, `/state` `waiting`, pane `Interrupted`, claude
+  still running (listed by the runner). Second long-hold 3 s later: `action cancel-ctrl-c: not done (ctrl-c too
+  soon)`, the pane did not change and the session was still alive.
+- `wb3-two-sessions`: A and B started (B chosen by `start`). A ran the long command. Harness `runner.choose(B)`, cancel
+  tap: only B got the Esc (B idle: pane shows only the empty prompt), A's pane kept `Running ... (7s)` and `esc to
+  interrupt`. `choose(A)`, cancel: A `Interrupted`. Push-to-talk tap (F13) on A, no microphone or voice set up:
+  `action push-to-talk: done`; the pane shows no message at all, only the footer line lost `? for shortcuts` (it
+  reads `manual mode on`); I did not check whether a space went into the prompt. Then a permission prompt in B
+  (not chosen): the bar was `permission`; allow press (F21) after 2 s: `action allow: not done (session)`, B's dialog
+  still on the pane. `1` typed in the terminal approved it; PostToolUse and Stop followed; the hook process (listed
+  before) was gone afterwards, the server's request ended without decision (replayed as 204).
+- Not tried: a second Ctrl+C after the 5 s window, a deny in the subagent, voice recording.
+- About 9 Claude turns in the final runs (haiku), plus 1 for the discarded auto mode try, 2 for an earlier subagent
+  run that was repeated after fixing the harness.

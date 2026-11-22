@@ -1,0 +1,8 @@
+# 09:34:25 session main = 43e270cc-dd7f-4d55-8aa2-377946059cd3
+# 09:34:27 typed into 43e270cc: Run date > out.txt with the Bash tool, nothing else.
+action allow: not done (not-shown-long-enough)
+# 09:34:33 pressed F21 (held 60 ms)
+# 09:34:35 hook processes: 2
+action allow: done
+# 09:34:37 pressed F21 (held 60 ms)
+# 09:34:40 out.txt exists: true
