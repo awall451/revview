@@ -154,13 +154,13 @@ comes from `/etc/profile.d/revview-claude.sh`, and for the server (and every Cla
 `/etc/revview/data.env`. Run `install.sh` again if it said hooks were skipped.
 
 **How the unlock works.** `revview-unlock.service` runs `unlock.sh` at boot. If the stick is not in yet, plugging
-it in later starts the same service (`72-revview-key.rules`). The script mounts the stick read-only for a moment,
+it in later starts the same script through `revview-unlock-stick.service` (`72-revview-key.rules`). The script mounts the stick read-only for a moment,
 hands the key file's path to cryptsetup, unmounts the stick, checks the file system, and mounts the data. The key is
 never copied, printed or logged. Pull the stick while the Pi runs: nothing happens, the data stays open until
 power-off (and is locked again at the next boot without the stick). While LOCKED the bar shows INSERT KEY ("Insert
 the key stick to unlock"). The bar, the network check, the buttons, the menu and read aloud work; no Claude session
 starts (the key-on session waits) and New session is refused. When the data unlocks, the bar goes to STARTING and
-the key-on session starts once. Log: `journalctl -u revview-unlock -b`. By hand: `sudo bash /opt/revview/pi/unlock.sh`.
+the key-on session starts once. Log: `journalctl -u 'revview-unlock*' -b`. By hand: `sudo bash /opt/revview/pi/unlock.sh`.
 
 ## Read-only root (run last)
 
