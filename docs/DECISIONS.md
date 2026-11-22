@@ -660,6 +660,12 @@ Recordings: `fixtures/buttons/README.md`, section WB3. Bench S1-S6.
   prompt for at least **1500 ms** (`MIN_SHOWN_MS`, server clock injected in tests; any change of what the bar
   shows restarts the time), and exactly one waiting request matches. One press answers one request, once.
   Recorded: a press right after the prompt appeared did nothing, one 2 s later allowed.
+- **An answered prompt leaves the bar at once.** When a press answers a request, the server feeds the internal
+  `RevviewAnswered {session_id, agent, since, decision}` to the board, which removes exactly that pending entry
+  (same session, agent and `since`); allow or deny, the session shows WORKING (or the next pending prompt) until
+  PostToolUse, PermissionDenied or Stop arrive. It does not shorten the 1500 ms wait of any later prompt (the
+  next prompt has its own `since`, so the shown-time restarts). `POST /event` refuses it with 403, also under
+  `--dev-bridge`.
 - **No carry-over**: after every board change, waiting requests whose entry left the board (answered in the
   terminal -> PostToolUse, Stop, interrupt, `RevviewStarting`) get 204 at once and are removed; a disconnected
   hook is removed; the 17th waiting request gets 503. No request id ever leaves the server, so nothing can name

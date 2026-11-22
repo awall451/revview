@@ -189,16 +189,66 @@ test('an identical second request that adds no prompt to the bar is never bound:
   assert.equal(c.s.permissionsWaiting(), 1);
 });
 
-test('POST /event RevviewInterrupted is refused with 403, with and without the dev bridge', async (t) => {
+test('POST /event RevviewInterrupted and RevviewAnswered are refused with 403, with and without the dev bridge', async (t) => {
   for (const devBridge of [true, false]) {
-    const c = await setup(t, { devBridge });
-    await c.ev(C2[1]);
-    await c.ev(C2[2]);
-    const before = (await c.state());
-    const r = await c.post('/event', { hook_event_name: 'RevviewInterrupted', session_id: SID });
-    assert.equal(r.status, 403);
-    assert.deepEqual(await c.state(), before);
+    for (const name of ['RevviewInterrupted', 'RevviewAnswered']) {
+      const c = await setup(t, { devBridge });
+      await c.ev(C2[1]);
+      await c.ev(C2[2]);
+      const before = (await c.state());
+      const r = await c.post('/event', { hook_event_name: name, session_id: SID, agent: '', since: 1, decision: 'allow' });
+      assert.equal(r.status, 403);
+      assert.deepEqual(await c.state(), before);
+    }
   }
+});
+
+test('after a button answer the prompt leaves the bar at once; the next prompt waits its own 1500 ms', async (t) => {
+  const c = await setup(t);
+  const r = await realPrompt(c);
+  c.ctx.now = 1500;
+  await c.press('F21');
+  assert.deepEqual(await r.p, { status: 200, body: '{"behavior":"allow"}' });
+  assert.equal((await c.state()).state.view, 'working'); // the allowed command still runs, no PostToolUse yet
+  // a second call asks right away: it must not be answerable by the next press at the same instant
+  await c.ev({ ...C2[2], tool_use_id: 'toolu_second' });
+  const r2 = c.perm({ ...C2[3], tool_use_id: 'toolu_second' });
+  for (let i = 0; i < 100 && (await c.state()).state.view !== 'permission'; i++) await sleep(10);
+  assert.equal((await c.state()).state.view, 'permission');
+  await c.press('F21');
+  assert.equal(await pending(r2.p), 'pending');
+  c.ctx.now = 1500 + 1499;
+  await c.press('F21');
+  assert.equal(await pending(r2.p), 'pending');
+  c.ctx.now = 1500 + 1500;
+  await c.press('F21');
+  assert.deepEqual(await r2.p, { status: 200, body: '{"behavior":"allow"}' });
+});
+
+test('after a button deny the prompt leaves the bar at once', async (t) => {
+  const c = await setup(t);
+  const r = await realPrompt(c);
+  c.ctx.now = 1500;
+  await c.press('F16');
+  assert.equal((await r.p).status, 200);
+  assert.equal((await c.state()).state.view, 'working');
+});
+
+test('two prompts in one session (main + subagent): an answer clears only the answered one', async (t) => {
+  const c = await setup(t);
+  c.ctx.tid = SUB[0].session_id;
+  for (const e of SUB.slice(1, 9)) await c.ev(e);
+  const sub = c.perm(SUB[9]);
+  for (let i = 0; i < 100 && (await c.state()).state.view !== 'permission'; i++) await sleep(10);
+  // a main-thread request of the same session arrives while the subagent's is shown
+  const mainReq = c.perm({ session_id: SUB[0].session_id, hook_event_name: 'PermissionRequest', tool_name: 'Bash', tool_input: { command: 'echo main' } });
+  for (let i = 0; i < 100 && c.s.permissionsWaiting() < 2; i++) await sleep(10);
+  assert.equal(c.s.permissionsWaiting(), 2);
+  c.ctx.now = 1500;
+  await c.press('F21');
+  assert.deepEqual(await sub.p, { status: 200, body: '{"behavior":"allow"}' });
+  assert.equal(await pending(mainReq.p), 'pending');
+  assert.equal(c.s.permissionsWaiting(), 1);
 });
 
 test('bad bodies: 400', async (t) => {

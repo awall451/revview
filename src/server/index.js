@@ -235,8 +235,8 @@ export async function startLiveServer({
         return text(res, 403, `${event.hook_event_name} is not accepted over HTTP (dev bridge only)`);
       }
       // internal only: it makes a screen state from a key revview sent itself, so no POST may forge it
-      if (event.hook_event_name === 'RevviewInterrupted') {
-        return text(res, 403, 'RevviewInterrupted is internal and not accepted over HTTP');
+      if (event.hook_event_name === 'RevviewInterrupted' || event.hook_event_name === 'RevviewAnswered') {
+        return text(res, 403, `${event.hook_event_name} is internal and not accepted over HTTP`);
       }
       if (!apply(event)) return text(res, 500, 'state core failed; event ignored');
       if (event.hook_event_name === 'RevviewButton' && typeof event.button === 'string'

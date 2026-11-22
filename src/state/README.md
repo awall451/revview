@@ -129,6 +129,11 @@ fires no hook for it (QA r3-02). A session in a turn (effective activity `workin
 unknown or missing `session_id`, or a `done`/`waiting` session, returns the same board; it never creates a
 session. The server feeds it after sending the key and refuses it over HTTP.
 
+Internal event `RevviewAnswered {session_id, agent, since, decision: 'allow'|'deny'}`: revview answered that permission
+request through the hook. The pending entry with that exact `agent` and `since` in that session is removed (tick
+advances, focus re-picked); no other entry, no activity change. No match, an unknown session or a malformed event
+returns the same board. Refused over HTTP like `RevviewInterrupted`.
+
 Read helpers: `pendingPrompts(board)` is the flat list over all sessions of
 `{ session, agent, since, tool, file, command }` per pending entry (`agent`: `''` main thread, an agent id, or
 `null` for a generic notification entry). `shownPrompt(board)` is `null` unless `boardView(board).view` is

@@ -185,6 +185,16 @@ function reduceInner(b, event) {
       const tick = b.tick + 1;
       return { ...b, tick, sessions: withSession(b.sessions, id, { ...live, state, open: [], pending: [], pre: [], touched: tick }) };
     }
+    case 'RevviewAnswered': { // revview itself answered one permission request (allow or deny) through the hook
+      // Clears exactly that prompt (session, agent, board tick `since`) so it leaves the bar now, not at
+      // PostToolUse. Nothing else changes: the state is whatever it was (working in a turn), Stop ends it.
+      if (!isStr(event.session_id) || live === null || (typeof event.agent !== 'string' && event.agent !== null)) return b;
+      if (typeof event.since !== 'number' || (event.decision !== 'allow' && event.decision !== 'deny')) return b;
+      const kept = live.pending.filter((p) => !(p.since === event.since && p.agent === event.agent));
+      if (kept.length === live.pending.length) return b;
+      const tick = b.tick + 1;
+      return { ...b, tick, sessions: withSession(b.sessions, id, { ...live, pending: kept, touched: tick }) };
+    }
     case 'RevviewButton': // a gesture is for the server's actions, never for the screen
       return b;
     case 'RevviewStarting':

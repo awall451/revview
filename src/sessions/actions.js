@@ -46,7 +46,12 @@ export function createActions({
       const t = await runner.target();
       if (!t) return out(kind, false, 'no session chosen');
       // after the await: the board as it is at this instant
-      const res = registry.answer(kind, shownPrompt(getBoard()), t.id);
+      const shown = shownPrompt(getBoard());
+      const res = registry.answer(kind, shown, t.id);
+      // the answered prompt leaves the bar at once (exactly that one), not only at PostToolUse
+      if (res?.ok === true) {
+        apply({ hook_event_name: 'RevviewAnswered', session_id: shown.session, agent: shown.agent, since: shown.since, decision: kind });
+      }
       return out(kind, res?.ok === true, res?.ok === true ? undefined : res?.reason ?? 'refused');
     }
     return out('none', false, 'no action');

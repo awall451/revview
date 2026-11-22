@@ -87,7 +87,7 @@ for each (a throwing callback is caught and logged).
   process without an Origin header could otherwise forge a press or fake NO BUTTONS. With the bridge, `RevviewButton` takes the
   normal path (204, `seq += 1`, the board ignores it) and, when `button` matches `/^[a-z][a-z0-9-]{0,31}$/` and `gesture` is one
   of the three, is also logged with source `post`.
-- `POST /event` with `RevviewInterrupted` is refused with **403 always**, even with `--dev-bridge`: it is the board's internal
+- `POST /event` with `RevviewInterrupted` or `RevviewAnswered` is refused with **403 always**, even with `--dev-bridge`: it is the board's internal
   event for a Escape/Ctrl+C that revview itself sent (`src/sessions/actions.js`).
 - With `--sessions` (or a `sessions` runner) gestures with source `device` or `bridge` (never `post`, never `dropped`) also go to
   the actions: cancel tap = Escape, cancel long-hold = one Ctrl+C (not twice within 5 s), push-to-talk tap = Space, press tap =

@@ -16,7 +16,7 @@ function permissionBoard() {
   return b;
 }
 
-function setup({ target = { id: SID, window: '@1' }, sendResult, board = permissionBoard() } = {}) {
+function setup({ target = { id: SID, window: '@1' }, sendResult, answerResult, board = permissionBoard() } = {}) {
   const sent = [];
   const applied = [];
   const answers = [];
@@ -35,7 +35,7 @@ function setup({ target = { id: SID, window: '@1' }, sendResult, board = permiss
   const registry = {
     answer: (kind, shown, chosen) => {
       answers.push({ kind, shown, chosen });
-      return { ok: true };
+      return answerResult ?? { ok: true };
     },
   };
   const a = createActions({
@@ -122,6 +122,20 @@ test('press/deny pass the re-verified target id (not chosen()) and the shown pro
   assert.equal(s.answers[0].shown.session, SID);
   assert.equal(s.answers[0].shown.command, 'ls');
   assert.deepEqual(s.sent, []);
+});
+
+test('an answered press/deny tells the board which exact prompt was answered; a refused one tells nothing', async () => {
+  const s = setup();
+  await s.a.handle(dev('press', 'tap'));
+  await s.a.handle(dev('deny', 'tap'));
+  const shown = s.answers[0].shown;
+  assert.deepEqual(s.applied, [
+    { hook_event_name: 'RevviewAnswered', session_id: SID, agent: shown.agent, since: shown.since, decision: 'allow' },
+    { hook_event_name: 'RevviewAnswered', session_id: SID, agent: shown.agent, since: shown.since, decision: 'deny' },
+  ]);
+  const r = setup({ answerResult: { ok: false, reason: 'not-shown-long-enough' } });
+  await r.a.handle(dev('press', 'tap'));
+  assert.deepEqual(r.applied, []);
 });
 
 test('no target: the registry is not asked (no session), nothing sent', async () => {

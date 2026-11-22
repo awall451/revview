@@ -126,3 +126,33 @@ test('shownPrompt follows the session boardView shows; pendingPrompts lists all'
 test('RevviewInterrupted never creates a session', () => {
   assert.deepEqual(reduceBoard(initialBoard(), INT('ghost')).sessions, {});
 });
+
+const ANS = (id, p, decision = 'allow') => ev('RevviewAnswered', { session_id: id, agent: p.agent, since: p.since, decision });
+const SUBREQ = (S) => ev('PermissionRequest', { ...S, agent_id: 'sub1', tool_name: 'Bash', tool_input: { command: 'ls' } });
+
+test('RevviewAnswered clears exactly the answered prompt: main and subagent in one session', () => {
+  const b = run([...asking(A), SUBREQ(A)]);
+  const [main, sub] = pendingPrompts(b);
+  assert.equal(main.agent, '');
+  assert.equal(sub.agent, 'sub1');
+  const one = reduceBoard(b, ANS('A', main));
+  assert.deepEqual(pendingPrompts(one).map((p) => p.agent), ['sub1']);
+  assert.equal(boardView(one).view, 'permission');
+  assert.equal(shownPrompt(one).agent, 'sub1');
+  const none = reduceBoard(one, ANS('A', sub, 'deny'));
+  assert.equal(pendingPrompts(none).length, 0);
+  assert.equal(boardView(none).view, 'working'); // allow or deny: working until the next hook (PostToolUse, Stop)
+  const other = reduceBoard(b, ANS('A', sub));
+  assert.deepEqual(pendingPrompts(other).map((p) => p.agent), ['']);
+});
+
+test('RevviewAnswered with another since, agent or session changes nothing and creates nothing', () => {
+  const b = run([...asking(A), ...asking(B, 'b1')]);
+  const p = pendingPrompts(b).find((x) => x.session === 'A');
+  assert.equal(reduceBoard(b, ANS('A', { ...p, since: p.since + 100 })), b);
+  assert.equal(reduceBoard(b, ANS('A', { ...p, agent: 'sub1' })), b);
+  assert.equal(reduceBoard(b, ANS('B', p)), b); // A's since in B's session
+  assert.equal(reduceBoard(b, ANS('ghost', p)), b);
+  assert.equal(reduceBoard(b, ev('RevviewAnswered', { session_id: 'A' })), b);
+  assert.deepEqual(Object.keys(reduceBoard(initialBoard(), ANS('ghost', p)).sessions), []);
+});
