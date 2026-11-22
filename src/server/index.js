@@ -1,7 +1,7 @@
 // Live server: hook scripts POST raw Claude Code hook JSON to /event, the state core
 // (src/state) reduces it, and the new state is pushed to the page over Server-Sent Events.
 // It also serves the view. Binds to 127.0.0.1 only; see src/server/README.md.
-//   node src/server/index.js [port] [--input [path]] [--dev-bridge] [--sessions] [--start dir]... [--projects file]   (port default 8138, or REVVIEW_PORT)
+//   node src/server/index.js [port] [--input [path]] [--dev-bridge] [--sessions] [--start dir]... [--projects file] [--speech file]   (port default 8138, or REVVIEW_PORT)
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,6 +11,10 @@ import { createSessionRunner, createActions, createPermissionRegistry, loadProje
 import { startInput, createInputPipeline } from '../input/index.js';
 import { loadConfig, ConfigError, DEFAULT_CONFIG_PATH } from '../input/keymap.js';
 import { BROWSER_CODES } from '../input/keys.js';
+import {
+  createSpeaker, createClosingMemo, createReadAloud, loadSpeechConfig, pickEngine, describeChoice, SpeechConfigError,
+  DEFAULT_SPEECH_CONFIG_PATH,
+} from '../speech/index.js';
 
 export const DEFAULT_PORT = 8138;
 export const DEFAULT_HOST = '127.0.0.1'; // the only address it binds; there is no option for another
@@ -71,7 +75,7 @@ function serveStatic(req, res, root) {
 export async function startLiveServer({
   port = 0, viewDir = DEFAULT_VIEW_DIR, reduce: reduceEvent = reduceBoard,
   input = null, devBridge = false, inputDeps, inputRetryMs, onGesture,
-  sessions = null, clock, permissionWaitMs, minShownMs, projects = [], timers, navTimeoutMs, ownedPollMs = 5000,
+  sessions = null, clock, permissionWaitMs, minShownMs, projects = [], timers, navTimeoutMs, ownedPollMs = 5000, speech = null,
 } = {}) {
   const root = path.resolve(viewDir);
   let board = initialBoard();
@@ -90,8 +94,15 @@ export async function startLiveServer({
       console.error('owned sessions: list failed:', e instanceof Error ? e.message : e);
     }
   }
+  // speech = { engine, speakOnStop, spawn?, killWaitMs? } or null: with null nothing about speech exists
+  let readAloud = null;
+  if (speech) {
+    const log = (m) => console.error(m);
+    const speaker = createSpeaker({ engine: speech.engine, spawn: speech.spawn, killWaitMs: speech.killWaitMs, log });
+    readAloud = createReadAloud({ speaker, memo: createClosingMemo(), speakOnStop: speech.speakOnStop === true, log });
+  }
   const actions = createActions({
-    runner: sessions, registry, getBoard: () => board, apply, projects, clock, timers, navTimeoutMs,
+    readAloud, runner: sessions, registry, getBoard: () => board, apply, projects, clock, timers, navTimeoutMs,
     log: (m) => console.error(m), onOwnedChanged: refreshOwned,
   });
 
@@ -253,6 +264,11 @@ export async function startLiveServer({
         return text(res, 403, `${event.hook_event_name} is internal and not accepted over HTTP`);
       }
       if (!apply(event)) return text(res, 500, 'state core failed; event ignored');
+      try {
+        readAloud?.onEvent(event, board, selectedKey(board));
+      } catch (e) {
+        console.error('read aloud failed:', e instanceof Error ? e.message : e);
+      }
       if (event.hook_event_name === 'RevviewButton' && typeof event.button === 'string'
         && BUTTON_RE.test(event.button) && GESTURES.includes(event.gesture)) {
         acceptGesture({ button: event.button, gesture: event.gesture, source: 'post' });
@@ -443,8 +459,13 @@ export async function startLiveServer({
     state: () => boardView(board),
     gestures: () => gestureLog.map((g) => ({ ...g })),
     permissionsWaiting: () => registry.size(), // test seam: waiting PermissionRequest hook calls
-    close: () =>
-      new Promise((resolve) => {
+    close: async () => {
+      try {
+        await readAloud?.close(); // kills any speech child
+      } catch (e) {
+        console.error('read aloud close failed:', e instanceof Error ? e.message : e);
+      }
+      return new Promise((resolve) => {
         closed = true;
         inputHandle?.stop();
         actions.close();
@@ -455,7 +476,8 @@ export async function startLiveServer({
         for (const c of clients) c.end();
         clients.clear();
         server.closeAllConnections();
-      }),
+      });
+    },
   };
 }
 
@@ -477,6 +499,11 @@ export function parseArgs(argv) {
       if (next === undefined || next.startsWith('--')) throw new Error('--projects needs a file');
       out.projects = next;
       i++;
+    } else if (a === '--speech') {
+      const next = argv[i + 1];
+      if (next === undefined || next.startsWith('--')) throw new Error('--speech needs a file');
+      out.speech = next;
+      i++;
     } else if (a === '--input') {
       const next = argv[i + 1];
       if (next !== undefined && !next.startsWith('--')) { out.inputPath = next; i++; } else out.inputPath = DEFAULT_CONFIG_PATH;
@@ -486,6 +513,8 @@ export function parseArgs(argv) {
   }
   if (out.port === null) out.port = Number(process.env.REVVIEW_PORT || DEFAULT_PORT);
   if (out.projects === null) out.projects = process.env.REVVIEW_PROJECTS || null;
+  // the key exists only when a speech file was named (flag or REVVIEW_SPEECH)
+  if (out.speech === undefined && process.env.REVVIEW_SPEECH) out.speech = process.env.REVVIEW_SPEECH;
   return out;
 }
 
@@ -525,7 +554,21 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     }
   }
   const projects = args.projects ? loadProjects(args.projects, { log: (m) => console.error(m) }) : [];
-  const live = await startLiveServer({ port: args.port, input, devBridge: args.devBridge, sessions: runner, projects });
+  // a bad speech config means no voice, never no bar
+  let speech = null;
+  let speechLine;
+  try {
+    const config = loadSpeechConfig(args.speech ?? DEFAULT_SPEECH_CONFIG_PATH);
+    const engine = pickEngine(config);
+    console.error(describeChoice(config, engine));
+    speech = { engine, speakOnStop: config.speakOnStop };
+    speechLine = `speech: ${engine ? engine.name : 'none found (read aloud does nothing)'}${config.speakOnStop ? ' (spoken summary on Stop: on)' : ''}`;
+  } catch (e) {
+    if (!(e instanceof SpeechConfigError)) throw e;
+    console.error(e.message);
+    speechLine = 'speech: off (bad speech config, see the log)';
+  }
+  const live = await startLiveServer({ port: args.port, input, devBridge: args.devBridge, sessions: runner, projects, speech });
   if (selectId !== null) live.select(selectId);
   const selectedNow = selectId !== null && live.selected() === selectId;
   const { url } = live;
@@ -535,6 +578,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   console.log(`post:  curl -s -X POST --data-binary @- ${url}/event < <(head -1 fixtures/sessions/working-turn.jsonl)`);
   if (input) console.log('input: reading wheel buttons (GET /buttons)');
   if (runner) console.log(`sessions: private tmux server (-L revview), ${selectId === null ? 'selected: none' : `${selectedNow ? 'selected' : 'wanted'}: ${selectId}`}`);
+  console.log(speechLine);
   if (args.projects) console.log(`projects: ${projects.length} from ${args.projects}`);
   if (args.devBridge) console.log('dev bridge ON (POST /dev/key): never use this on the car');
 }

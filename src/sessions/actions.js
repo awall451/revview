@@ -12,7 +12,7 @@ const NAV_BUTTONS = new Set(['up', 'down', 'left', 'right', 'menu', 'back']);
 
 export function createActions({
   runner, registry, getBoard, apply, projects = [], log = () => {}, clock = () => performance.now(),
-  ctrlCGapMs = CTRL_C_GAP_MS, timers = { setTimeout, clearTimeout }, navTimeoutMs = NAV_TIMEOUT_MS, onOwnedChanged,
+  ctrlCGapMs = CTRL_C_GAP_MS, timers = { setTimeout, clearTimeout }, navTimeoutMs = NAV_TIMEOUT_MS, onOwnedChanged, readAloud = null,
 }) {
   let lastCtrlC = null;
   let chain = Promise.resolve();
@@ -108,7 +108,28 @@ export function createActions({
     return out('new-session', true);
   }
 
+  // speech stops first, and is awaited: the mic must not hear it. Never throws.
+  async function stopSpeech() {
+    try { await readAloud.stop(); } catch (e) { log(`read aloud stop failed: ${String(e?.message ?? e)}`); }
+  }
+
+  // read aloud never sends a key and never answers a permission request
+  async function speakSelected() {
+    const board = getBoard();
+    const id = selectedKey(board);
+    if (id === null) return out('read-aloud', false, 'no session selected');
+    const r = await readAloud.speakFor(board, id);
+    if (r?.reason === 'no engine') note('Read aloud: no speech engine installed');
+    return out('read-aloud', r?.spoken === true, r?.spoken === true ? undefined : r?.reason ?? 'not spoken');
+  }
+
   async function dispatch(button, gesture) {
+    if (readAloud && button === 'push-to-talk') await stopSpeech();
+    if (button === 'read-aloud' && (gesture === 'hold' || gesture === 'long-hold')) {
+      if (!readAloud) return out('read-aloud-stop', false, 'no speech');
+      await stopSpeech();
+      return out('read-aloud-stop', true);
+    }
     const b = getBoard();
     if (b.nav !== null) {
       if (button === 'press' && gesture === 'tap' && b.nav.kind === 'new') return newSession(b);
@@ -123,6 +144,7 @@ export function createActions({
         interrupted(r);
       });
     }
+    if (button === 'read-aloud' && gesture === 'tap' && readAloud) return speakSelected();
     if (button === 'push-to-talk' && gesture === 'tap') return send('push-to-talk', 'Space');
     if (button === 'press' && gesture === 'tap') {
       // a prompt on the bar: allow attempt only (a refusal never falls through to the list)
