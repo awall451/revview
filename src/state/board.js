@@ -24,12 +24,21 @@ export function initialBoard() {
     focus: null,
     spokenTo: null,
     buttons: null, // wheel buttons present: null = not known yet, true, false (RevviewInput)
+    selected: null, // the session the driver chose (live id or null); null = the old heuristics decide
+    want: null, // a session revview started that is not on the board yet: selected when it first appears
+    owned: null, // ids of sessions revview owns (its tmux windows); null = the server runs without sessions
+    nav: null, // null (normal view) or {kind, row}: a list/menu the driver has open
+    projects: [], // project paths from the config file (display only)
   };
 }
 
+const NAV_KINDS = ['list', 'menu', 'new', 'projects', 'settings'];
+const MENU_ROWS = ['New session', 'Projects', 'Settings'];
+const SETTINGS_ROWS = 4;
+
 function isValidSession(s) {
   return isObj(s) && isObj(s.state) && typeof s.state.activity === 'string' && isObj(s.state.diff)
-    && Array.isArray(s.open) && Array.isArray(s.pending) && Array.isArray(s.pre) && Number.isInteger(s.touched) && typeof s.dropped === 'boolean';
+    && Array.isArray(s.open) && Array.isArray(s.pending) && Array.isArray(s.pre) && Number.isInteger(s.touched) && Number.isInteger(s.born) && typeof s.dropped === 'boolean';
 }
 
 // Only boards this module built are used; anything else is replaced, so nothing below can throw on it.
@@ -38,6 +47,10 @@ function isValidBoard(b) {
     && Array.isArray(b.ended) && Number.isInteger(b.tick) && (b.focus === null || typeof b.focus === 'string')
     && (b.spokenTo === null || typeof b.spokenTo === 'string')
     && (b.buttons === null || typeof b.buttons === 'boolean')
+    && (b.selected === null || typeof b.selected === 'string') && (b.want === null || typeof b.want === 'string')
+    && (b.owned === null || (Array.isArray(b.owned) && b.owned.every((x) => typeof x === 'string')))
+    && (b.nav === null || (isObj(b.nav) && NAV_KINDS.includes(b.nav.kind) && Number.isInteger(b.nav.row) && b.nav.row >= 0))
+    && Array.isArray(b.projects) && b.projects.every((x) => typeof x === 'string')
     && Object.keys(b.sessions).every((k) => isValidSession(b.sessions[k]));
 }
 
@@ -92,12 +105,12 @@ const need = (s) => PRIORITY[act(s)] ?? 0;
 // is never dropped: a pending prompt must not vanish. If every other session needs permission the newcomer is
 // still admitted and the cap is exceeded (the hint "+N" may then have two digits); showing every prompt beats
 // a tidy count.
-function capSessions(sessions, keepId, focus) {
+function capSessions(sessions, keepId, focus, selected, want) {
   let out = sessions;
   while (Object.keys(out).length > MAX_SESSIONS) {
     let victim = null;
     for (const k of Object.keys(out)) {
-      if (k === keepId || act(out[k]) === 'permission') continue;
+      if (k === keepId || k === selected || k === want || act(out[k]) === 'permission') continue;
       if (victim === null) { victim = k; continue; }
       const kFocus = k === focus;
       const vFocus = victim === focus;
@@ -158,8 +171,121 @@ export function reduceBoard(board, event) {
   const spokenTo = spoke !== null ? spoke : next.spokenTo !== null && has(next.sessions, next.spokenTo) ? next.spokenTo : null;
   const base = spokenTo === next.spokenTo ? next : { ...next, spokenTo };
   const asked = (x) => Object.keys(x.sessions).some((k) => x.sessions[k].pending.length > 0);
-  const focus = pickFocus(base, spoke, asked(b) && !asked(base));
-  return focus === base.focus ? base : { ...base, focus };
+  let cur = base;
+  // a session revview started appears on the board: the driver gets it
+  if (cur.want !== null && has(cur.sessions, cur.want) && cur.want !== '') cur = { ...cur, selected: cur.want, want: null };
+  // the selected session ended (or was dropped): fall to the neediest
+  if (cur.selected !== null && !has(cur.sessions, cur.selected)) cur = { ...cur, selected: homeKey(cur) };
+  const focus = cur.selected !== null ? cur.selected : pickFocus(cur, spoke, asked(b) && !asked(cur));
+  return focus === cur.focus ? cur : { ...cur, focus };
+}
+
+// Live sessions in the order the driver steps through them: not the anonymous '' one, oldest first.
+function orderOf(b) {
+  return Object.keys(b.sessions).filter((k) => k !== '').sort((x, y) => (b.sessions[x].born - b.sessions[y].born) || (x < y ? -1 : x > y ? 1 : 0));
+}
+
+export function sessionOrder(board) {
+  return orderOf(isValidBoard(board) ? board : initialBoard());
+}
+
+const HOME_RANK = { permission: 4, waiting: 3, done: 2, working: 1 };
+
+// The session that needs the driver most: permission, waiting, done, working; the oldest ask first among equals.
+function homeOf(b) {
+  let best = null;
+  let bestRank = -1;
+  let bestAge = 0;
+  for (const k of orderOf(b)) {
+    const s = b.sessions[k];
+    const rank = HOME_RANK[act(s)] ?? 0;
+    const age = s.pending.length > 0 ? s.pending[0].since : s.touched;
+    if (rank > bestRank || (rank === bestRank && age < bestAge)) { best = k; bestRank = rank; bestAge = age; }
+  }
+  return best;
+}
+
+export function homeKey(board) {
+  return homeOf(isValidBoard(board) ? board : initialBoard());
+}
+
+const selectedOf = (b) => (b.selected !== null && b.selected !== '' && has(b.sessions, b.selected) ? b.selected : null);
+
+export function selectedKey(board) {
+  return selectedOf(isValidBoard(board) ? board : initialBoard());
+}
+
+const NAV_BUTTONS = new Set(['push-to-talk', 'read-aloud', 'cancel', 'deny', 'up', 'down', 'left', 'right', 'press', 'back', 'menu', 'spare', 'timeout']);
+const NAV_GESTURES = new Set(['tap', 'hold', 'long-hold']);
+
+function navRows(b, kind) {
+  if (kind === 'list') return orderOf(b).length;
+  if (kind === 'menu') return MENU_ROWS.length;
+  if (kind === 'settings') return SETTINGS_ROWS;
+  return b.projects.length;
+}
+const clampRow = (row, rows) => (rows === 0 ? 0 : Math.min(row, rows - 1));
+
+// Select `id` (or keep) and set nav; the same board when nothing changes. A driver's choice of a session drops a
+// pending `want` (the driver chose something else); moving around a list or menu keeps it.
+function withNav(b, selected, nav) {
+  const same = nav === b.nav || (nav !== null && b.nav !== null && nav.kind === b.nav.kind && nav.row === b.nav.row);
+  const want = selected === b.selected ? b.want : null;
+  if (selected === b.selected && want === b.want && same) return b;
+  return { ...b, selected, want, nav: same ? b.nav : nav };
+}
+
+function goHome(b) {
+  const home = homeOf(b);
+  return withNav(b, home === null ? b.selected : home, null);
+}
+
+function reduceNav(b, event) {
+  const button = event.button;
+  if (typeof button !== 'string' || !NAV_BUTTONS.has(button)) return b;
+  if (button === 'timeout') return b.nav === null ? b : { ...b, nav: null };
+  const gesture = event.gesture;
+  if (!NAV_GESTURES.has(gesture)) return b;
+  const tap = gesture === 'tap';
+  const order = orderOf(b);
+  const n = order.length;
+
+  if (b.nav === null) {
+    if (tap && (button === 'left' || button === 'right')) {
+      if (n === 0) return b;
+      const from = selectedOf(b) ?? shownKeyOf(b);
+      const i = order.indexOf(from);
+      const to = i < 0 ? (button === 'left' ? n - 1 : 0) : (i + (button === 'left' ? -1 : 1) + n) % n;
+      return withNav(b, order[to], null);
+    }
+    if (button === 'back' && gesture === 'hold') return goHome(b);
+    if (tap && (button === 'up' || button === 'down' || button === 'press')) {
+      return { ...b, nav: { kind: 'list', row: Math.max(0, order.indexOf(shownKeyOf(b))) } };
+    }
+    if (tap && button === 'menu') return { ...b, nav: { kind: 'menu', row: 0 } };
+    return b;
+  }
+
+  const { kind } = b.nav;
+  const rows = navRows(b, kind);
+  const row = clampRow(b.nav.row, rows);
+  const go = (nav) => withNav(b, b.selected, nav);
+  if (button === 'back' && gesture === 'hold') return goHome(b);
+  if (tap && button === 'menu') return go(kind === 'list' ? { kind: 'menu', row: 0 } : null);
+  if (tap && button === 'up') return go({ kind, row: Math.max(0, row - 1) });
+  if (tap && button === 'down') return go({ kind, row: clampRow(row + 1, rows) });
+  if (tap && button === 'back') {
+    if (kind === 'new') return go({ kind: 'menu', row: 0 });
+    if (kind === 'projects') return go({ kind: 'menu', row: 1 });
+    if (kind === 'settings') return go({ kind: 'menu', row: 2 });
+    return go(null);
+  }
+  if (tap && button === 'press') {
+    if (kind === 'list') return n > 0 ? withNav(b, order[row], null) : go(null);
+    if (kind === 'menu') return go({ kind: ['new', 'projects', 'settings'][row], row: 0 });
+    if (kind === 'new') return go(null);
+  }
+  return b;
 }
 
 function reduceInner(b, event) {
@@ -198,8 +324,29 @@ function reduceInner(b, event) {
     case 'RevviewButton': // a gesture is for the server's actions, never for the screen
       return b;
     case 'RevviewStarting':
-      if (b.phase === 'starting' && b.ended.length === 0 && Object.keys(b.sessions).length === 0) return b;
-      return { ...b, phase: 'starting', sessions: {}, ended: [] };
+      if (b.phase === 'starting' && b.ended.length === 0 && Object.keys(b.sessions).length === 0
+        && b.selected === null && b.want === null && b.nav === null) return b;
+      return { ...b, phase: 'starting', sessions: {}, ended: [], selected: null, want: null, nav: null };
+    case 'RevviewSelect': {
+      if (!isStr(event.session_id)) return b;
+      const sid = event.session_id;
+      if (orderOf(b).includes(sid)) return b.selected === sid && b.want === null ? b : { ...b, selected: sid, want: null };
+      return b.want === sid ? b : { ...b, want: sid };
+    }
+    case 'RevviewOwned': {
+      const ids = event.ids;
+      if (!Array.isArray(ids) || ids.length > 64 || !ids.every((x) => isStr(x) && x.length <= 200)) return b;
+      const owned = [...new Set(ids)];
+      if (b.owned !== null && owned.length === b.owned.length && owned.every((x) => b.owned.includes(x))) return b;
+      return { ...b, owned };
+    }
+    case 'RevviewProjects': {
+      const paths = event.paths;
+      if (!Array.isArray(paths) || paths.length > 32 || !paths.every((x) => typeof x === 'string' && x.length <= 4096)) return b;
+      return sameList(paths, b.projects) ? b : { ...b, projects: [...paths] };
+    }
+    case 'RevviewNav':
+      return reduceNav(b, event);
     case 'RevviewContext': {
       if (live !== null && isStr(event.session_id)) {
         const state = reduce(live.state, event);
@@ -321,7 +468,7 @@ function applyToSession(b, live, id, event) {
     if (state === prev && sameList(open, prevOpen) && (live === null || dropped === live.dropped)
       && pending === prevPending && pre === prevPre) return b;
     const tick = b.tick + 1;
-    const sessions = capSessions(withSession(b.sessions, id, { state, open, touched: tick, dropped, pending, pre }), id, b.focus);
+    const sessions = capSessions(withSession(b.sessions, id, { state, open, touched: tick, born: live === null ? tick : live.born, dropped, pending, pre }), id, b.selected ?? b.focus, b.selected, b.want);
     const ended = b.ended.includes(id) ? b.ended.filter((x) => x !== id) : b.ended;
     return { ...b, sessions, ended, tick };
   };
@@ -389,7 +536,7 @@ function applyToSession(b, live, id, event) {
 const buttonsView = (b) => (b.buttons === null ? 'unknown' : b.buttons ? 'present' : 'missing');
 
 // The session the bar shows: the focus when it is live, else what pickFocus would choose.
-const shownKeyOf = (b) => (b.focus !== null && has(b.sessions, b.focus) ? b.focus : pickFocus(b, null));
+const shownKeyOf = (b) => selectedOf(b) ?? (b.focus !== null && has(b.sessions, b.focus) ? b.focus : pickFocus(b, null));
 
 const promptOf = (session, p) => ({ session, agent: p.agent, since: p.since, tool: p.tool, file: p.file, command: p.command });
 
@@ -402,9 +549,60 @@ export function pendingPrompts(board) {
 // The prompt the bar shows (the shown session's first pending one), or null when the view is not 'permission'.
 export function shownPrompt(board) {
   const b = isValidBoard(board) ? board : initialBoard();
-  if (boardView(b).view !== 'permission') return null;
+  if (b.nav !== null || boardView(b).view !== 'permission') return null;
   const k = shownKeyOf(b);
   return k === null || b.sessions[k].pending.length === 0 ? null : promptOf(k, b.sessions[k].pending[0]);
+}
+
+const WORDS = { permission: 'PERMISSION', waiting: 'WAITING', working: 'WORKING', done: 'DONE' };
+
+function navView(b) {
+  if (b.nav === null) return null;
+  const { kind } = b.nav;
+  const order = orderOf(b);
+  let rows;
+  if (kind === 'list') {
+    rows = order.map((id) => {
+      const s = b.sessions[id];
+      const a = act(s);
+      const state = has(WORDS, a) ? a : 'unknown';
+      return {
+        label: typeof s.state.repo === 'string' ? s.state.repo : '',
+        word: WORDS[state] ?? 'UNKNOWN',
+        state,
+        target: id === b.selected,
+        voice: b.owned === null ? null : b.owned.includes(id),
+      };
+    });
+  } else if (kind === 'menu') {
+    rows = MENU_ROWS.map((label) => ({ label }));
+  } else if (kind === 'settings') {
+    const found = b.buttons === null ? 'not known' : b.buttons ? 'found' : 'not found';
+    rows = [
+      'Voice: tap mode, set in Claude Code',
+      `Wheel buttons: ${found}`,
+      `Sessions: ${order.length} on the bar, ${b.owned?.length ?? 0} started by revview`,
+      `Projects: ${b.projects.length} in the config file`,
+    ].map((label) => ({ label }));
+  } else {
+    rows = b.projects.map((label) => ({ label }));
+  }
+  return { kind, row: clampRow(b.nav.row, rows.length), rows };
+}
+
+// The keys every view state carries besides the shown session's own fields.
+function extrasOf(b, shownKey) {
+  const order = orderOf(b);
+  const sel = selectedOf(b);
+  const i = shownKey === null ? -1 : order.indexOf(shownKey);
+  let voice = null;
+  if (b.owned !== null) voice = b.owned.length === 0 ? 'no-session' : sel === null ? 'none' : b.owned.includes(sel) ? 'here' : 'not-owned';
+  return {
+    voice,
+    position: b.owned === null || i < 0 ? null : { index: i + 1, count: order.length },
+    elsewhere: order.filter((k) => k !== shownKey && b.sessions[k].pending.length > 0).length,
+    nav: navView(b),
+  };
 }
 
 export function boardView(board) {
@@ -431,6 +629,7 @@ export function boardView(board) {
       others: 0,
       diffIncomplete: false,
       buttons,
+      ...extrasOf(b, shownKey),
     };
   }
   const s = shown.state;
@@ -455,6 +654,7 @@ export function boardView(board) {
     others: Object.keys(b.sessions).filter((k) => k !== '').length - (shownKey === '' ? 0 : 1),
     diffIncomplete: shown.dropped,
     buttons,
+    ...extrasOf(b, shownKey),
   };
 }
 

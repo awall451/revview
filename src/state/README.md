@@ -115,7 +115,7 @@ permission prompts, `pre` = the open PreToolUse calls per agent (at most 32); `f
 - `boardView` branch: `s.branch`, else `board.context.branch` only when `board.context.repo` is the repo shown.
 
 `boardView(board)` is the flat state the page renders, always with exactly these keys: `view, activity,
-offline, locked, repo, branch, tool, file, diff {added, removed}, command, output, outputLines, others, diffIncomplete, buttons` (`buttons`: `'unknown'` | `'present'` | `'missing'`, from the board whatever session is shown).
+offline, locked, repo, branch, tool, file, diff {added, removed}, command, output, outputLines, others, diffIncomplete, buttons, voice, position, elsewhere, nav` (`buttons`: `'unknown'` | `'present'` | `'missing'`, from the board whatever session is shown).
 With a shown session these are its fields (`others` = other live sessions, `diffIncomplete` = its `dropped`,
 repo/branch fall back to `board.context`). With no live session `activity` is the board phase
 (`unknown`, `starting`, `ended`), repo/branch come from `board.context`, the rest is null/0/false.
@@ -133,6 +133,27 @@ Internal event `RevviewAnswered {session_id, agent, since, decision: 'allow'|'de
 request through the hook. The pending entry with that exact `agent` and `since` in that session is removed (tick
 advances, focus re-picked); no other entry, no activity change. No match, an unknown session or a malformed event
 returns the same board. Refused over HTTP like `RevviewInterrupted`.
+
+**Driver-chosen selection (WB4).** New board fields: `selected` (live session id or null), `want` (a session revview
+started that is not on the board yet: the first event that creates it sets `selected = want`, `want = null`),
+`owned` (ids revview owns; null = the server runs without sessions), `nav` (null or `{kind, row}`, kind `list|menu|new|projects|settings`),
+`projects` (config-file paths, display only); each session has `born` (the board tick that created it, kept on updates).
+The shown session is `selected` when live; only when it is null do the heuristics above decide. Other sessions' events never move
+`selected`; when the selected session ends it falls to `homeKey`; the cap never drops `selected` or `want`'s session.
+Exports: `sessionOrder(board)` (sessions other than `''`, by `born` then id), `homeKey(board)` (needs permission 4 > waiting 3 > done 2 >
+working 1 > rest; oldest ask first: smallest `pending[0].since`, else smallest `touched`, then the order; note done outranks working here,
+unlike the cap's priority), `selectedKey(board)`.
+
+Internal events (the server refuses them over HTTP): `RevviewSelect {session_id}` (known -> `selected`, unknown -> `want`),
+`RevviewOwned {ids}` (<= 64 ids of <= 200 chars, deduplicated), `RevviewProjects {paths}` (<= 32 strings of <= 4096),
+`RevviewNav {button, gesture}` (does not touch `tick` or sessions): normal view left/right tap step through the order (wrapping),
+back hold = home, up/down/press tap open the list on the shown session, menu tap opens the menu; inside a view up/down move the row
+(clamped), press chooses/opens, back tap goes up one level, back hold = home and close, menu tap toggles, button `timeout`
+closes from anywhere. `RevviewStarting` also clears `selected`, `want`, `nav`. Malformed events return the same board.
+
+`boardView` also always carries `voice` (null without `owned`; else `'no-session'|'none'|'here'|'not-owned'`), `position`
+(`{index, count}` or null), `elsewhere` (other sessions with a pending prompt; `others` still counts all) and `nav` (null or
+`{kind, row, rows}`; session rows `{label, word, state, target, voice}`, other rows `{label}`). `shownPrompt` is null while `nav` is open.
 
 Read helpers: `pendingPrompts(board)` is the flat list over all sessions of
 `{ session, agent, since, tool, file, command }` per pending entry (`agent`: `''` main thread, an agent id, or

@@ -19,7 +19,11 @@
       "outputLines": [],
       "others": 0,
       "diffIncomplete": false,
-      "buttons": "unknown"
+      "buttons": "unknown",
+      "voice": null,
+      "position": null,
+      "elsewhere": 0,
+      "nav": null
     }
   },
   {
@@ -42,7 +46,11 @@
       "outputLines": [],
       "others": 0,
       "diffIncomplete": false,
-      "buttons": "unknown"
+      "buttons": "unknown",
+      "voice": null,
+      "position": null,
+      "elsewhere": 0,
+      "nav": null
     }
   },
   {
@@ -65,7 +73,11 @@
       "outputLines": [],
       "others": 0,
       "diffIncomplete": false,
-      "buttons": "unknown"
+      "buttons": "unknown",
+      "voice": null,
+      "position": null,
+      "elsewhere": 0,
+      "nav": null
     }
   },
   {
@@ -90,7 +102,11 @@
       ],
       "others": 0,
       "diffIncomplete": false,
-      "buttons": "unknown"
+      "buttons": "unknown",
+      "voice": null,
+      "position": null,
+      "elsewhere": 0,
+      "nav": null
     }
   },
   {
@@ -115,7 +131,11 @@
       ],
       "others": 0,
       "diffIncomplete": false,
-      "buttons": "unknown"
+      "buttons": "unknown",
+      "voice": null,
+      "position": null,
+      "elsewhere": 0,
+      "nav": null
     }
   },
   {
@@ -140,7 +160,11 @@
       ],
       "others": 0,
       "diffIncomplete": false,
-      "buttons": "unknown"
+      "buttons": "unknown",
+      "voice": null,
+      "position": null,
+      "elsewhere": 0,
+      "nav": null
     }
   },
   {
@@ -165,7 +189,11 @@
       ],
       "others": 0,
       "diffIncomplete": false,
-      "buttons": "unknown"
+      "buttons": "unknown",
+      "voice": null,
+      "position": null,
+      "elsewhere": 0,
+      "nav": null
     }
   },
   {
@@ -188,7 +216,11 @@
       "outputLines": [],
       "others": 0,
       "diffIncomplete": false,
-      "buttons": "unknown"
+      "buttons": "unknown",
+      "voice": null,
+      "position": null,
+      "elsewhere": 0,
+      "nav": null
     }
   }
 ]
