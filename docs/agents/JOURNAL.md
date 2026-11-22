@@ -49,3 +49,20 @@ Not proven: legibility of 3.4 mm text on the real panel (bench item 26, untested
 Process notes:
 - A killed cycle leaves a locked worktree with uncommitted work: `git add -u` + a wip commit inside it (check for untracked files first), `git worktree unlock`, `remove --force`, then hand the branch to a new area lead. The lead's shell loses its cwd if it was inside the removed worktree: `cd` back before spawning agents.
 - When only one product branch is in flight, waiting about 3 minutes for the gate before writing notes lets the notes say "merged" and be based on the new main.
+
+## 2026-11-22: one-shot cycle (wheel buttons 1: the design note)
+
+Owner message 20261122T061547Z-o-e2cf26 (backlog abb749, plan 20261122T060852Z-p-dcd34d, owner issue 20261122T061545Z-i-08da9f). Docs and recordings only; nothing built, no product code, `tools/check` untouched. area-lead-core (Opus; one Haiku scout for the package, two Sonnet builders for recordings and writing; about 14 minutes) wrote `docs/BUTTONS.md` (the owner's 8 questions as 8 sections, each statement labelled recorded / source / untested hardware / proposal), recorded Claude Code 2.1.330 in tmux (`fixtures/buttons/`, with a README), updated the DESIGN.md Button row and "second button" note to the two pods, added DECISIONS "Wheel buttons", bench items 27-39 (untested) and the scope escalation. No reviewer (docs only, as the job said); the lead scanned the diff for secrets and read the escalation and section 8.
+
+Recorded facts worth remembering:
+- Esc mid-turn stops the turn (no Stop hook event), the session stays usable. One Ctrl+C mid-turn does the same; two Ctrl+C at the idle prompt EXIT the session, so a button never sends two.
+- A PermissionRequest hook that waits can answer allow or deny; meanwhile the terminal dialog stays answerable and the first answer wins. A hook killed by its `timeout` leaves the dialog open (nothing allowed or denied). Hook deny ends the turn with Stop, with no PostToolUse and no PermissionDenied. The default timeout was not pinned: set one explicitly.
+- `claude agents --json` gives {pid, id, cwd, kind, startedAt, sessionId, name, status, state}; `claude attach` in a tmux pane with `tmux send-keys` reaches only that session. There is no way to interrupt a turn without keystrokes.
+
+Decisions (designed, not built; DECISIONS.md): revview owns plain `claude` sessions in a private tmux server (not the `--bg` hub); every button action goes to the session the driver selected and only the driver changes the selection; the bar names it (position "2/3" and a mic mark), which closes the "cannot say where push-to-talk will land" limit as a rule; its own evdev reader with an exclusive grab replaces keyd; allow/deny by hook, push-to-talk (tap mode), Esc and Ctrl+C by keys.
+
+Scope: the menu, session switching, starting sessions, projects, settings, cancel, deny and read-aloud on demand go beyond charter stage 3. Written in ESCALATIONS.md and asked as 20261122T063053Z-a-wheel-buttons-scope with the default "stage 3 only until answered". Scope is not widened.
+
+Not proven: `/voice` in any mode (no microphone), hold-to-talk, voice inside tmux, Remote Control (source only), the default hook timeout, `agents --json` still saying "working" after an interrupt, anything on hardware.
+
+Process note: one area lead for research + recordings + writing worked well for a docs job; the scout hit its turn limit on the minified package and needed one nudge.

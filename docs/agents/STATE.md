@@ -1,6 +1,6 @@
 # STATE
 
-Updated 2026-11-22 (cycle 8).
+Updated 2026-11-22 (one-shot cycle after cycle 8: wheel buttons design note).
 
 ## Roadmap (the charter's four stages)
 
@@ -32,7 +32,12 @@ Nothing. No ready branch, no worktree, no open owner message, nothing held.
 
 ## Pending owner
 
-Nothing.
+- Question 20261122T063053Z-a-wheel-buttons-scope (asked 2026-11-22): may the team build beyond charter stage 3 for the wheel buttons (allow/deny, cancel, session switching, list, menu, several sessions, read-aloud on demand)? Default until answered: stage 3 only (read the button device, push-to-talk in tap mode for one session). The escalation is in `docs/agents/ESCALATIONS.md`; the design and 8 smaller questions with defaults are in `docs/BUTTONS.md` section 8.
+- The owner's backlog holds proposals "Wheel buttons 2-6" (not approved yet). Do not start them from the roadmap; they run when the owner approves them.
+
+## Wheel buttons (design only, nothing built)
+
+`docs/BUTTONS.md` (merged with this note; recordings in `fixtures/buttons/`). Designed rules: revview-owned `claude` sessions in a private tmux server; one driver-selected session gets every action and the bar names it; own evdev reader with exclusive grab (replaces keyd; needs a dependency decision when built); allow/deny by a waiting PermissionRequest hook with an explicit timeout; push-to-talk (tap), Esc, a single Ctrl+C by `tmux send-keys`. Bench items 27-39 untested. Not proven: `/voice` in any mode, voice inside tmux, the default hook timeout.
 
 ## Next
 
