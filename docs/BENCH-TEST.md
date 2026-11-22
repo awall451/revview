@@ -60,6 +60,21 @@ above cover the key codes, repeat, the grab and replug. Ids `W1`... are new.
 | W4 | In the car, tap and hold each pod button (cancel for over 1 s; back and read aloud for about half a second) | Taps are never read as holds and holds fire when expected (400 ms hold, 1000 ms long hold, 30 ms debounce). If not, change `timing` in `config/buttons.json` and note the values | untested |
 | W5 | Hold the grab (server running with `--input`), then `kill -9` the server (`pgrep -f grab.py` before and after) | The grab helper exits within about 1-2 s, `evtest` on the device (or the keys reaching the console) shows it free within about 1 s, including when the server dies right at startup (the helper gets the server's pid as an argument and exits when that pid is gone), and a restarted server grabs without `cannot grab` | untested |
 
+## Wheel buttons 3: sessions and actions, WB3 (2026-11-22)
+
+What WB3 could not prove here (no microphone, no Pi, no pods). Proven here instead: keys reach only the chosen
+tmux window (stand-in and real Claude Code 2.1.330), allow/deny through the real hook for a main-session and a
+subagent prompt, Esc and one Ctrl+C (`fixtures/buttons/README.md`, WB3). Ids `S1`... are new.
+
+| # | Try | Should happen | State |
+|---|---|---|---|
+| S1 | Voice tap mode in a revview session: `node src/server/index.js --input --start <repo>`, then `tmux -L revview attach` once to run `/voice tap` in it (and set up the microphone), detach; tap push-to-talk, speak, tap again | First tap starts recording (the pane shows it), second stops and submits the transcript, only in the chosen session. Push-to-talk sends one Space by `send-keys`; voice inside tmux was never tried | untested |
+| S2 | Voice hold mode (`/voice hold`) with the push-to-talk button held | NOT BUILT: revview sends one Space per tap only, so hold mode will not record (it needs imitated key repeat). Note what the pane shows | untested |
+| S3 | On the Pi, install the hook (`hooks/settings-snippet.json`, `$REVVIEW_DIR` replaced, `timeout` 600) and run a session started by `--start`; let Claude ask for a Bash permission; wait 2 s, press allow; next prompt: deny | Allow runs the command ("Allowed by PermissionRequest hook"); deny shows "Reason: Denied with the wheel button."; a press within 1.5 s of the prompt appearing does nothing | untested |
+| S4 | Same, stop the revview server while the dialog is shown, then answer in the terminal | The dialog stays and the terminal answer works (the hook prints nothing when the server is down) | untested |
+| S5 | Cancel by pod while a long command runs: tap; another run: hold over 1 s, then hold again within 5 s | Tap: Claude shows "Interrupted" and the bar leaves WORKING at once. Hold: one Ctrl+C (Interrupted, Claude does not exit); the second hold within 5 s does nothing | untested |
+| S6 | A subagent's permission prompt (ask Claude to use a subagent for a command that needs permission) | The bar shows NEEDS PERMISSION; the main pane may show no dialog at all (recorded here); allow by button works. Note what happens if nobody answers for 10 minutes (not recorded) | untested |
+
 ## Honest states (2026-11-22)
 
 These replace what items 21 and 22 expect while the server is away: the page now shows NO LINK (black band,

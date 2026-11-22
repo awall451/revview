@@ -613,3 +613,72 @@ on Claude Code yet (WB3).
   (40 px, 6 rows).
 - **`#session` is not reachable with the emulator's fonts**: next to NEEDS PERMISSION, `9+` and NO BUTTONS,
   `#where` keeps about 190 px against its 157 px floor. A test forces it with a style; the Pi's fonts may differ.
+
+## 2026-11-22: wheel buttons 3, sessions and actions (built; real Claude Code here, not on hardware)
+
+Owner one-shot job 20261122T061803Z-o-0ba39d. Code: `src/sessions/` (README), `src/server/` (README), `hooks/`.
+Recordings: `fixtures/buttons/README.md`, section WB3. Bench S1-S6.
+
+- **Sessions: plain interactive `claude` in a private tmux server**, as BUTTONS.md section 3 chose, not the
+  owner's item text (`claude --bg` + `attach`): an attached pane adds a client layer (Left opens the agent list,
+  Ctrl+Z detaches) and voice inside an attached `--bg` session is unknown. `claude agents --json` is not used.
+  `--sessions` uses `tmux -L revview` (socket in `/tmp/tmux-<uid>/`, mode 0700), always with `-f /dev/null`.
+  Each session runs `claude --session-id <uuid>` with a uuid revview made, stored as the window option
+  `@revview_id`; that uuid is also the hook events' `session_id` (recorded), which ties the chosen session to the
+  bar. `--start <dir>` starts one at boot. The chosen session is a plain variable in the runner (`choose`, `list`,
+  `start`, `stop` are plain functions for WB4). There is no HTTP route to start or choose a session.
+- **Keys go only to the chosen session, re-verified at every send**: the runner lists the windows and finds the
+  one whose `@revview_id` is the chosen uuid, then `send-keys -t @<window id>` (tmux never reuses a window id in a
+  server's life). Gone -> the choice is cleared and nothing is sent. Only `Escape`, `C-c` and `Space` can be sent.
+- **Actions** (`src/sessions/actions.js`), one gesture at a time: cancel tap = Esc; cancel long-hold = ONE Ctrl+C,
+  and any further Ctrl+C within **5 s** of the last one sent is refused (two within the hint window exit Claude;
+  4 s apart did not, recorded); push-to-talk tap = Space (voice tap mode); press tap = allow; deny tap = deny.
+  **Hold-mode push-to-talk is not built** (the detector gives no key-down/up stream; bench S2).
+- **What may act**: only gestures from the device reader or the dev bridge, and not `dropped`. The target comes
+  only from the runner, never from the board. A POSTed event (e.g. `RevviewStarting`, which marks presses
+  `dropped`, or `RevviewButton` under `--dev-bridge`, source `post`) can make a press do nothing, but can never
+  make one act or change where it goes. That is our reading of WB2 review finding 7: suppressing is allowed,
+  causing or redirecting is not.
+- **QA r3-02 solved**: after revview sends Esc or Ctrl+C it feeds the internal `RevviewInterrupted
+  {session_id}`; a session in a turn becomes WAITING FOR ME (pending prompts cleared: Esc rejects a dialog).
+  `POST /event` refuses it with 403, also under `--dev-bridge`. Recorded: `/state` was `waiting` 300 ms after
+  the press. An Esc or Ctrl+C typed by anyone else still leaves WORKING (no hook fires).
+- **Allow / deny by a waiting PermissionRequest hook** (`hooks/permission-request.mjs`). The hook POSTs its stdin
+  to `POST /permission` and waits. Only on a 200 with exactly `{"behavior":"allow"}` or `{"behavior":"deny",
+  "message": "Denied with the wheel button."}` does it print a decision; anything else (204, timeout, server down,
+  error, extra keys) prints nothing and exits 0, so the normal terminal dialog stays. Never allow or deny by
+  default, no `updatedPermissions` ("always allow" is impossible). Timeouts: the server ends its wait at **540 s**
+  (204), the hook gives up at **570 s**, Claude Code's `timeout` is **600 s** in `hooks/settings-snippet.json`.
+- **The press answers only the prompt shown on the bar.** The server feeds the request's own event to the board
+  and binds the request to the pending entry THAT event created (identity: session, agent, the board tick
+  `since`; plus its shown tool, file and command). If the event created no entry (a duplicate, a request for a
+  finished turn) the request is unbound and no button can ever answer it. A press answers a request only if, at
+  that instant: the bar's view is NEEDS PERMISSION (`shownPrompt(board)`), the shown session is the chosen one
+  (re-verified tmux target), the shown entry is the request's entry with the same text, it has been the shown
+  prompt for at least **1500 ms** (`MIN_SHOWN_MS`, server clock injected in tests; any change of what the bar
+  shows restarts the time), and exactly one waiting request matches. One press answers one request, once.
+  Recorded: a press right after the prompt appeared did nothing, one 2 s later allowed.
+- **No carry-over**: after every board change, waiting requests whose entry left the board (answered in the
+  terminal -> PostToolUse, Stop, interrupt, `RevviewStarting`) get 204 at once and are removed; a disconnected
+  hook is removed; the 17th waiting request gets 503. No request id ever leaves the server, so nothing can name
+  one, and no HTTP route answers.
+- **Stage 2 must not post PermissionRequest to `/event`** as well: `/permission` puts it on the board. If it
+  does, the press fails safe (the second entry is unbound or not the one shown).
+
+Residual risks (honest):
+
+- Any local process (including a Bash command Claude runs) can POST to 127.0.0.1:8138. It can: fake hook events
+  that change what the bar shows (it could already); post `RevviewStarting` or a PostToolUse that clears a real
+  prompt, so its waiting hook gets no decision (the terminal dialog stays: a denial of service, never an allow);
+  fill the 16 request slots (same); post a fake `/permission` request and receive the driver's allow for it if the
+  driver presses while the fake is shown (the answer goes to the faker, not to Claude Code). It cannot make a press
+  answer a real request whose own tool, file and command were not on the bar for 1.5 s in the chosen session.
+- What the bar shows is the shortened command (`shortenCommand`); two commands that differ only beyond the shown
+  part look the same to the driver. The request is still bound to its own entry, so a different hidden command
+  can only be allowed if Claude itself asked for it.
+- A real prompt raised while another prompt of the chosen session is shown waits behind it; the driver answers the
+  shown one only. A subagent prompt shows no dialog in the main pane (recorded): if nobody answers in 540 s the hook
+  ends with no decision, and what Claude Code then shows was not recorded (bench S6).
+- The 5 s Ctrl+C gap is global, measured on the server's monotonic clock. A Ctrl+C typed by hand in the pane is not
+  counted.
+- Not proven: voice (tap or hold) inside tmux, the hook and buttons on the Pi, the real pods (bench S1-S6).

@@ -1,5 +1,5 @@
 ---
-status: open
+status: closed (fixed in ddf1f6d state core and 7895184 server, branch work/wb3-sessions)
 id: qa-20261122-r3-02
 title: After Esc or Ctrl+C mid-turn (recorded) the bar keeps showing WORKING and the interrupted command
 severity: minor
@@ -34,3 +34,12 @@ covers this behaviour.
 
 Minor today: nothing built yet lets the driver press Esc while driving. It becomes major with the planned
 Cancel button (BUTTONS.md: tap = Esc). The driver presses Cancel and the bar keeps saying WORKING.
+
+## Fix (WB3)
+
+revview now sends Esc / Ctrl+C itself (cancel button), and right after a sent key it feeds the internal event
+`RevviewInterrupted {session_id}` to the board: a session in a turn becomes WAITING FOR ME. It cannot be POSTed
+(403). Tests: `tests/unit/board-wb3.test.js` (replays `events-a-esc.jsonl` and `events-b-ctrlc-once.jsonl`),
+`tests/unit/wb3-tmux.test.js`, `tests/unit/wb3-recordings.test.js`; real run `fixtures/buttons/wb3/` (`/state`
+was `waiting` 300 ms after the press). Still open: an Esc typed by hand in the terminal (not by revview) fires no
+hook, so the bar stays WORKING then (DECISIONS, WB3 residual risks).

@@ -81,7 +81,7 @@ break with an update), **missing** (Claude Code offers nothing).
 | Button | Route | Verdict | Evidence |
 |---|---|---|---|
 | Push-to-talk, tap mode | `tmux send-keys -t <window> Space` with the input empty | workaround | Default `space` -> `voice:pushToTalk` **[source]**. Keys reach only the chosen pane **[recorded]** (`pane-e-3-attached-after-esc.txt`). Voice itself not recorded. |
-| Push-to-talk, hold mode | Space repeatedly (about every 50 ms) while held, imitating auto-repeat | workaround that an update can break | Hold is detected from terminal key repeat, with timers in the minified code **[source]**. A terminal has no key-up. Not recorded. |
+| Push-to-talk, hold mode | Space repeatedly (about every 50 ms) while held, imitating auto-repeat | workaround that an update can break; **not built in WB3** | Hold is detected from terminal key repeat, with timers in the minified code **[source]**. A terminal has no key-up. Not recorded. |
 | Cancel, tap | Esc by send-keys | workaround | **[recorded]** `events-a-esc.jsonl`, `pane-a-2-after-esc.txt` |
 | Cancel, hold 1 s | One Ctrl+C by send-keys | workaround | **[recorded]** `events-b-ctrlc-once.jsonl` |
 | Allow (press on a prompt) | Waiting PermissionRequest hook answers `allow` | supported | **[recorded]** `pane-c2-2-after-answer-file.txt` |
@@ -327,6 +327,10 @@ WB3 for ONE session, and it can go first. Allow and deny by hook is cheap and we
 - Whether the `claude agents` state resolves after an interrupt (it still said "working").
 - Whether `claude remote-control` can interrupt or answer permissions.
 - Whether a `--bg` session has any input channel other than `attach`.
-- Two sessions with a permission prompt in the non-selected one.
+- ~~Two sessions with a permission prompt in the non-selected one.~~ Recorded in WB3
+  (`fixtures/buttons/wb3/`, `wb3-two-sessions`): allow on the chosen session does nothing to it; the terminal
+  answer works. WB3 also recorded allow and deny by button through the real hook and server, a subagent prompt
+  (the main pane shows no dialog while the hook waits; what happens when nobody answers is not recorded), Esc and
+  a single Ctrl+C by button. See DECISIONS "wheel buttons 3".
 - The timing constants of hold mode (from minified code; may change).
 - That 3.5 mm text is readable on the dash (bench 26).
