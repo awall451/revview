@@ -43,8 +43,9 @@ The panel's active area is about **190 x 60 mm** (docs/DESIGN.md; not measured o
 computed font, measured in the page with canvas `measureText('H').actualBoundingBoxAscent`. A test checks it
 against the rows of ink of an H painted on a canvas (within 1.5 px). `fontSizeMm` (the CSS font-size, the em
 box) is returned too but is always larger than any letter. Both come from this Chromium's fonts (DejaVu /
-FreeSans here); the Pi's fonts may measure differently. Example: "the state word's cap height is at least
-10.5 mm" (the real thresholds are `MIN_MM` in `src/view/type.js`: 10.5 mm state word, 6.0 mm any text).
+FreeSans here); the Pi's fonts may measure differently. Example: "the state word's cap height is between
+5.8 and 6.3 mm" (the real ranges are `RANGE_MM` in `src/view/type.js`: 5.8-6.3 mm state word, 3.3-3.7 mm any
+other text; the design sizes are `TYPE_MM`, 6.05 and 3.55 mm).
 
 ## Fixtures
 

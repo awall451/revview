@@ -42,13 +42,16 @@ for (const view of ['working', 'waiting', 'permission', 'done']) {
     // the file is cut but its base name survives; the lower-bound diff stays whole
     await expect(page.locator('#file')).toHaveAttribute('data-full', file);
     expect(await page.locator('#file').textContent()).toContain('.test.tsx');
-    await expect(page.locator('#diff-approx')).toBeVisible();
-    await expect(page.locator('#diff-added')).toHaveText('+12.3k');
-    await expect(page.locator('#diff-removed')).toHaveText('−56');
-    const d = await rect(page, '#diff');
-    expect(d.right).toBeLessThanOrEqual(1280);
-    const f = await rect(page, '#file');
-    expect(f.right).toBeLessThanOrEqual(d.left + 0.5);
+    if (view === 'permission') await expect(page.locator('#diff')).toBeHidden(); // no diff under NEEDS PERMISSION (QA r3-03)
+    else {
+      await expect(page.locator('#diff-approx')).toBeVisible();
+      await expect(page.locator('#diff-added')).toHaveText('+12.3k');
+      await expect(page.locator('#diff-removed')).toHaveText('−56');
+      const d = await rect(page, '#diff');
+      expect(d.right).toBeLessThanOrEqual(1280);
+      const f = await rect(page, '#file');
+      expect(f.right).toBeLessThanOrEqual(d.left + 0.5);
+    }
     // command and output sit on separate rows of their own and do not overlap (was: the → separator)
     const cmd = await rect(page, '#command');
     const out = await rect(page, '#out3');

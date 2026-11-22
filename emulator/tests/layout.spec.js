@@ -1,6 +1,6 @@
 import { test, expect } from './harness.js';
 import { FIXTURE_IDS, loadFixture } from '../fixtures.js';
-import { WORST_CASE_IDS, loadWorstCase } from '../worst-case.js';
+import { WORST_CASE_IDS, loadWorstCase, asPermission } from '../worst-case.js';
 import { LIMITS } from '../../src/state/format.js';
 import { textSizeMm } from '../mm.js';
 import { RANGE_MM } from '../../src/view/type.js';
@@ -90,7 +90,8 @@ for (const id of FIXTURE_IDS) {
       const name = `worst case ${wc}${bash ? ' (Bash)' : ''} in ${id}`;
       test(name, async ({ openView, page }, testInfo) => {
         const content = loadWorstCase(wc);
-        const state = { ...loadFixture(id), ...content, ...(bash ? { tool: 'Bash' } : {}) };
+        const merged = { ...content, ...(bash ? { tool: 'Bash' } : {}) };
+        const state = { ...loadFixture(id), ...(id === 'permission' ? asPermission(merged) : merged) };
         await openView(state);
         await expectFits(page);
 
@@ -196,14 +197,14 @@ test('#diff-approx marks a lower bound; +A and −R stay as they are', async ({ 
 });
 
 test('diffIncomplete with no counted lines shows "+? −?" (QA 11) where a diff is shown', async ({ openView, page }) => {
-  for (const view of ['working', 'waiting', 'permission', 'done', 'offline']) {
+  for (const view of ['working', 'waiting', 'done', 'offline']) {
     await openView({ ...loadFixture('working'), view, diff: { added: 0, removed: 0 }, diffIncomplete: true });
     await expect(page.locator('#diff-approx')).toBeHidden();
     await expect(page.locator('#diff-added')).toHaveText('+?');
     await expect(page.locator('#diff-removed')).toHaveText('−?');
     await expect(page.locator('#diff')).toHaveAttribute('data-full', 'diff unknown (an event was too large to read)');
   }
-  for (const view of ['starting', 'insert-key', 'unknown', 'ended', 'no-link']) {
+  for (const view of ['permission', 'starting', 'insert-key', 'unknown', 'ended', 'no-link']) {
     await openView({ ...loadFixture('working'), view, diff: { added: 0, removed: 0 }, diffIncomplete: true });
     await expect(page.locator('#diff')).toBeHidden();
   }

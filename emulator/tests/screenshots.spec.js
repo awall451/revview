@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { test, expect, shotsDir } from './harness.js';
 import { startLiveServer } from '../../src/server/index.js';
 import { FIXTURE_IDS, loadFixture } from '../fixtures.js';
-import { WORST_CASE_IDS, loadWorstCase } from '../worst-case.js';
+import { WORST_CASE_IDS, loadWorstCase, asPermission } from '../worst-case.js';
 
 test.beforeAll(() => {
   fs.mkdirSync(shotsDir(), { recursive: true });
@@ -54,11 +54,23 @@ for (const wc of WORST_CASE_IDS) {
   for (const [view, suffix] of [['working', ''], ['permission', '-permission']]) {
     test(`screenshot worst case ${wc} (${view}) is 1280x400`, async ({ openView, page }) => {
       const file = path.join(shotsDir(), `worst-${wc}${suffix}.png`);
-      await openView({ ...loadFixture(view), ...loadWorstCase(wc) });
+      const content = loadWorstCase(wc);
+      await openView({ ...loadFixture(view), ...(view === 'permission' ? asPermission(content) : content) });
       await expect(page.locator('body')).toHaveAttribute('data-view', view);
+      if (view === 'permission') await expect(page.locator('#cmdbox')).toBeHidden(); // none of the worst cases is a Bash tool
       await expect(page.locator('html')).toHaveAttribute('data-rendered', view);
       await page.screenshot({ path: file });
       expectPng1280x400(file);
     });
   }
 }
+
+test('screenshot permission-offline (needs the driver, no network) is 1280x400', async ({ openView, page }) => {
+  const file = path.join(shotsDir(), 'permission-offline.png');
+  const command = 'cd packages/frontend && pnpm exec vitest run --reporter=verbose --coverage --silent=false src/components/some.spec.ts && git push origin main';
+  await openView({ ...loadFixture('permission'), offline: true, tool: 'Bash', command, others: 1 });
+  await expect(page.locator('#state-word')).toHaveText('NEEDS PERMISSION');
+  await expect(page.locator('#offline-note')).toBeVisible();
+  await page.screenshot({ path: file });
+  expectPng1280x400(file);
+});

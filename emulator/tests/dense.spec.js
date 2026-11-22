@@ -2,7 +2,7 @@
 // cut only when it does not fit the rows left by the output lines.
 import { test, expect } from './harness.js';
 import { FIXTURE_IDS, loadFixture } from '../fixtures.js';
-import { WORST_CASE_IDS, loadWorstCase } from '../worst-case.js';
+import { WORST_CASE_IDS, loadWorstCase, asPermission } from '../worst-case.js';
 import { expectFits, checkContrastAndFloor } from './checks.js';
 
 const ROW = 40;
@@ -12,7 +12,7 @@ const longCommand = (n) => words(100).slice(0, n).trimEnd();
 
 // one extra worst-case Bash state: 300-char multi-word command, 3 long output lines, others, long repo and branch
 const WORST_BASH = {
-  ...loadFixture('permission'), tool: 'Bash', file: null, others: 12,
+  ...loadFixture('working'), tool: 'Bash', file: null, others: 12, // working: a permission state has no output rows
   repo: 'customer-billing-service-with-a-very-long-name', branch: 'feature/some-very-long-branch-name-for-a-refund-flow-fix',
   command: longCommand(300), output: line('c'), outputLines: [line('a'), line('b'), line('c')],
 };
@@ -32,7 +32,8 @@ test.describe('nothing clipped, outside the panel or overlapping', () => {
   for (const wc of WORST_CASE_IDS) {
     for (const view of ['working', 'permission']) {
       test(`worst case ${wc} (${view})`, async ({ openView, page }) => {
-        await openView({ ...loadFixture(view), ...loadWorstCase(wc) });
+        const content = loadWorstCase(wc);
+        await openView({ ...loadFixture(view), ...(view === 'permission' ? asPermission(content) : content) });
         await expectFits(page);
       });
     }

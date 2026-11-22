@@ -44,7 +44,8 @@ const NOTES = {
   ended: ['No Claude Code session running', 'Voice input goes nowhere'],
   'no-link': ['Display lost the revview server', 'Claude may still be running'],
 };
-const NO_DIFF = new Set(['starting', 'insert-key', 'unknown', 'ended', 'no-link']);
+// permission: the turn total would read as the size of the requested edit (QA r3-03)
+const NO_DIFF = new Set(['permission', 'starting', 'insert-key', 'unknown', 'ended', 'no-link']);
 const NO_OTHERS = new Set(['starting', 'insert-key', 'unknown', 'no-link']);
 
 // First note of OFFLINE: what Claude is doing, worded for each activity (QA 14: "Claude: claude exited").
@@ -58,7 +59,7 @@ function offlineNote(activity) {
 const $ = (id) => document.getElementById(id);
 const str = (v) => (typeof v === 'string' ? v : '');
 const ids = ['band', 'shape', 'state-word', 'others', 'where', 'buttons-tag', 'tool', 'file', 'note1', 'note2', 'diff', 'diff-approx', 'diff-added',
-  'diff-removed', 'session', 'cmdbox', 'command', 'out1', 'out2', 'out3'];
+  'diff-removed', 'session', 'cmdbox', 'command', 'out1', 'out2', 'out3', 'offline-note'];
 const el = Object.fromEntries(ids.map((id) => [id, $(id)]));
 
 // ---- type sizes: cap height in mm -> font-size px, using the real font's cap-height ratio ----
@@ -98,16 +99,22 @@ function fitFile(full) {
 
 // The command wraps over at most MAX_ROWS minus the output rows shown (3 to 6 rows of 40 px; the rows below the
 // band are 7 in all); longer text is cut at its end with an ellipsis. Needs layout: call with the command box shown.
+// The row height is the computed line-height of #command (40 px from view.css), read at run time.
+// The displayed text has a U+2060 WORD JOINER after each '-' that is followed by a non-space, so a line breaks
+// at spaces and not after "--" (QA r3-09); a token longer than a row still breaks inside (overflow-wrap).
+// data-full and the cut itself work on the plain text.
 const MAX_ROWS = 6;
-const ROW_PX = 40;
+const WORD_JOINER = '\u2060';
+const noBreakAfterHyphen = (t) => t.replace(/-(?=\S)/gu, `-${WORD_JOINER}`);
 function fitCommand(full, outRows) {
   const c = el.command;
   c.dataset.full = full;
+  const rowPx = parseFloat(getComputedStyle(c).lineHeight) || 40;
   const fits = (t) => {
-    c.textContent = t;
-    return c.offsetHeight <= (MAX_ROWS - outRows) * ROW_PX;
+    c.textContent = noBreakAfterHyphen(t);
+    return c.offsetHeight <= (MAX_ROWS - outRows) * rowPx;
   };
-  c.textContent = fitPrefix(full, fits);
+  c.textContent = noBreakAfterHyphen(fitPrefix(full, fits));
 }
 
 // Up to the last 3 output lines, oldest first. outputLines is used only when it agrees with `output`
@@ -137,7 +144,7 @@ export function render(input) {
   document.body.dataset.view = view;
 
   // everything below starts empty; only what applies is filled in
-  for (const k of ['tool', 'file', 'note1', 'note2', 'command', 'out1', 'out2', 'out3']) set(el[k], '');
+  for (const k of ['tool', 'file', 'note1', 'note2', 'command', 'out1', 'out2', 'out3', 'offline-note']) set(el[k], '');
   el.cmdbox.hidden = true;
   el.diff.hidden = true;
 
@@ -161,6 +168,8 @@ export function render(input) {
     file = str(s.file);
     el.cmdbox.hidden = !str(s.command);
     outRows = outputLines(s).reverse().map((line, i) => set(el[`out${3 - i}`], line)).length;
+    // NEEDS PERMISSION while offline: a secondary row at the bottom (it takes one of the command's rows)
+    if (view === 'permission' && s.offline === true) { set(el['offline-note'], 'No network: voice input will not work'); outRows += 1; }
   }
   if (showDiff) {
     // a lower bound of zero says nothing ("at least nothing"): show it as unknown, never as +0 −0 (QA 11)

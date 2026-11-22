@@ -158,12 +158,14 @@ span:empty { display: none; }
   overflow-wrap: anywhere;
 }
 
-/* output lines, oldest first, newest last; each one row, cut with an ellipsis */
+/* output lines, oldest first, newest last; each one row, cut with an ellipsis. #offline-note is the secondary row
+   of NEEDS PERMISSION while offline, the last row of all (grey, like the tool) */
 #outarea { flex: none; display: flex; flex-direction: column; }
-#outarea > span {
+#outarea > span, #offline-note {
   flex: none;
   height: 40px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+#offline-note { color: var(--grey); }

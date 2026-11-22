@@ -13,15 +13,26 @@ Files: `index.html`, `boot.html` (kiosk start page, see Boot page), `view.css`, 
   piece of the branch fits, the repo alone is shown (never a bare `repo ·…`; the CSS end cut still applies to a
   repo that is too long). With other sessions (`+N`) and no room in the band (long state words), the repo moves
   to `#session`, bold at the right end of row A (at most 30% wide, `data-full` = repo), so the driver can tell
-  which session needs them; not for the note views (offline, ended, ...).
+  which session needs them; not for the note views (offline, ended, ...). With the emulator's fonts this never
+  happens: next to NEEDS PERMISSION, `9+` and the NO BUTTONS tag `#where` keeps about 190 px (the floor is about
+  157 px), so no input reaches it; the emulator test squeezes the band with a style to check the logic (the Pi's
+  fonts may be wider).
 - **Row A**: the tool and the file (the file is shortened in the middle when it does not fit), and the diff
   as `+N −N` (U+2212) at the right, shown only when added or removed is above 0. Very large counts are
-  abbreviated.
+  abbreviated. Never shown under NEEDS PERMISSION (`permission` is in the no-diff set): the turn total would read
+  as the size of the requested edit, and the request has no payload to compute its own size from. `#diff` is
+  hidden and its `data-full` is empty.
 - **Below row A**, a flow of 40 px rows without gaps (at most 7 rows below the band in all): the command after
   a `$` (monospace, wrapped; at most 6 minus the number of output lines shown, so 3 to 6 rows; cut with an
   ellipsis at its end only when it does not fit, `data-full` holds the full text), then the last up to 3 output
   lines (`#out1`..`#out3`, oldest first, one row each, cut with an ellipsis). In the note views `#note2` takes
-  the command's place. An empty part takes no room.
+  the command's place. An empty part takes no room. Under NEEDS PERMISSION the state core sends no output, only
+  the requested Bash command (null for other tools), so there is just row A and the command.
+  The command breaks at spaces: the displayed text has a U+2060 WORD JOINER after each `-` that is followed by a
+  non-space (so a line never ends after `--`); a token longer than a row still breaks inside it
+  (`overflow-wrap: anywhere`). `data-full` and the cut for the ellipsis use the plain text, so the visible text
+  minus U+2060 is the command. The row height is read at run time from the computed `line-height` of `#command`
+  (40 px in the CSS; a test pins it for `#command` and the output rows, and the command at 6 rows).
 - **starting**, **offline**, **insert-key** show short notes instead of tool, file and command:
   starting "Not ready for voice yet"; offline "Claude: <activity>" (`Claude exited` when the last activity was ended, `Claude: not known` when unknown) and "No network: voice input will not
   work"; insert-key "Data locked" and "Insert the key stick to unlock". Starting and insert-key show no diff.
@@ -34,6 +45,11 @@ Files: `index.html`, `boot.html` (kiosk start page, see Boot page), `view.css`, 
   gives way first; next to NEEDS PERMISSION the band's padding is tightened, class `tight`). Not shown in
   no-link, unknown, starting, insert-key. From 10 on it reads `9+` (two digits next to NEEDS PERMISSION ran off the panel; the state core may exceed its
   session cap with pending permissions); `data-full` always has the real number.
+- **Needs permission while offline**: the state keeps `view: 'permission'` with `offline: true` (needing the
+  driver outranks OFFLINE). The look is the full NEEDS PERMISSION one (amber band, triangle, tool, file,
+  command) plus `#offline-note`, one grey detail-size row, the last row of all, reading `No network: voice input
+  will not work` (`data-full` the same). It takes one row of the command (at most 5 rows). Hidden, with an empty
+  `data-full`, when `offline` is not `true` and in every other view.
 - **NO BUTTONS tag**: `#buttons-tag` at the right end of the band, shown only when `state.buttons === 'missing'` and the view is neither `starting` nor `no-link` (any other value: hidden). `data-full` is `Wheel buttons not found: the buttons do nothing`. Not a state takeover: band colour, shape, word and rows are unchanged. Detail size (`--detail-font`), bold, 2 px outline in the band's text colour, transparent fill, vertically centred; it never shrinks (`#where` gives way first, and `tight` is also set when the hint would reach the tag).
 - **Diff lower bound**: when `diffIncomplete` is `true` (an event of the turn was too large to read) the diff
   shows a white bold `≥` (`#diff-approx`) before `+A −R`, and `#diff` `data-full` is `at least +A −R`. With no
@@ -117,7 +133,8 @@ A page loaded from the cache keeps its old scripts until the next reload after t
 
 ## Fitting
 
-Long values never wrap or overflow. The file path is cut in the MIDDLE (`fit.js`, `middleEllipsis`) so
+Long values never overflow: only the command wraps (over up to 6 rows, see above); everything else is one
+line. The file path is cut in the MIDDLE (`fit.js`, `middleEllipsis`) so
 the file name stays visible: first as much of the leading directories as fits, then `…/` and the whole file
 name (`src/compo…/Button.tsx`, or `…/Button.tsx`); only if the file name alone does not fit is it cut in
 its own middle, about a third from the front and two thirds from the back, so the extension stays

@@ -12,3 +12,12 @@ export function loadWorstCase(id) {
   if (!WORST_CASE_IDS.includes(id)) throw new Error(`unknown worst case: ${id}`);
   return JSON.parse(fs.readFileSync(new URL(`${id}.json`, WORST_CASE_DIR), 'utf8'));
 }
+
+// What the state core can emit under view 'permission': no output, and a command only for a Bash tool (the
+// requested command). Worst-case content merged over the permission fixture must go through this, or the
+// screenshot shows an Edit with an old `$ command` and output that no real state has.
+export function asPermission(content) {
+  const c = { ...content, output: null, outputLines: [] };
+  if (c.tool !== 'Bash') c.command = null;
+  return c;
+}

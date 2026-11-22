@@ -65,7 +65,8 @@ async function expectShows(page, state) {
   await expect(page.locator('#file')).toHaveText(state.file || '');
   const command = state.command || '';
   await expect(page.locator('#command')).toHaveAttribute('data-full', command);
-  const shownCmd = (await page.locator('#command').textContent()).replace(/…$/, '');
+  // the displayed command has a U+2060 after each '-' (no line break after "--"); data-full does not
+  const shownCmd = (await page.locator('#command').textContent()).replaceAll('\u2060', '').replace(/…$/, '');
   expect(command.startsWith(shownCmd.trimEnd())).toBe(true);
   // output: up to 3 lines, newest in #out3 (outputLines when it agrees with output, else output alone)
   const o = state.output || '';
@@ -78,7 +79,7 @@ async function expectShows(page, state) {
   else await expect(page.locator('#where')).toBeHidden();
 
   const { added, removed } = state.diff || { added: 0, removed: 0 };
-  if (added > 0 || removed > 0) {
+  if ((added > 0 || removed > 0) && state.view !== 'permission') { // no diff under NEEDS PERMISSION (QA r3-03)
     await expect(page.locator('#diff')).toBeVisible();
     await expect(page.locator('#diff-added')).toHaveText(`+${added}`);
     await expect(page.locator('#diff-removed')).toHaveText(`${MINUS}${removed}`);
@@ -284,7 +285,8 @@ test.describe('live', () => {
       await postOk(server, ev(B, 'Notification', { notification_type: 'idle_prompt' }));
       await expectSeq(page, 4);
       await expect(page.locator('#state-word')).toHaveText('NEEDS PERMISSION');
-      await expect(page.locator('#command')).toHaveText('rm -rf build');
+      await expect(page.locator('#command')).toHaveAttribute('data-full', 'rm -rf build');
+      expect((await page.locator('#command').textContent()).replaceAll('\u2060', '')).toBe('rm -rf build');
       await expect(page.locator('#others')).toHaveText('+1');
     });
   });
