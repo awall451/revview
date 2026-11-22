@@ -1,0 +1,19 @@
+{
+  "note": "Key codes and USB ids are unverified until bench items 27-30 (docs/BENCH-TEST.md); vendor 1d50 and product 615e are ZMK's default USB ids, not read from the real dongle. Combos are written like \"Shift+F24\".",
+  "device": { "vendor": "1d50", "product": "615e", "grab": true },
+  "timing": { "debounceMs": 30, "holdMs": 400, "longHoldMs": 1000 },
+  "buttons": [
+    { "key": "F13", "button": "push-to-talk" },
+    { "key": "F14", "button": "read-aloud", "hold": true },
+    { "key": "F15", "button": "cancel", "longHold": true },
+    { "key": "F16", "button": "deny" },
+    { "key": "F17", "button": "up" },
+    { "key": "F18", "button": "down" },
+    { "key": "F19", "button": "left" },
+    { "key": "F20", "button": "right" },
+    { "key": "F21", "button": "press" },
+    { "key": "F22", "button": "back", "hold": true },
+    { "key": "F23", "button": "menu" },
+    { "key": "F24", "button": "spare" }
+  ]
+}
