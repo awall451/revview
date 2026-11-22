@@ -329,3 +329,38 @@ test('end to end, permission-prompt: the hook skips PermissionRequest, the Notif
     await srv.close();
   }
 });
+
+for (const bad of ['99999', '-5', '1.5', '0', 'abc']) {
+  test(`out-of-range REVVIEW_PORT=${bad}: exit 0, stdout empty (normal and oversize body)`, async () => {
+    const small = await runHook(bad, ev({ hook_event_name: 'PreToolUse', tool_name: 'Bash' }));
+    assert.equal(small.code, 0);
+    assert.equal(small.out, '');
+    const big = await runHook(bad, ev({ hook_event_name: 'PreToolUse', pad: 'x'.repeat(1024 * 1024 + 10) }));
+    assert.equal(big.code, 0);
+    assert.equal(big.out, '');
+  });
+}
+
+test('a hung git child is killed when the hook hits its deadline', async () => {
+  const s = await stub();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'revview-fakegit-'));
+  const pidFile = path.join(dir, 'pid');
+  fs.writeFileSync(path.join(dir, 'git'), `#!/bin/sh\necho $$ > "${pidFile}"\nexec sleep 30\n`, { mode: 0o755 });
+  const r = await runHook(s.port, ev({ hook_event_name: 'Stop', cwd: '/tmp' }), {
+    PATH: `${dir}:${process.env.PATH}`,
+    REVVIEW_EVENT_WAIT_MS: '300',
+  });
+  s.close();
+  assert.equal(r.code, 0);
+  const pid = Number(fs.readFileSync(pidFile, 'utf8'));
+  assert.ok(pid > 0);
+  await new Promise((res) => setTimeout(res, 300));
+  let alive = true;
+  try {
+    process.kill(pid, 0);
+  } catch {
+    alive = false;
+  }
+  if (alive) process.kill(pid, 'SIGKILL');
+  assert.equal(alive, false, 'git child still running');
+});

@@ -2,9 +2,10 @@
 // Installs revview's hooks (hooks/settings.json) into a Claude Code settings file.
 // Usage: node hooks/install.mjs [--settings <file>] [--remove] [--dry-run]
 // Default target: $CLAUDE_CONFIG_DIR/settings.json, else $HOME/.claude/settings.json.
-// Own entries (a command containing /hooks/event.mjs or /hooks/permission-request.mjs) are removed first,
-// then appended again, so the run is idempotent and a moved repo replaces the old paths. Everything else
-// in the file is kept. The first change to an existing file copies it to <file>.revview-backup.
+// Own entries (a command ending in the marker comment ` # revview-hook`, plus once the old snippet form
+// `node <this repo>/hooks/permission-request.mjs`) are removed first, then appended again, so the run is
+// idempotent and a moved repo replaces the old paths. Everything else, other tools' hooks included, is kept.
+// A symlinked settings file is written through the link. The first change to an existing file copies it to <file>.revview-backup.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -39,14 +40,18 @@ const target = settingsArg
     : path.join(os.homedir(), '.claude', 'settings.json');
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
-const ours = (h) => isObj(h) && typeof h.command === 'string' && /\/hooks\/(event|permission-request)\.mjs/.test(h.command);
+const MARK = ' # revview-hook';
+const legacy = [`node ${repo}/hooks/permission-request.mjs`, 'node $REVVIEW_DIR/hooks/permission-request.mjs'];
+const ours = (h) => isObj(h) && typeof h.command === 'string' && (h.command.endsWith(MARK) || legacy.includes(h.command));
 
 let existing = null;
 let mode = 0o600;
 let text = null;
+let real = target;
 if (fs.existsSync(target)) {
-  text = fs.readFileSync(target, 'utf8');
-  mode = fs.statSync(target).mode & 0o777;
+  real = fs.realpathSync(target); // a symlinked settings file is written through
+  text = fs.readFileSync(real, 'utf8');
+  mode = fs.statSync(real).mode & 0o777;
   try {
     existing = JSON.parse(text);
   } catch (e) {
@@ -60,7 +65,9 @@ if (settings.hooks !== undefined && !isObj(settings.hooks)) die(`"hooks" in ${ta
 
 const hooks = settings.hooks ?? {};
 for (const ev of Object.keys(hooks)) {
-  if (!Array.isArray(hooks[ev])) continue;
+  if (!Array.isArray(hooks[ev])) die(`"hooks.${ev}" in ${target} is not an array; left untouched`);
+}
+for (const ev of Object.keys(hooks)) {
   const groups = [];
   for (const g of hooks[ev]) {
     if (isObj(g) && Array.isArray(g.hooks)) {
@@ -94,11 +101,17 @@ if (existing !== null && JSON.stringify(settings) === before) {
   console.log(`${target}: already ${remove ? 'without' : 'up to date with'} revview hooks, not changed`);
   process.exit(0);
 }
-const dir = path.dirname(target);
+const dir = path.dirname(real);
 if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-if (text !== null && !fs.existsSync(`${target}.revview-backup`)) fs.copyFileSync(target, `${target}.revview-backup`);
-const tmpFile = path.join(dir, `.${path.basename(target)}.revview-${process.pid}.tmp`);
-fs.writeFileSync(tmpFile, out, { mode });
+if (text !== null && !fs.existsSync(`${real}.revview-backup`)) fs.copyFileSync(real, `${real}.revview-backup`);
+const tmpFile = path.join(dir, `.${path.basename(real)}.revview-${process.pid}.tmp`);
+const fd = fs.openSync(tmpFile, 'w', mode);
+try {
+  fs.writeSync(fd, out);
+  fs.fsyncSync(fd);
+} finally {
+  fs.closeSync(fd);
+}
 fs.chmodSync(tmpFile, mode);
-fs.renameSync(tmpFile, target);
+fs.renameSync(tmpFile, real);
 console.log(`${target}: revview hooks ${remove ? 'removed' : 'installed'}`);

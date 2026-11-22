@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const INSTALL = path.join(ROOT, 'hooks/install.mjs');
 const TEMPLATE = JSON.parse(fs.readFileSync(path.join(ROOT, 'hooks/settings.json'), 'utf8'));
+const MARK = ' # revview-hook';
 const EVENTS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PostToolUseFailure',
   'PermissionDenied', 'Notification', 'Stop', 'StopFailure', 'SubagentStop', 'SessionEnd'];
 
@@ -26,7 +27,7 @@ function run(args, { home, configDir, script = INSTALL } = {}) {
 const commands = (settings) =>
   Object.entries(settings.hooks ?? {}).flatMap(([ev, groups]) =>
     groups.flatMap((g) => g.hooks.map((h) => ({ ev, command: h.command }))));
-const mine = (settings) => commands(settings).filter((c) => /\/hooks\/(event|permission-request)\.mjs/.test(c.command));
+const mine = (settings) => commands(settings).filter((c) => c.command.endsWith(MARK));
 
 function setup() {
   const home = tmp();
@@ -54,7 +55,31 @@ test('template: every consumed event runs event.mjs with a short timeout; $REVVI
     assert.ok(hs[0].timeout <= 10, ev);
   }
   for (const ev of ['SubagentStart', 'PreCompact', 'PostCompact']) assert.equal(TEMPLATE.hooks[ev], undefined);
-  for (const c of commands(TEMPLATE)) assert.match(c.command, /"\$REVVIEW_DIR\/hooks\/[a-z-]+\.mjs"/);
+  for (const c of commands(TEMPLATE)) {
+    assert.match(c.command, /^node "\$REVVIEW_DIR\/hooks\/[a-z-]+\.mjs" # revview-hook$/);
+  }
+});
+
+function consumedEvents() {
+  const names = new Set();
+  const src = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
+  const reducer = src('src/state/reducer.js');
+  const patchFor = reducer.slice(reducer.indexOf('patchFor'));
+  for (const m of patchFor.matchAll(/case '([A-Z]\w*)'/g)) names.add(m[1]);
+  for (const f of ['src/state/reducer.js', 'src/state/board.js']) {
+    for (const m of src(f).matchAll(/(?:hook_event_name|\bname) === '([A-Z]\w*)'/g)) names.add(m[1]);
+  }
+  for (const m of src('src/state/board.js').matchAll(/^\s*case '([A-Z]\w*)':/gm)) names.add(m[1]);
+  return [...names].filter((n) => !n.startsWith('Revview') && n !== 'PermissionRequest');
+}
+
+test('template registers event.mjs for every event the state core consumes (derived from the sources)', () => {
+  const derived = consumedEvents();
+  for (const ev of EVENTS) assert.ok(derived.includes(ev), `${ev} not found in the state sources`);
+  for (const ev of derived) {
+    const hs = (TEMPLATE.hooks[ev] ?? []).flatMap((g) => g.hooks);
+    assert.ok(hs.some((h) => /event\.mjs/.test(h.command)), `${ev} consumed by the state core but not registered`);
+  }
 });
 
 test('fresh install into a missing file (HOME default)', () => {
@@ -117,16 +142,19 @@ test('old snippet-style entry is replaced, not duplicated; backup made once', ()
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const old = {
     hooks: {
-      PermissionRequest: [{ matcher: '*', hooks: [{ type: 'command', command: 'node /old/place/hooks/permission-request.mjs', timeout: 600 }] }],
+      PermissionRequest: [{ matcher: '*', hooks: [{ type: 'command', command: `node ${ROOT.replace(/\/$/, '')}/hooks/permission-request.mjs`, timeout: 600 }] }],
       SubagentStart: [{ hooks: [{ type: 'command', command: 'node /old/place/hooks/event.mjs' }] }],
+      PreCompact: [{ hooks: [{ type: 'command', command: 'node "/y/hooks/permission-request.mjs"' }] }],
     },
   };
   fs.writeFileSync(file, JSON.stringify(old));
   run([], { home });
   const s = read();
-  assert.ok(!JSON.stringify(s).includes('/old/place'));
+  assert.ok(!JSON.stringify(s).includes(`node ${ROOT.replace(/\/$/, '')}/hooks/permission-request.mjs`));
   assert.equal(s.hooks.PermissionRequest.length, 1);
-  assert.equal(s.hooks.SubagentStart, undefined);
+  assert.equal(s.hooks.SubagentStart[0].hooks[0].command, 'node /old/place/hooks/event.mjs'); // foreign: kept
+  assert.equal(s.hooks.PreCompact[0].hooks[0].command, 'node "/y/hooks/permission-request.mjs"');
+  assert.equal(mine(s).length, EVENTS.length + 1);
   const bak = fs.readFileSync(`${file}.revview-backup`, 'utf8');
   assert.ok(bak.includes('/old/place'));
   run(['--remove'], { home });
@@ -150,10 +178,46 @@ test("--remove leaves only the user's things; no-op without revview hooks", () =
   assert.deepEqual(read(), { a: 1 });
 });
 
+test("other tools' event.mjs / permission-request.mjs hooks survive install and --remove", () => {
+  const { home, file, read } = setup();
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const user = {
+    hooks: {
+      PreToolUse: [{ hooks: [{ type: 'command', command: 'node /x/hooks/event.mjs' }] }],
+      PermissionRequest: [{ hooks: [{ type: 'command', command: 'node "/y/hooks/permission-request.mjs"' }] }],
+    },
+  };
+  fs.writeFileSync(file, JSON.stringify(user));
+  assert.equal(run([], { home }).code, 0);
+  const cmds = commands(read()).map((c) => c.command);
+  assert.ok(cmds.includes('node /x/hooks/event.mjs'));
+  assert.ok(cmds.includes('node "/y/hooks/permission-request.mjs"'));
+  assert.equal(mine(read()).length, EVENTS.length + 1);
+  assert.equal(run(['--remove'], { home }).code, 0);
+  assert.deepEqual(read(), user);
+});
+
+test('a symlinked settings file stays a symlink; the real file gets the hooks', () => {
+  const { home } = setup();
+  const real = path.join(tmp(), 'real.json');
+  fs.writeFileSync(real, '{"model":"x"}\n');
+  const link = path.join(home, 'link.json');
+  fs.symlinkSync(real, link);
+  assert.equal(run(['--settings', link], { home }).code, 0);
+  assert.ok(fs.lstatSync(link).isSymbolicLink());
+  const s = JSON.parse(fs.readFileSync(real, 'utf8'));
+  assert.equal(s.model, 'x');
+  assert.equal(mine(s).length, EVENTS.length + 1);
+  assert.ok(fs.existsSync(`${real}.revview-backup`));
+  assert.equal(run(['--settings', link, '--remove'], { home }).code, 0);
+  assert.ok(fs.lstatSync(link).isSymbolicLink());
+  assert.deepEqual(JSON.parse(fs.readFileSync(real, 'utf8')), { model: 'x' });
+});
+
 test('invalid targets: exit 2, file untouched', () => {
   const { home, file } = setup();
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  for (const bad of ['{nope', '[1]', '{"hooks":[]}', '"x"']) {
+  for (const bad of ['{nope', '[1]', '{"hooks":[]}', '"x"', '{"hooks":{"Stop":{"a":1}}}', '{"hooks":{"Stop":"x"}}']) {
     fs.writeFileSync(file, bad);
     const r = run([], { home });
     assert.equal(r.code, 2, bad);

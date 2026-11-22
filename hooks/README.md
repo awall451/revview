@@ -22,8 +22,11 @@ node $REVVIEW_DIR/hooks/install.mjs --remove   # take revview's hooks out again
 
 It replaces `$REVVIEW_DIR` with this repository's absolute path (refused if the path has `"`, `` ` ``, `$`, `\` or
 control characters, since it goes inside a quoted bash word), keeps every other key and hook, removes revview's own
-entries (any command containing `/hooks/event.mjs` or `/hooks/permission-request.mjs`) before adding them again
-(idempotent; after moving the repo, run it again), and copies an existing file once to
+entries before adding them again (idempotent; after moving the repo, run it again). Own entries are recognised by
+the trailing `# revview-hook` marker (a bash comment at the end of each command) and, migrated once, by the old
+snippet form for this repo (`node <this repo>/hooks/permission-request.mjs`). Other tools' hooks, even ones named
+`.../hooks/event.mjs`, are never touched. A `hooks.<Event>` that is not an array makes it exit 2 with the file
+untouched. A symlinked settings file stays a symlink (the real file is written, the backup sits next to it). It copies an existing file once to
 `settings.json.revview-backup`. `--settings <file>` picks another file. Run it as the user that runs Claude Code
 (on the Pi: the user of the revview sessions, see `pi/README.md`). Install into ONE settings file only: the same
 hook in user and project settings would post every event twice (a doubled diff, QA r3-07).

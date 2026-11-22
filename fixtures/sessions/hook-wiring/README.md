@@ -82,3 +82,11 @@ a command the classifier refuses was not tried (would need something truly dange
 `tests/unit/hook-wiring-recordings.test.js` replays each `events-*.jsonl` line by line through the real
 `hooks/event.mjs` into a live server and compares with `states-*.jsonl` (the branch is not compared: it came from git
 at `/tmp/rvhw/repo`, which does not exist in a checkout).
+
+## Re-run after the review fixes
+
+The committed recordings were made with the first template (`node "$REVVIEW_DIR/hooks/event.mjs"`). After the
+install marker was added (`... # revview-hook`, a bash comment), `bar-follows` was run once more the same way
+(output not committed): the same events (SessionStart 1, UserPromptSubmit 1, PreToolUse 4, PostToolUse 3,
+PostToolUseFailure 1, Stop 1, SessionEnd 1) and the same bar sequence (branch `main` -> `feature-bar`, Write +3,
+Edit +4 -1, done, ended), so Claude Code 2.1.330 runs the commands with the trailing comment.

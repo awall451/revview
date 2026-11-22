@@ -14,14 +14,21 @@ import { execFile } from 'node:child_process';
 
 const MAX_BODY = 1024 * 1024; // the server's MAX_BODY_BYTES
 const KEEP = MAX_BODY + 64 * 1024 + 1; // an oversize body is sent as this prefix; the server marks it dropped
-const port = Number(process.env.REVVIEW_PORT) || 8138;
+const portNum = Number(process.env.REVVIEW_PORT);
+const port = Number.isInteger(portNum) && portNum >= 1 && portNum <= 65535 ? portNum : 8138;
 const raw = process.env.REVVIEW_EVENT_WAIT_MS;
 const asNum = Number(raw);
 const waitMs = raw !== undefined && raw !== '' && Number.isFinite(asNum) ? Math.min(3000, Math.max(50, asNum)) : 1000;
 const t0 = Date.now();
 const left = () => Math.max(1, waitMs - (Date.now() - t0));
 
+let gitChild = null;
 const bail = (why) => {
+  try {
+    gitChild?.kill('SIGKILL');
+  } catch {
+    // already gone
+  }
   if (why) process.stderr.write(`revview hook: ${why}\n`);
   process.exit(0);
 };
@@ -30,23 +37,28 @@ setTimeout(() => bail('timed out'), waitMs).unref();
 
 function post(body) {
   return new Promise((resolve) => {
-    const req = http.request(
-      {
-        host: '127.0.0.1',
-        port,
-        path: '/event',
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'content-length': body.length },
-        agent: false,
-      },
-      (res) => {
-        res.resume();
-        res.on('error', () => resolve(false));
-        res.on('end', () => resolve(res.statusCode >= 200 && res.statusCode < 300));
-      },
-    );
-    req.on('error', () => resolve(false));
-    req.end(body);
+    let req;
+    try {
+      req = http.request(
+        {
+          host: '127.0.0.1',
+          port,
+          path: '/event',
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'content-length': body.length },
+          agent: false,
+        },
+        (res) => {
+          res.resume();
+          res.on('error', () => resolve(false));
+          res.on('end', () => resolve(res.statusCode >= 200 && res.statusCode < 300));
+        },
+      );
+      req.on('error', () => resolve(false));
+      req.end(body);
+    } catch {
+      resolve(false);
+    }
   });
 }
 
@@ -66,7 +78,7 @@ function wantsContext(ev) {
 
 function git(cwd) {
   return new Promise((resolve) => {
-    execFile(
+    gitChild = execFile(
       'git',
       ['-C', cwd, 'rev-parse', '--show-toplevel', '--abbrev-ref', 'HEAD'],
       { timeout: left(), env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' }, maxBuffer: 65536 },
@@ -103,7 +115,7 @@ process.stdin.on('end', () => {
     const head = body.subarray(0, 65536).toString('utf8');
     const m = /"hook_event_name"\s*:\s*"([^"\\]*)"/.exec(head);
     if (m && (m[1] === 'PermissionRequest' || m[1].startsWith('Revview'))) return bail(null);
-    return post(body).then(() => bail(null));
+    return post(body).then(() => bail(null)).catch(() => bail(null));
   }
   let ev;
   try {
