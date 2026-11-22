@@ -83,3 +83,13 @@ Process notes:
 - The reviewer earned its cost: the area lead and its builders did not see the injection path. Keep an independent review for every phase that touches the gesture or permission path.
 - Basing the second branch on the first (instead of main) and submitting the stack as one topic avoided a merge run. The untracked QA issue files in the main checkout were read there by the fixing lead and committed on its branch; the lead deleted the untracked copies before `reset --hard`.
 - Leftover `worktree-agent-*` branches and three agent worktrees were removed at the end.
+
+## 2026-11-22: one-shot cycle (wheel buttons 2, started after it had merged)
+
+Owner message 20261122T061619Z-o-a96099 (backlog cf3327, owner issue 20261122T061604Z-i-e011ec) started at 08:04, seconds after cycle 9 had already built and merged WB2 (2406ab9) from the owner's scope answer. Nothing was rebuilt. The cycle 9 notes branch `lead-notes-9` was still waiting for the gate; it merged as 135b100.
+
+Done here: a second reviewer (default model, fresh context, 10 minutes) on the merged input layer against the job's six steps and the HTTP gating rule: approve, all met, no real bug. It broke 13 things on purpose: 9 caught (among them the 403 gate, which cycle 9 had not seen fail), 4 survived (helper kill on close, the two threshold comparisons, reset on `SYN_DROPPED`). One area-lead-core run (Sonnet, 2.5 minutes, no builders) closed findings 1-6 on `work/wb2-review2`: merged first try as 98d7fc2, 563 tests (was 552). `tools/check` untouched. Finding 7 (the `dropped` mark trusts a postable `RevviewStarting`) is noted for WB3 in STATE.md.
+
+Not proven: unchanged from cycle 9 (nothing on hardware, no successful EVIOCGRAB seen, constructed traces); the helper's exit after its parent dies stays bench W5.
+
+Process notes: an owner one-shot can arrive for work a normal cycle has just finished; check gate/main and the ready branches before dispatching. A leftover clean worktree `/tmp/rv-wb2` (detached, commit in main) was removed.
