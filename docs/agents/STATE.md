@@ -1,6 +1,6 @@
 # STATE
 
-Updated 2026-11-22 (cycle 13, a normal cycle: QA round 5, stage 2 hook wiring, core hardening; all submitted as ONE topic `stage2-qa5`, verdict not yet seen).
+Updated 2026-11-22 (cycle 13, a normal cycle: QA round 5, stage 2 hook wiring, core hardening; all merged as ONE topic `stage2-qa5`, gate main 0277757, 974 tests). Milestone 1 is CLOSED; stage 2 (hook wiring) is BUILT, unproven on the Pi.
 
 ## Roadmap (the charter's four stages)
 
@@ -25,11 +25,11 @@ Updated 2026-11-22 (cycle 13, a normal cycle: QA round 5, stage 2 hook wiring, c
 - DONE (merged 2026-11-22, 15dd3f0, topic `qa-round-2`, cycle 7): QA round 2, all 15 issues closed (several sessions and subagents, sticky focus, prompts per agent, compaction, polish). Cycle 7 was cut short before its notes; this is reconstructed from the git log.
 - DONE (merged 2026-11-22, 3e8f199, topic `dense-layout`, cycle 8): the owner's dense layout (message 20261122T042927Z-o-d9a077, replied done). State word 5.94 mm, other text 3.41 mm, tests hold 5.8-6.3 / 3.3-3.7 mm; band 84 px, then tool/file/diff, the full command wrapped (up to 6 rows), last 3 output lines (`outputLines` in the core, commands up to 300 code points). 423 tests = gate count, 22 shots. DECISIONS "dense layout"; bench item 26 (3.5 mm legibility) untested.
 - DONE (merged 2026-11-22, 2406ab9, topic `wb2-qa3`, cycle 9): QA round 3 (1 major, 5 minor, 4 cosmetic; round 2 fixes all held) and its fixes: 01 (major: NEEDS PERMISSION showed a stale Bash command and output for non-Bash requests), 03, 04, 06, 09, 10 closed. Decisions in DECISIONS.md "QA round 3": no diff under NEEDS PERMISSION; needing the driver outranks OFFLINE; an untied prompt clears on its agent's next tool event; commands break at spaces (a word joiner U+2060 after hyphens in the displayed text, `data-full` keeps the plain command).
-- CLOSED IF `stage2-qa5` MERGES: QA round 5 (on adedbbd, real tmux) re-ran round 4's majors: r4-01/02/03 held, r4-04 did not hold in general (new major r5-01: no Allowed/Denied mark for a non-Bash request after a Bash). Fixed on the branch; QA round 5b on the branch: everything held, no major left (3 new small findings). So milestone 1 is closed the moment `stage2-qa5` shows MERGED; if it fails, milestone 1 stays open until the fix lands.
+- CLOSED (merged 2026-11-22, 0277757): QA round 5 (on adedbbd, real tmux) re-ran round 4's majors: r4-01/02/03 held, r4-04 did not hold in general (new major r5-01: no Allowed/Denied mark for a non-Bash request after a Bash). Fixed on the branch; QA round 5b on the branch: everything held, no major left (3 new small findings). Merged, so milestone 1 is closed.
 
 ## In flight
 
-- `ready/stage2-qa5` (= `work/qa5-fixes`, head 0277757, 16 commits on adedbbd, 974 tests locally, was 862; `tools/check` untouched, no new dependency). One topic because the three parts are stacked: (1) core hardening (`work/core-hardening`), (2) stage 2 hook wiring (`work/hook-wiring`, cherry-picked on top; the lead resolved one append conflict in DECISIONS.md), (3) QA round 5 fixes + reviewer fix round. Next cycle: MERGED -> delete `ready/stage2-qa5` and the work branches `work/core-hardening`, `work/hook-wiring`, `work/stage2-stack`, `work/qa5-fixes`, and mark the items below DONE; FAILED -> give the log to area-lead-core (state/view) or area-lead-platform (hooks) as a fix task.
+- Nothing. `stage2-qa5` MERGED at 19:33Z as 0277757 (16 commits: core hardening, stage 2 hook wiring, QA round 5 fixes + reviewer fix round; 974 tests, was 862; `tools/check` untouched, no new dependency). Ready and work branches deleted. A publish was requested.
 - No worktree left. No held change.
 
 What `stage2-qa5` contains (details in DECISIONS.md "core hardening", "stage 2 hook wiring", and the entries after them; `hooks/README.md`):
@@ -60,7 +60,7 @@ Design: `docs/BUTTONS.md`; recordings `fixtures/buttons/`. Phases:
 
 ## Next
 
-1. Read the verdict of `stage2-qa5` (see In flight). If merged: milestone 1 closed, stage 2 built; run `owner-publish request` again only if new work merged after it.
+1. (done in cycle 13: `stage2-qa5` merged, publish requested.) Start with item 2.
 2. Stage 4, the Pi image (area-lead-platform, Opus; nothing can run here: lint, test what can be tested, bench items). Decide first, in DECISIONS.md (or `owner-inbox ask` with a default): WHICH USER runs the server and the Claude sessions (the `revview` system user in `pi/revview.service` has no Claude sign-in; the hooks must be installed for that same user with `hooks/install.mjs`). Then: kiosk start on boot (Chromium on the 1280x400 panel), rotation, quiet boot, power-cut behaviour (read-only root or equivalent), who sends `RevviewStarting` / `RevviewNetwork` / `RevviewDataLock`, Piper install, hooks install in `pi/install.sh`.
 3. Small core run (area-lead-core, Sonnet), reviewer leftovers of cycle 13: pass `[...owned, ...missing]` to `capSessions` (board.js ~410; a once-missing session can be evicted at the cap); pin in a test what a late hook of an ended owned session does (tests/unit/board-owned-gone.test.js ~31); a test that a repeated identical PreToolUse clears the answered mark; r5b-02 (failed-turn message wraps into the free rows); r5-06, r5-07; r4-05, r4-07, r4-10; hold-mode push-to-talk is still not built.
 4. QA round 6 after stage 4's testable parts or after item 3 (every 3rd cycle).

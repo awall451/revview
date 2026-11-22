@@ -182,3 +182,5 @@ Process notes:
 - Agents spawned by the lead are put in a harness worktree under `.claude/worktrees/agent-*` and cannot use the /tmp worktree named in the brief: brief them to "commit on branch X in the worktree you are given", and remove the leftover worktree and its `worktree-agent-*` branch after each one.
 - QA on main + a second QA on the fix branch, 6-7 minutes each, was cheap and found the round's only major; the Opus reviewer found what QA could not (the transient listing).
 - Cycle cost about $14 of $40.
+
+Gate: `stage2-qa5` MERGED at 19:33Z (0277757, 974 tests). The notes branch was rejected once ("not based on current main": it was cut before the merge) and rebased. Lesson: submit the notes branch after the work topic's verdict, or base it on the work branch.
