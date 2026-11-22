@@ -224,7 +224,8 @@ function live() {
     };
   };
   root.dataset.link = 'connecting';
-  render({ view: 'starting' });
+  // nothing is known until the first message: NO LINK, never STARTING (only RevviewStarting makes that)
+  render({ view: 'no-link' });
   connect();
 }
 

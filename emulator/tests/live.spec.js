@@ -112,7 +112,7 @@ test.describe('live', () => {
     });
   }
 
-  test('shows "starting" until the first state arrives', async ({ page }) => {
+  test('shows NO LINK (never "starting") until the first state arrives', async ({ page }) => {
     await withServer(async (server) => {
       let release;
       const gate = new Promise((r) => { release = r; });
@@ -122,8 +122,8 @@ test.describe('live', () => {
       });
       await page.goto(`${server.url}/`);
       await expect(html(page)).toHaveAttribute('data-link', 'connecting');
-      await expect(page.locator('body')).toHaveAttribute('data-view', 'starting');
-      await expect(page.locator('#state-word')).toHaveText('STARTING');
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'no-link');
+      await expect(page.locator('#state-word')).toHaveText('NO LINK');
       await expect(html(page)).not.toHaveAttribute('data-seq', /.*/);
       release();
       await expect(html(page)).toHaveAttribute('data-link', 'up');
