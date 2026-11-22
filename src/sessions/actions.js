@@ -43,13 +43,20 @@ export function createActions({
     return out('nav', true);
   };
 
+  const refreshOwned = () => {
+    try { onOwnedChanged?.(); } catch (e) { log(`owned refresh failed: ${String(e?.message ?? e)}`); }
+  };
+
   // Send one key to the selected session; `after(sent)` runs only when it was sent.
   async function send(action, key, after) {
     if (!runner) return out(action, false, 'no sessions');
     const id = selectedKey(getBoard());
     if (id === null) return out(action, false, 'no session selected');
     const r = await runner.send(key, id);
-    if (!r?.sent) return out(action, false, r?.reason ?? 'not sent');
+    if (!r?.sent) {
+      if (r?.reason === 'selected session gone') refreshOwned();
+      return out(action, false, r?.reason ?? 'not sent');
+    }
     after?.(r);
     return out(action, true);
   }
@@ -88,7 +95,7 @@ export function createActions({
     }
     // the board selects it when its first hook event arrives
     apply({ hook_event_name: 'RevviewSelect', session_id: s.id });
-    try { onOwnedChanged?.(); } catch (e) { log(`owned refresh failed: ${String(e?.message ?? e)}`); }
+    refreshOwned();
     return out('new-session', true);
   }
 

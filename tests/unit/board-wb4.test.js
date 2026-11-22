@@ -164,11 +164,11 @@ test('nav: normal view opening, row = shown session index', () => {
   const { tick } = b;
   for (const k of ['up', 'down', 'press']) {
     const o = reduceBoard(b, nav(k));
-    assert.deepEqual(o.nav, { kind: 'list', row: 1 }, k);
+    assert.deepEqual(o.nav, { kind: 'list', row: 1, id: 'B' }, k);
     assert.equal(o.tick, tick);
     assert.equal(o.sessions, b.sessions);
   }
-  assert.deepEqual(reduceBoard(initialBoard(), nav('up')).nav, { kind: 'list', row: 0 });
+  assert.deepEqual(reduceBoard(initialBoard(), nav('up')).nav, { kind: 'list', row: 0 }); // no sessions: no id
   assert.deepEqual(reduceBoard(b, nav('menu')).nav, { kind: 'menu', row: 0 });
   for (const [k, g] of [['push-to-talk', 'tap'], ['cancel', 'tap'], ['deny', 'tap'], ['back', 'tap'], ['spare', 'tap'], ['up', 'hold'], ['press', 'long-hold'], ['menu', 'hold']]) {
     assert.equal(reduceBoard(b, nav(k, g)), b, `${k} ${g}`);
@@ -181,7 +181,7 @@ test('nav: normal view opening, row = shown session index', () => {
 test('nav list: clamp, press chooses, back closes, back hold goes home, menu opens the menu', () => {
   const base = run([select('A'), work('B'), work('C'), ask('C')], three()); // home = C
   let b = reduceBoard(base, nav('press'));
-  assert.deepEqual(b.nav, { kind: 'list', row: 0 });
+  assert.deepEqual(b.nav, { kind: 'list', row: 0, id: 'A' });
   assert.equal(reduceBoard(b, nav('up')), b); // clamp at the top
   b = reduceBoard(b, nav('down'));
   b = reduceBoard(b, nav('down'));
@@ -304,6 +304,7 @@ test('rows shrinking while a view is open: clamped on use', () => {
   let b = reduceBoard(three(), nav('press'));
   b = reduceBoard(reduceBoard(b, nav('down')), nav('down'));
   assert.equal(b.nav.row, 2);
+  b = { ...b, nav: { kind: 'list', row: 2 } }; // an older board: a list without a highlighted id falls back to the row
   b = run([end('B'), end('C')], b);
   assert.equal(boardView(b).nav.row, 0);
   assert.equal(reduceBoard(b, nav('press')).selected, 'A');
@@ -357,4 +358,53 @@ test('moving around a list or menu keeps a pending want; choosing a session drop
   b = run([ev('RevviewSelect', { session_id: 'new2' }), ev('RevviewNav', { button: 'left', gesture: 'tap' })], b);
   assert.equal(b.selected, 'a1');
   assert.equal(b.want, null);
+});
+
+test('list highlight follows its session: a session above ending does not change what press selects', () => {
+  let b = run([start('alpha'), start('xray'), start('yankee'), select('alpha'), work('alpha'), work('yankee'), stop('xray')]);
+  b = reduceBoard(b, nav('press'));
+  assert.deepEqual(b.nav, { kind: 'list', row: 0, id: 'alpha' });
+  b = reduceBoard(b, nav('down'));
+  assert.equal(b.nav.id, 'xray');
+  b = reduceBoard(b, end('alpha'));
+  assert.equal(b.nav.id, 'xray');
+  assert.equal(b.nav.row, 0);
+  assert.equal(boardView(b).nav.row, 0);
+  assert.equal(reduceBoard(b, nav('press')).selected, 'xray');
+  assert.equal(reduceBoard(reduceBoard(b, nav('down')), nav('press')).selected, 'yankee');
+});
+
+test('highlighted session ends: the list closes, the note is set, the selection is not changed by it', () => {
+  let b = run([select('A')], three());
+  b = reduceBoard(reduceBoard(b, nav('press')), nav('down'));
+  assert.equal(b.nav.id, 'B');
+  b = reduceBoard(b, end('B'));
+  assert.equal(b.nav, null);
+  assert.equal(b.selected, 'A');
+  assert.equal(boardView(b).note, 'Highlighted session ended: list closed');
+  const c = reduceBoard(b, nav('right')); // a gesture clears the note
+  assert.equal(boardView(c).note, null);
+});
+
+test('RevviewNote: 1..120 chars only; cleared by a nav gesture and by RevviewSelect; a board without note is valid', () => {
+  const b = run([start('A')]);
+  const noted = reduceBoard(b, ev('RevviewNote', { note: 'hello' }));
+  assert.equal(boardView(noted).note, 'hello');
+  for (const note of ['', 'x'.repeat(121), 5, null, undefined]) assert.equal(reduceBoard(b, ev('RevviewNote', { note })), b);
+  assert.equal(boardView(reduceBoard(b, ev('RevviewNote', { note: 'x'.repeat(120) }))).note.length, 120);
+  assert.equal(boardView(reduceBoard(noted, nav('up'))).note, null);
+  assert.equal(boardView(reduceBoard(noted, nav('timeout', 'hold'))).note, null);
+  assert.equal(boardView(reduceBoard(noted, select('A'))).note, null);
+  const old = { ...noted };
+  delete old.note;
+  assert.equal(boardView(old).note, null);
+  assert.equal(boardView(reduceBoard(old, start('B'))).view, 'waiting');
+});
+
+test('RevviewProjects changing the list closes an open New session / Projects view', () => {
+  for (const kind of ['new', 'projects']) {
+    const b = { ...withP(run([start('A')])), nav: { kind, row: 0 } };
+    assert.equal(reduceBoard(b, ev('RevviewProjects', { paths: P })), b);
+    assert.equal(reduceBoard(b, ev('RevviewProjects', { paths: ['/q'] })).nav, null);
+  }
 });

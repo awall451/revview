@@ -27,7 +27,8 @@ export function initialBoard() {
     selected: null, // the session the driver chose (live id or null); null = the old heuristics decide
     want: null, // a session revview started that is not on the board yet: selected when it first appears
     owned: null, // ids of sessions revview owns (its tmux windows); null = the server runs without sessions
-    nav: null, // null (normal view) or {kind, row}: a list/menu the driver has open
+    nav: null, // null (normal view) or {kind, row[, id]}: a list/menu the driver has open; a list also holds the highlighted session id
+    note: null, // a one-line message for the bottom note row (null = none); cleared by the driver's next gesture
     projects: [], // project paths from the config file (display only)
   };
 }
@@ -49,7 +50,9 @@ function isValidBoard(b) {
     && (b.buttons === null || typeof b.buttons === 'boolean')
     && (b.selected === null || typeof b.selected === 'string') && (b.want === null || typeof b.want === 'string')
     && (b.owned === null || (Array.isArray(b.owned) && b.owned.every((x) => typeof x === 'string')))
-    && (b.nav === null || (isObj(b.nav) && NAV_KINDS.includes(b.nav.kind) && Number.isInteger(b.nav.row) && b.nav.row >= 0))
+    && (b.nav === null || (isObj(b.nav) && NAV_KINDS.includes(b.nav.kind) && Number.isInteger(b.nav.row) && b.nav.row >= 0
+      && (b.nav.id === undefined || typeof b.nav.id === 'string')))
+    && (b.note === undefined || b.note === null || typeof b.note === 'string')
     && Array.isArray(b.projects) && b.projects.every((x) => typeof x === 'string')
     && Object.keys(b.sessions).every((k) => isValidSession(b.sessions[k]));
 }
@@ -162,7 +165,8 @@ function withContext(board, patch) {
 export function reduceBoard(board, event) {
   const b = isValidBoard(board) ? board : initialBoard();
   if (!isObj(event) || typeof event.hook_event_name !== 'string') return b;
-  const next = reduceInner(b, event);
+  let next = reduceInner(b, event);
+  if (event.hook_event_name === 'RevviewNav' && typeof next.note === 'string') next = { ...next, note: null };
   const tid = targetOf(event, b.sessions);
   const spoke = isDriverPrompt(event) && has(next.sessions, tid) ? tid : null;
   // a driver prompt that changes nothing else (the session was already working) still moves the focus
@@ -176,6 +180,12 @@ export function reduceBoard(board, event) {
   if (cur.want !== null && has(cur.sessions, cur.want) && cur.want !== '') cur = { ...cur, selected: cur.want, want: null };
   // the selected session ended (or was dropped): fall to the neediest
   if (cur.selected !== null && !has(cur.sessions, cur.selected)) cur = { ...cur, selected: homeKey(cur) };
+  // an open list highlights a session, not a row: the highlight follows it, and a list whose session ended closes
+  if (cur.nav !== null && cur.nav.kind === 'list' && typeof cur.nav.id === 'string') {
+    const at = orderOf(cur).indexOf(cur.nav.id);
+    if (at < 0) cur = { ...cur, nav: null, note: 'Highlighted session ended: list closed' };
+    else if (at !== cur.nav.row) cur = { ...cur, nav: { ...cur.nav, row: at } };
+  }
   const focus = cur.selected !== null ? cur.selected : pickFocus(cur, spoke, asked(b) && !asked(cur));
   return focus === cur.focus ? cur : { ...cur, focus };
 }
@@ -229,7 +239,7 @@ const clampRow = (row, rows) => (rows === 0 ? 0 : Math.min(row, rows - 1));
 // Select `id` (or keep) and set nav; the same board when nothing changes. A driver's choice of a session drops a
 // pending `want` (the driver chose something else); moving around a list or menu keeps it.
 function withNav(b, selected, nav) {
-  const same = nav === b.nav || (nav !== null && b.nav !== null && nav.kind === b.nav.kind && nav.row === b.nav.row);
+  const same = nav === b.nav || (nav !== null && b.nav !== null && nav.kind === b.nav.kind && nav.row === b.nav.row && nav.id === b.nav.id);
   const want = selected === b.selected ? b.want : null;
   if (selected === b.selected && want === b.want && same) return b;
   return { ...b, selected, want, nav: same ? b.nav : nav };
@@ -260,7 +270,8 @@ function reduceNav(b, event) {
     }
     if (button === 'back' && gesture === 'hold') return goHome(b);
     if (tap && (button === 'up' || button === 'down' || button === 'press')) {
-      return { ...b, nav: { kind: 'list', row: Math.max(0, order.indexOf(shownKeyOf(b))) } };
+      const row = Math.max(0, order.indexOf(shownKeyOf(b)));
+      return { ...b, nav: n > 0 ? { kind: 'list', row, id: order[row] } : { kind: 'list', row } };
     }
     if (tap && button === 'menu') return { ...b, nav: { kind: 'menu', row: 0 } };
     return b;
@@ -268,12 +279,14 @@ function reduceNav(b, event) {
 
   const { kind } = b.nav;
   const rows = navRows(b, kind);
-  const row = clampRow(b.nav.row, rows);
+  const at = kind === 'list' && typeof b.nav.id === 'string' ? order.indexOf(b.nav.id) : -1; // the highlight follows its session
+  const row = at >= 0 ? at : clampRow(b.nav.row, rows);
+  const to = (r) => (kind === 'list' && order[r] !== undefined ? { kind, row: r, id: order[r] } : { kind, row: r });
   const go = (nav) => withNav(b, b.selected, nav);
   if (button === 'back' && gesture === 'hold') return goHome(b);
   if (tap && button === 'menu') return go(kind === 'list' ? { kind: 'menu', row: 0 } : null);
-  if (tap && button === 'up') return go({ kind, row: Math.max(0, row - 1) });
-  if (tap && button === 'down') return go({ kind, row: clampRow(row + 1, rows) });
+  if (tap && button === 'up') return go(to(Math.max(0, row - 1)));
+  if (tap && button === 'down') return go(to(clampRow(row + 1, rows)));
   if (tap && button === 'back') {
     if (kind === 'new') return go({ kind: 'menu', row: 0 });
     if (kind === 'projects') return go({ kind: 'menu', row: 1 });
@@ -334,8 +347,8 @@ function reduceInner(b, event) {
     case 'RevviewSelect': {
       if (!isStr(event.session_id)) return b;
       const sid = event.session_id;
-      if (orderOf(b).includes(sid)) return b.selected === sid && b.want === null ? b : { ...b, selected: sid, want: null };
-      return b.want === sid ? b : { ...b, want: sid };
+      if (orderOf(b).includes(sid)) return b.selected === sid && b.want === null && !b.note ? b : { ...b, selected: sid, want: null, note: null };
+      return b.want === sid && !b.note ? b : { ...b, want: sid, note: null };
     }
     case 'RevviewOwned': {
       const ids = event.ids;
@@ -347,10 +360,16 @@ function reduceInner(b, event) {
     case 'RevviewProjects': {
       const paths = event.paths;
       if (!Array.isArray(paths) || paths.length > 32 || !paths.every((x) => typeof x === 'string' && x.length <= 4096)) return b;
-      return sameList(paths, b.projects) ? b : { ...b, projects: [...paths] };
+      if (sameList(paths, b.projects)) return b;
+      const rowsChanged = b.nav !== null && (b.nav.kind === 'new' || b.nav.kind === 'projects');
+      return { ...b, projects: [...paths], nav: rowsChanged ? null : b.nav };
+    }
+    case 'RevviewNote': {
+      const note = event.note;
+      return typeof note === 'string' && note.length >= 1 && note.length <= 120 && note !== b.note ? { ...b, note } : b;
     }
     case 'RevviewNav':
-      return reduceNav(b, event);
+      return reduceNav(b, event); // a button gesture clears the note (see reduceBoard)
     case 'RevviewContext': {
       if (live !== null && isStr(event.session_id)) {
         const state = reduce(live.state, event);
@@ -606,6 +625,7 @@ function extrasOf(b, shownKey) {
     position: b.owned === null || i < 0 ? null : { index: i + 1, count: order.length },
     elsewhere: order.filter((k) => k !== shownKey && b.sessions[k].pending.length > 0).length,
     nav: navView(b),
+    note: typeof b.note === 'string' ? b.note : null,
   };
 }
 

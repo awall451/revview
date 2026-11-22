@@ -178,7 +178,9 @@ export function render(input) {
   const activity = offlineNote(s.activity);
   // null (a server without sessions) or anything unknown: nothing new is drawn
   const voice = Object.hasOwn(MIC_STATES, s.voice) ? s.voice : null;
-  const voiceNote = voice !== null && Object.hasOwn(VOICE_NOTES, voice) ? VOICE_NOTES[voice] : '';
+  // a board note (a short message from revview itself) takes the voice note's place
+  const plainVoiceNote = voice !== null && Object.hasOwn(VOICE_NOTES, voice) ? VOICE_NOTES[voice] : '';
+  const voiceNote = typeof s.note === 'string' && s.note !== '' ? s.note : plainVoiceNote;
   const pos = s.position && Number.isInteger(s.position.index) && Number.isInteger(s.position.count) && s.position.index > 0 && s.position.count > 0 ? s.position : null;
   const elsewhere = Number.isInteger(s.elsewhere) && s.elsewhere > 0 ? s.elsewhere : 0;
   const added = s.diff && typeof s.diff === 'object' ? s.diff.added : 0;
@@ -238,7 +240,7 @@ export function render(input) {
     el.voice.dataset.voice = voice;
     el.voice.dataset.full = voice === 'here'
       ? `Push-to-talk goes to this session${pos ? ` (${pos.index} of ${pos.count})` : ''}`
-      : voiceNote;
+      : plainVoiceNote;
   } else {
     el.voice.dataset.full = '';
   }

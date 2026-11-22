@@ -27,13 +27,13 @@ test('initialBoard shape', () => {
   assert.deepEqual(initialBoard(), {
     phase: 'unknown', offline: false, locked: false, context: { repo: null, branch: null },
     sessions: {}, ended: [], tick: 0, focus: null, spokenTo: null, buttons: null,
-    selected: null, want: null, owned: null, nav: null, projects: [],
+    selected: null, want: null, owned: null, nav: null, note: null, projects: [],
   });
 });
 
 test('boardView always has exactly the same keys', () => {
   const keys = Object.keys(boardView(initialBoard())).sort();
-  assert.deepEqual(keys, ['activity', 'branch', 'buttons', 'command', 'diff', 'diffIncomplete', 'elsewhere', 'file', 'locked', 'nav',
+  assert.deepEqual(keys, ['activity', 'branch', 'buttons', 'command', 'diff', 'diffIncomplete', 'elsewhere', 'file', 'locked', 'nav', 'note',
     'offline', 'others', 'output', 'outputLines', 'position', 'repo', 'tool', 'view', 'voice']);
   const b = run([ev('SessionStart', A), ev('PreToolUse', { ...A, ...BASH })]);
   assert.deepEqual(Object.keys(boardView(b)).sort(), keys);

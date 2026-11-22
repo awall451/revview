@@ -12,6 +12,7 @@ const INTERNAL = [
   { hook_event_name: 'RevviewNav', button: 'up', gesture: 'tap' },
   { hook_event_name: 'RevviewOwned', ids: [A] },
   { hook_event_name: 'RevviewProjects', paths: ['/x'] },
+  { hook_event_name: 'RevviewNote', note: 'forged' },
 ];
 
 function fakeRunner(state = {}) {

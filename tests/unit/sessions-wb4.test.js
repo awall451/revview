@@ -84,7 +84,7 @@ function rig({ owned = [A, B], select = A, projects = PROJECTS, noRunner = false
     return registry.add(p, (d) => decisions.push({ id, d }));
   };
   return {
-    r, runner, registry, decisions, logs, actions, adv, request, apply,
+    r, live, runner, registry, decisions, logs, actions, adv, request, apply,
     now: () => now,
     tap: (b, g = 'tap', extra) => actions.handle(dev(b, g, extra)),
     view: () => boardView(r.board),
@@ -122,6 +122,49 @@ test('2b. nothing selected: no key, no answer', async () => {
   assert.equal(t.sel(), null);
   for (const b of ['push-to-talk', 'cancel']) assert.deepEqual(await t.tap(b), { action: b === 'cancel' ? 'cancel-escape' : 'push-to-talk', done: false, reason: 'no session selected' });
   assert.equal(t.runner.calls.send, 0);
+});
+
+test('2c. nothing selected but a prompt is shown on the bar: press and deny send no decision and no key', async () => {
+  const t = rig({ select: null });
+  t.request(A);
+  t.adv(2000);
+  assert.equal(t.sel(), null);
+  assert.equal(shownPrompt(t.r.board)?.session, A, 'the old focus rules show it');
+  for (const b of ['press', 'deny', 'push-to-talk']) {
+    const r = await t.tap(b);
+    assert.deepEqual([r.done, r.reason], [false, 'no session selected'], b);
+  }
+  assert.equal(t.decisions.length, 0);
+  assert.equal(t.registry.size(), 1, 'the long poll stays open');
+  assert.deepEqual(t.runner.sent, []);
+  assert.equal(t.nav(), null);
+});
+
+test('2d. a key to a session that is gone refreshes owned at once', async () => {
+  const t = rig();
+  t.live.delete(A);
+  const r = await t.tap('push-to-talk');
+  assert.deepEqual([r.done, r.reason], [false, 'selected session gone']);
+  assert.deepEqual(t.r.board.owned, [B]);
+});
+
+test('2e. the highlighted session ends while the list is open: the list closes, a prompt shown again waits 1500 ms', async () => {
+  const t = rig({ select: A });
+  t.request(A);
+  t.adv(5000);
+  await t.tap('up'); // list opens on A (the prompt is shown, so up navigates)
+  await t.tap('down');
+  assert.equal(t.nav().id, B);
+  t.apply(ev('SessionEnd', B));
+  assert.equal(t.nav(), null);
+  assert.equal(t.view().note, 'Highlighted session ended: list closed');
+  assert.equal(t.sel(), A);
+  const early = await t.tap('press');
+  assert.deepEqual([early.done, early.reason], [false, 'not-shown-long-enough']);
+  assert.equal(t.decisions.length, 0);
+  t.adv(1500);
+  assert.equal((await t.tap('press')).done, true);
+  assert.deepEqual(t.decisions, [{ id: A, d: { behavior: 'allow' } }]);
 });
 
 test('3. switching onto a session with a prompt restarts the 1500 ms shown time', async () => {

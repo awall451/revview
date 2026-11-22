@@ -27,7 +27,7 @@ const GESTURE_LOG_MAX = 32;
 const BUTTON_RE = /^[a-z][a-z0-9-]{0,31}$/;
 const GESTURES = ['tap', 'hold', 'long-hold'];
 // made only by revview itself (the actions, the boot path): no POST may forge them, not even under --dev-bridge
-const INTERNAL_EVENTS = ['RevviewInterrupted', 'RevviewAnswered', 'RevviewSelect', 'RevviewNav', 'RevviewOwned', 'RevviewProjects'];
+const INTERNAL_EVENTS = ['RevviewInterrupted', 'RevviewAnswered', 'RevviewSelect', 'RevviewNav', 'RevviewOwned', 'RevviewProjects', 'RevviewNote'];
 export const MAX_SSE_CLIENTS = 8;
 export const MAX_CLIENT_BACKLOG_BYTES = 256 * 1024; // unread bytes after which a stalled SSE client is dropped
 const HERE = path.dirname(fileURLToPath(import.meta.url));
