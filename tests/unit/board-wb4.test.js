@@ -442,8 +442,12 @@ test('placeholders: same board when nothing changes; come back after RevviewStar
   assert.equal(reduceBoard(b, owned([U1], ['a'])), b);
   const c = run([ev('RevviewStarting'), owned([U1], ['a'])], b);
   assert.deepEqual(sessionOrder(c), [U1]);
-  const d = run([owned([U1]), start(U1), end(U1), owned([U1])]);
+  // an end of a session whose window is no longer owned is remembered: no placeholder for it
+  const d = run([owned([U1]), start(U1), owned([]), end(U1), owned([U1])]);
   assert.deepEqual(sessionOrder(d), []);
+  // an end of a session whose window is still owned is not (docs/DECISIONS.md, core hardening): it is back
+  const e = run([owned([U1]), start(U1), end(U1), owned([U1])]);
+  assert.deepEqual(sessionOrder(e), [U1]);
 });
 
 test('placeholders: removed when no longer owned; a real session is kept', () => {

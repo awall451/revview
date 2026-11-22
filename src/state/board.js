@@ -63,9 +63,11 @@ const keyOf = (event) => (isStr(event.session_id) ? event.session_id : '');
 
 // An event without a usable session_id belongs to the one live session when there is exactly one (hand-posted
 // or old-style hooks must not make a second session and a false "+1"); otherwise to the anonymous '' session.
+// A quiet placeholder (known only from RevviewOwned, no hook seen yet) is never a target: a local process
+// posting an id-less event must not be able to show a forged prompt on a session that has said nothing.
 function targetOf(event, sessions) {
   if (isStr(event.session_id)) return event.session_id;
-  const real = Object.keys(sessions).filter((k) => k !== '');
+  const real = Object.keys(sessions).filter((k) => k !== '' && sessions[k].quiet !== true);
   return real.length === 1 ? real[0] : '';
 }
 
@@ -427,17 +429,17 @@ function reduceInner(b, event) {
       return sessions === b.sessions ? b : { ...b, sessions };
     }
     case 'SessionEnd': {
+      // revview's own tmux window for this id still exists (RevviewOwned): a placeholder ignores the end, and a
+      // live session that ends is not remembered as ended, so the window's next hook or placeholder still shows
+      const stillOwned = tid !== '' && b.owned !== null && b.owned.includes(tid);
+      if (tlive !== null && tlive.quiet === true && stillOwned) return b;
+      if (stillOwned) return tlive === null ? b : endSession(b, tlive, tid, b.ended);
       if (tlive === null) {
         // a session the board never saw ended: it proves nothing about the phase (the others may still run)
         return tid === '' || b.ended.includes(tid) ? b : { ...b, ended: pushEnded(b.ended, tid) };
       }
-      const sessions = withoutSession(b.sessions, tid);
       // the anonymous session ('') is never remembered as ended, so later id-less events still count
-      const ended = tid === '' ? b.ended : pushEnded(b.ended, tid);
-      if (Object.keys(sessions).length > 0) return { ...b, sessions, ended };
-      const repo = tlive.state.repo !== null ? tlive.state.repo : b.context.repo;
-      const branch = tlive.state.branch !== null ? tlive.state.branch : b.context.branch;
-      return { ...b, sessions, ended, phase: 'ended', context: { repo, branch } };
+      return endSession(b, tlive, tid, tid === '' ? b.ended : pushEnded(b.ended, tid));
     }
     default:
       break;
@@ -447,11 +449,20 @@ function reduceInner(b, event) {
   return applyToSession(b, tlive, tid, event);
 }
 
+function endSession(b, tlive, tid, ended) {
+  const sessions = withoutSession(b.sessions, tid);
+  if (Object.keys(sessions).length > 0) return { ...b, sessions, ended };
+  const repo = tlive.state.repo !== null ? tlive.state.repo : b.context.repo;
+  const branch = tlive.state.branch !== null ? tlive.state.branch : b.context.branch;
+  return { ...b, sessions, ended, phase: 'ended', context: { repo, branch } };
+}
+
 const DIFF_TOOLS = new Set(['Edit', 'Write', 'MultiEdit']);
 const POST = new Set(['PostToolUse', 'PostToolUseFailure']);
 const PERMISSION_TYPES = new Set(['permission_prompt', 'worker_permission_prompt']);
 
 const MAX_PRE = 32;
+const MAX_CLOSED = 64; // tool_use_ids closed by a Post, kept to recognise a duplicate Post
 // A comparable signature of a tool input ('' when there is none).
 const sig = (x) => {
   try {
@@ -503,6 +514,13 @@ function applyToSession(b, live, id, event) {
   const prevPre = live === null ? [] : live.pre;
   const toolUseId = isStr(event.tool_use_id) ? event.tool_use_id : null;
   const agent = isStr(event.agent_id) ? event.agent_id : '';
+  // a Post whose call an earlier Post already closed is a duplicate delivery (hook configured twice, a retry):
+  // it adds nothing, so the diff is not counted twice (QA r3-07). A new Pre of the same id forgets the closing.
+  const prevClosed = live === null || live.closed === undefined ? [] : live.closed;
+  if (POST.has(name) && toolUseId !== null && prevClosed.includes(toolUseId) && !prevOpen.includes(toolUseId)) return b;
+  let closed = prevClosed;
+  // `stopped`: the turn got its Stop and no new work since; an idle_prompt after it does not reopen the turn (QA r3-08)
+  const prevStopped = live !== null && live.stopped === true;
 
   let pending = pendingAfter(prevPending, event, agent, toolUseId);
   let pre = prevPre;
@@ -521,10 +539,11 @@ function applyToSession(b, live, id, event) {
     || (name === 'Notification' && PERMISSION_TYPES.has(event.notification_type));
   const answer = live !== null && live.answer !== undefined && !clears ? live.answer : undefined;
   const commit = (state, open, dropped) => {
-    if (state === prev && sameList(open, prevOpen) && (live === null || dropped === live.dropped)
+    const stopped = name === 'Stop' ? true : (state.activity === 'done' || state.activity === 'waiting') && prevStopped;
+    if (stopped === prevStopped && closed === prevClosed && state === prev && sameList(open, prevOpen) && (live === null || dropped === live.dropped)
       && pending === prevPending && pre === prevPre && answer === (live === null ? undefined : live.answer)) return b;
     const tick = b.tick + 1;
-    const sessions = capSessions(withSession(b.sessions, id, { state, open, touched: tick, born: live === null ? tick : live.born, dropped, pending, pre, ...(answer === undefined ? {} : { answer }) }), id, b.selected ?? b.focus, b.selected, b.want, b.owned);
+    const sessions = capSessions(withSession(b.sessions, id, { state, open, touched: tick, born: live === null ? tick : live.born, dropped, pending, pre, ...(closed.length === 0 ? {} : { closed }), ...(stopped ? { stopped } : {}), ...(answer === undefined ? {} : { answer }) }), id, b.selected ?? b.focus, b.selected, b.want, b.owned);
     const ended = b.ended.includes(id) ? b.ended.filter((x) => x !== id) : b.ended;
     return { ...b, sessions, ended, tick };
   };
@@ -533,7 +552,7 @@ function applyToSession(b, live, id, event) {
   // The turn's `finished` flag decides what a late hook is. Pending prompts are kept beside the state: the
   // state's activity never becomes `permission` here, `act()` derives it from `pending`.
   const finished = live !== null
-    && (prev.activity === 'done' || (prev.activity === 'waiting' && prevOpen.length === 0));
+    && (prev.activity === 'done' || (prev.activity === 'waiting' && (prevOpen.length === 0 || prevStopped)));
 
   if (name === 'PermissionRequest' && isStr(event.tool_name)) {
     if (agent === '' && finished) return b; // a main-thread request needs a running turn
@@ -579,8 +598,10 @@ function applyToSession(b, live, id, event) {
   if (name === 'PreToolUse' && toolUseId !== null && typeof event.tool_name === 'string' && event.tool_name !== ''
     && !open.includes(toolUseId)) {
     open = [...open, toolUseId];
+    if (closed.includes(toolUseId)) closed = closed.filter((x) => x !== toolUseId);
   } else if (POST.has(name) && toolUseId !== null && open.includes(toolUseId)) {
     open = open.filter((x) => x !== toolUseId);
+    closed = [...closed, toolUseId].slice(-MAX_CLOSED);
   } else if (isDriverPrompt(event)) {
     open = [];
     dropped = false;
