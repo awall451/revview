@@ -1,0 +1,146 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import os from 'node:os';
+import { createSessionRunner } from '../../src/sessions/index.js';
+
+const A = '11111111-1111-4111-8111-111111111111';
+const B = '22222222-2222-4222-8222-222222222222';
+const CMDS = ['list-windows', 'has-session', 'new-session', 'new-window', 'set-option', 'send-keys', 'kill-window', 'kill-server'];
+
+// Fake exec: records calls, answers by tmux subcommand from a mutable state.
+function fake(state = {}) {
+  const calls = [];
+  const exec = async (bin, args) => {
+    calls.push({ bin, args });
+    const cmd = args.find((a) => CMDS.includes(a));
+    if (cmd === 'list-windows') {
+      if (state.noServer) throw Object.assign(new Error('x'), { stderr: 'no server running on /tmp/x' });
+      return { stdout: (state.windows ?? []).join('\n') + '\n' };
+    }
+    if (cmd === 'has-session') {
+      if (!state.hasSession) throw new Error('no');
+      return { stdout: '' };
+    }
+    if (cmd === 'new-session' || cmd === 'new-window') return { stdout: '@7\n' };
+    return { stdout: '' };
+  };
+  return { calls, exec, state };
+}
+const row = (w, id, cwd = '/tmp', name = 'n') => [w, id, cwd, name].join('\t');
+const sub = (calls, c) => calls.filter((x) => x.args.includes(c));
+
+test('start: first creates the session, argv shape, no shell', async () => {
+  const f = fake();
+  const r = createSessionRunner({ exec: f.exec, claude: ['claude', '--x'], newId: () => A });
+  const s = await r.start({ cwd: os.tmpdir(), name: 'w' });
+  assert.deepEqual(s, { id: A, window: '@7', cwd: os.tmpdir() });
+  const ns = sub(f.calls, 'new-session')[0];
+  assert.equal(ns.bin, 'tmux');
+  assert.deepEqual(ns.args.slice(0, 4), ['-f', '/dev/null', '-L', 'revview']);
+  assert.deepEqual(ns.args.slice(ns.args.indexOf('--')), ['--', 'claude', '--x', '--session-id', A]);
+  assert.equal(ns.args[ns.args.indexOf('-c') + 1], os.tmpdir());
+  assert.ok(ns.args.includes('-d') && ns.args.includes('-P'));
+  const so = sub(f.calls, 'set-option')[0];
+  assert.deepEqual(so.args.slice(-5), ['-w', '-t', '@7', '@revview_id', A]);
+  assert.equal(r.chosen(), A);
+});
+
+test('start: later sessions use new-window; socket path uses -S', async () => {
+  const f = fake({ hasSession: true });
+  const r = createSessionRunner({ exec: f.exec, socket: { path: '/tmp/x/sock' }, newId: () => B });
+  await r.start({ cwd: os.tmpdir() });
+  const nw = sub(f.calls, 'new-window')[0];
+  assert.deepEqual(nw.args.slice(0, 4), ['-f', '/dev/null', '-S', '/tmp/x/sock']);
+  assert.ok(nw.args.includes('revview:'));
+  assert.equal(sub(f.calls, 'new-session').length, 0);
+});
+
+test('start: cwd must be absolute and an existing directory', async () => {
+  const f = fake();
+  const r = createSessionRunner({ exec: f.exec });
+  await assert.rejects(r.start({ cwd: 'rel' }));
+  await assert.rejects(r.start({ cwd: '/nonexistent-dir-xyz' }));
+  await assert.rejects(r.start({ cwd: new URL(import.meta.url).pathname }));
+  assert.equal(f.calls.length, 0);
+});
+
+test('list: only windows with a uuid @revview_id; no server -> []', async () => {
+  const f = fake({ windows: [row('@1', A, '/a', 'one'), row('@2', ''), row('@3', 'not-a-uuid'), row('@4', B, '/b', 'two')] });
+  const r = createSessionRunner({ exec: f.exec });
+  assert.deepEqual(await r.list(), [
+    { id: A, window: '@1', cwd: '/a', name: 'one' },
+    { id: B, window: '@4', cwd: '/b', name: 'two' },
+  ]);
+  f.state.noServer = true;
+  assert.deepEqual(await r.list(), []);
+});
+
+test('choose only listed ids', async () => {
+  const f = fake({ windows: [row('@1', A)] });
+  const r = createSessionRunner({ exec: f.exec });
+  assert.equal(await r.choose(B), false);
+  assert.equal(r.chosen(), null);
+  assert.equal(await r.choose(A), true);
+  assert.equal(r.chosen(), A);
+});
+
+test('send goes only to the re-verified window', async () => {
+  const f = fake({ windows: [row('@1', A)] });
+  const r = createSessionRunner({ exec: f.exec });
+  await r.choose(A);
+  f.state.windows = [row('@9', A)]; // window id changed behind our back
+  assert.deepEqual(await r.send('Escape'), { sent: true, id: A, window: '@9' });
+  const sk = sub(f.calls, 'send-keys');
+  assert.equal(sk.length, 1);
+  assert.deepEqual(sk[0].args.slice(-3), ['-t', '@9', 'Escape']);
+  assert.ok(!sk[0].args.includes('-l'));
+});
+
+test('send: unknown key throws and runs nothing', async () => {
+  const f = fake({ windows: [row('@1', A)] });
+  const r = createSessionRunner({ exec: f.exec });
+  await r.choose(A);
+  const n = f.calls.length;
+  for (const k of ['Enter', 'a', '', undefined, 'Escape;x']) await assert.rejects(r.send(k));
+  assert.equal(f.calls.length, n);
+});
+
+test('send with nothing chosen runs nothing', async () => {
+  const f = fake({ windows: [row('@1', A)] });
+  const r = createSessionRunner({ exec: f.exec });
+  assert.deepEqual(await r.send('C-c'), { sent: false, reason: 'no session chosen' });
+  assert.equal(f.calls.length, 0);
+});
+
+test('chosen window gone: cleared, nothing sent', async () => {
+  const f = fake({ windows: [row('@1', A)] });
+  const logs = [];
+  const r = createSessionRunner({ exec: f.exec, log: (m) => logs.push(m) });
+  await r.choose(A);
+  f.state.windows = [row('@2', B)];
+  assert.equal(await r.target(), null);
+  assert.equal(r.chosen(), null);
+  assert.ok(logs.length > 0);
+  await r.choose(B);
+  f.state.windows = [];
+  assert.deepEqual(await r.send('Space'), { sent: false, reason: 'chosen session gone' });
+  assert.equal(sub(f.calls, 'send-keys').length, 0);
+});
+
+test('stop kills the verified window and clears the choice', async () => {
+  const f = fake({ windows: [row('@1', A), row('@2', B)] });
+  const r = createSessionRunner({ exec: f.exec });
+  await r.choose(A);
+  assert.equal(await r.stop(B), true);
+  assert.equal(r.chosen(), A);
+  assert.deepEqual(sub(f.calls, 'kill-window')[0].args.slice(-2), ['-t', '@2']);
+  assert.equal(await r.stop(A), true);
+  assert.equal(r.chosen(), null);
+  assert.equal(await r.stop('33333333-3333-4333-8333-333333333333'), false);
+  assert.equal(sub(f.calls, 'kill-window').length, 2);
+});
+
+test('killServer ignores no server', async () => {
+  const exec = async () => { throw Object.assign(new Error('x'), { stderr: 'no server running on /tmp/x' }); };
+  await createSessionRunner({ exec }).killServer();
+});
