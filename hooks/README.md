@@ -5,8 +5,11 @@ JSON (unchanged) to the revview server (`http://127.0.0.1:$REVVIEW_PORT/permissi
 waits. If the driver answers with a wheel button, the server replies with `{behavior:'allow'}` or
 `{behavior:'deny',message}` and the hook prints the matching `hookSpecificOutput` for Claude Code.
 
-Install: merge `settings-snippet.json` into a Claude Code settings file and replace `$REVVIEW_DIR`
-with the absolute path of this repository.
+Install: `node hooks/install.mjs` merges `hooks/settings.json` (with `$REVVIEW_DIR` replaced by this
+repository's absolute path) into `$CLAUDE_CONFIG_DIR/settings.json`, else `~/.claude/settings.json`. It keeps
+every other key and hook, replaces revview's own entries (idempotent; after moving the repo, run it again),
+and copies an existing file once to `settings.json.revview-backup`. Options: `--settings <file>` picks another
+file, `--dry-run` prints the result and writes nothing, `--remove` takes revview's hooks out again.
 
 ## No decision means the terminal prompt stays
 
