@@ -20,7 +20,7 @@ listening (so Claude's SessionStart hook reaches it) `bootSessions` looks at the
 cut, tmux is gone) starts one session per `--start` directory, or the one in env `REVVIEW_START` when no `--start`
 was given (only used with `--sessions`), and selects the last; exactly one window (a service restart) selects it
 and starts nothing; several select none. Every start revview makes (`bootSessions`, and the actions' New session) marks the session launching (`live.launched(id)`, internal, no HTTP route: board event `RevviewLaunching`) and arms a timer of `launchLimitMs` (default 30000; option of `startLiveServer`, with the injected `timers`) that applies `RevviewLaunchExpired`; both events are refused over HTTP with 403, `close()` clears the timers. Until its first hook the session shows STARTING (not UNKNOWN "No events from this session yet"); presses are NOT dropped then (only the boot STARTING drops them), so the menu and list work. A failure here is logged and never stops the bar. `bootSessions` always ends the boot
-STARTING (`live.bootDone(note)`, internal, no HTTP route; the board event `RevviewBootDone` is refused over HTTP with
+STARTING (`live.bootDone(note)`, internal, no HTTP route; the board events `RevviewBootBegin` and `RevviewBootDone` are refused over HTTP with
 403), after any select, so the bar's buttons work and New session is reachable: nothing to start and no window ->
 note "No session yet: open the menu for New session"; a start folder that is not absolute is refused before trying
 (`REVVIEW_START must be an absolute folder, got <dir>` in the log; never resolved against the service's cwd) ->
@@ -118,7 +118,7 @@ With `--input` the device reader (`src/input`) runs inside the server. Its prese
 `{hook_event_name:'RevviewInput', present}` (only counted when it changed; the page shows the quiet NO BUTTONS tag).
 Gestures (`tap`, `hold`, `long-hold`) are kept in an in-memory log of the last 32, **not** in the board: `seq` and the
 state do not change for them. Each entry is `{button, gesture, source: 'device'|'bridge'|'post', at, dropped}`;
-`dropped` is true while the boot STARTING lasts (board phase `starting` and view `starting`; presses then are dropped, not queued). Under INSERT KEY or after the boot is done presses are not dropped. `onGesture(entry)` is called
+`dropped` is true while the boot STARTING lasts (board flag `booting`, set by the server's own boot via the internal `RevviewBootBegin`, and view `starting`; presses then are dropped, not queued; a POSTed `RevviewStarting` does not set it, so it never drops presses). Under INSERT KEY or after the boot is done presses are not dropped. `onGesture(entry)` is called
 for each (a throwing callback is caught and logged).
 
 - `GET /buttons`: `{"buttons": "unknown"|"present"|"missing", "gestures": [oldest first]}`, `no-store`.

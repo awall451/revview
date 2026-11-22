@@ -14,8 +14,9 @@
 # Exit: 0 done; 2 bad arguments, or the root is read-only (overlay on) or /boot/firmware is ro (nothing written);
 #   1 a file was refused (a symlink at any part of its path, a cmdline.txt or config.txt that is missing or malformed
 #   or has no root=, or hooks skipped as ~/.claude is on the locked data): left as it was, everything else done,
-#   fix it and re-run; 3 (or any other code) setup.mjs failed part way: nothing after that point was done, the hooks
-#   were not installed, no "done" line.
+#   fix it and re-run; 3 (or any other code, 1 included when setup.mjs itself could not load) setup.mjs failed part way:
+#   nothing after that point was done, the hooks were not installed, no "done" line. (setup.mjs alone uses 4 for
+#   "a file was refused", 2 bad arguments, 3 a crash; install.sh maps 4 to its own 1 and 2 to its own 2.)
 # What it changes (see pi/setup.mjs): /boot/firmware/cmdline.txt and config.txt (quiet boot, rotated console),
 #   /etc/lightdm/lightdm.conf (autologin), udev rules (dongle, touch rotation), /etc/systemd/user/revview.service
 #   and its enable symlink, /var/lib/systemd/linger/<user>, /etc/revview/server.env (only if missing),
@@ -154,15 +155,23 @@ fi
 # Files.
 setup_args=(--root "$root" --user "$user" --home "$home" --dir "$dir" --rotate "$rotate" --output "$output" --node "$node_bin" --owner "$uid:$gid")
 if [ "$dry" -eq 1 ]; then setup_args+=(--dry-run); fi
-# setup.mjs exits 1 when it refused a file (a symlink, a cmdline.txt without root=): the rest still runs, the
-# exit code of this script stays non-zero. Exit 2 (bad arguments) stops here.
+# setup.mjs exits 4 when it refused a file (a symlink, a cmdline.txt without root=): the rest still runs, the exit
+# code of this script ends as 1. 2 = bad arguments: stop. Anything else (3 a crash, 1 node could not even load it,
+# a signal) = failed part way: stop. 1 is deliberately NOT "refused": node uses it for an uncaught error.
 setup_rc=0
 "$node_bin" "$here/setup.mjs" "${setup_args[@]}" || setup_rc=$?
-if [ "$setup_rc" -ne 0 ] && [ "$setup_rc" -ne 1 ]; then
-  echo "install.sh: setup.mjs failed part way (exit $setup_rc); nothing after that point was done, the hooks were not installed; fix the error above and run it again" >&2
-  exit "$setup_rc"
-fi
-if [ "$setup_rc" -eq 1 ]; then echo "install.sh: some files were refused (see the skipped lines above); fix them and run it again" >&2; fi
+case "$setup_rc" in
+  0) ;;
+  4) echo "install.sh: some files were refused (see the skipped lines above); fix them and run it again" >&2; setup_rc=1 ;;
+  2)
+    echo "install.sh: setup.mjs refused the arguments (see above); nothing was written" >&2
+    exit 2
+    ;;
+  *)
+    echo "install.sh: setup.mjs failed part way (exit $setup_rc); nothing after that point was done, the hooks were not installed; fix the error above and run it again" >&2
+    exit "$setup_rc"
+    ;;
+esac
 
 # Claude Code hooks for that user. ~/.claude may be a symlink into the locked data partition (pi/data-setup.sh):
 # while the target is missing, writing through it would fail (or make a stray directory), so skip and say so.

@@ -1,12 +1,12 @@
 // QA r6-01/r6-06: RevviewBootDone ends the boot STARTING; a quiet placeholder shows STARTING while it lasts.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { initialBoard, reduceBoard, boardView } from '../../src/state/index.js';
+import { initialBoard, reduceBoard, boardView, sessionStarting } from '../../src/state/index.js';
 
 const ev = (name, extra = {}) => ({ hook_event_name: name, ...extra });
 const A = '11111111-1111-4111-8111-111111111111';
 const fold = (b, ...events) => events.reduce((x, e) => reduceBoard(x, e), b);
-const starting = () => reduceBoard(initialBoard(), ev('RevviewStarting'));
+const starting = () => reduceBoard(initialBoard(), ev('RevviewBootBegin'));
 
 test('BootDone: starting -> unknown (voice no-session with an empty owned list), buttons work', () => {
   let b = fold(starting(), ev('RevviewOwned', { ids: [] }));
@@ -53,4 +53,33 @@ test('r6-06: overlays still apply over the starting placeholder; a real hook eve
   assert.equal(boardView(reduceBoard(b, ev('RevviewNetwork', { online: false }))).view, 'offline');
   const w = reduceBoard(b, ev('UserPromptSubmit', { session_id: A, cwd: '/w/a' }));
   assert.equal(boardView(w).view, 'working');
+});
+
+test('a posted RevviewStarting is not the boot: no booting flag, placeholders read UNKNOWN, BootDone is a no-op', () => {
+  const posted = reduceBoard(initialBoard(), ev('RevviewStarting'));
+  assert.equal(posted.phase, 'starting');
+  assert.notEqual(posted.booting, true);
+  assert.equal(reduceBoard(posted, ev('RevviewBootDone')), posted);
+  const b = fold(posted, ev('RevviewOwned', { ids: [A] }), ev('RevviewSelect', { session_id: A }));
+  assert.notEqual(boardView(b).activity, 'starting');
+  assert.equal(sessionStarting(b, A), false);
+});
+
+test('after the boot, a posted RevviewStarting does not bring the boot rule back', () => {
+  let b = fold(starting(), ev('RevviewOwned', { ids: [A] }), ev('RevviewSelect', { session_id: A }));
+  assert.equal(sessionStarting(b, A), true);
+  b = fold(b, ev('RevviewBootDone'), ev('RevviewStarting'), ev('RevviewOwned', { ids: [A] }), ev('RevviewSelect', { session_id: A }));
+  assert.equal(b.booting, false);
+  assert.equal(sessionStarting(b, A), false);
+});
+
+test('BootBegin is idempotent and an internal-looking board without booting stays valid', () => {
+  const b = starting();
+  assert.equal(reduceBoard(b, ev('RevviewBootBegin')), b);
+  assert.equal(boardView(initialBoard()).view, 'unknown');
+});
+
+test('sessionStarting: unknown id or null is false', () => {
+  assert.equal(sessionStarting(starting(), null), false);
+  assert.equal(sessionStarting(starting(), A), false);
 });

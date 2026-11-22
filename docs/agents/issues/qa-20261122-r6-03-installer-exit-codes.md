@@ -1,5 +1,5 @@
 ---
-status: closed (2026-11-22, work/qa6-fixes: setup.mjs crash exits 3 and install.sh stops without hooks or done; missing or malformed cmdline.txt or config.txt exit 1, file untouched; not yet re-run by QA)
+status: closed (2026-11-22, work/qa6-fixes: a setup.mjs crash (exit 3, or 1 at load) stops install.sh without hooks or done; a refusal is setup.mjs exit 4 = install.sh exit 1; missing or malformed cmdline.txt or config.txt are refusals, file untouched; not yet re-run by QA)
 id: qa-20261122-r6-03
 title: Installer exit codes mislead: a crash in setup.mjs is reported as "files were refused (see the skipped lines)" with no skipped line and later files never written; a missing or two-line cmdline.txt is skipped with exit 0
 severity: minor

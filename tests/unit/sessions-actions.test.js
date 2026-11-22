@@ -231,3 +231,28 @@ test('push-to-talk while the session is launching is dropped with a note; after 
   assert.equal((await tap()).done, true);
   assert.deepEqual(sent, ['Space', 'Space']);
 });
+
+test('push-to-talk refusal keys on the selected session: another launching session does not refuse; no selection keeps send', async () => {
+  const OTHER = '22222222-2222-4222-8222-222222222222';
+  const sent = [];
+  const runner = { target: async () => ({ id: SID }), send: async (k) => { sent.push(k); return { sent: true, id: SID }; } };
+  const mk = (board) => createActions({ runner, registry: {}, getBoard: () => board, apply: () => {}, log: () => {} });
+  let b = reduceBoard(initialBoard(), { hook_event_name: 'RevviewOwned', ids: [SID, OTHER] });
+  b = reduceBoard(b, select);
+  b = reduceBoard(b, { hook_event_name: 'RevviewLaunching', session_id: OTHER });
+  assert.equal((await mk(b).handle(dev('push-to-talk', 'tap'))).done, true, 'selected one is not starting');
+  const none = reduceBoard(reduceBoard(initialBoard(), { hook_event_name: 'RevviewOwned', ids: [OTHER] }), { hook_event_name: 'RevviewLaunching', session_id: OTHER });
+  assert.notEqual((await mk(none).handle(dev('push-to-talk', 'tap'))).reason, 'session starting');
+});
+
+test('push-to-talk is not refused while the data is locked (a selected session under INSERT KEY is already running)', async () => {
+  const sent = [];
+  const runner = { target: async () => ({ id: SID }), send: async (k) => { sent.push(k); return { sent: true, id: SID }; } };
+  let b = reduceBoard(reduceBoard(initialBoard(), { hook_event_name: 'RevviewOwned', ids: [SID] }), select);
+  b = reduceBoard(b, { hook_event_name: 'RevviewLaunching', session_id: SID });
+  const a = createActions({ runner, registry: {}, getBoard: () => b, apply: () => {}, log: () => {} });
+  assert.equal((await a.handle(dev('push-to-talk', 'tap'))).reason, 'session starting');
+  b = reduceBoard(b, { hook_event_name: 'RevviewDataLock', locked: true });
+  assert.equal((await a.handle(dev('push-to-talk', 'tap'))).done, true);
+  assert.deepEqual(sent, ['Space']);
+});

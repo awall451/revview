@@ -241,3 +241,41 @@ test('install.sh: a two-line cmdline.txt, a missing cmdline.txt, a missing confi
   fs.rmSync(path.join(r, 'boot/firmware/config.txt'));
   assert.equal(run(base(r)).code, 1);
 }));
+
+// A copy of pi/ whose setup.mjs is replaced by `body`: install.sh is run from the copy (it finds setup.mjs next to itself).
+function withFakeSetup(body, fn) {
+  return withRoot(async (r) => {
+    const piCopy = fs.mkdtempSync(path.join(os.tmpdir(), 'revview-inst-picopy-'));
+    try {
+      fs.cpSync(path.join(ROOT, 'pi'), piCopy, { recursive: true });
+      fs.writeFileSync(path.join(piCopy, 'setup.mjs'), body);
+      const p = spawnSync('bash', [path.join(piCopy, 'install.sh'), ...base(r)], { encoding: 'utf8' });
+      await fn(r, { code: p.status, out: p.stdout, err: p.stderr });
+    } finally { fs.rmSync(piCopy, { recursive: true, force: true }); }
+  });
+}
+
+test('install.sh: setup.mjs dying at load time (exit 1 from node) is a failure, not a refusal: stops, no hooks, no done', withFakeSetup(
+  "throw new Error('boom at import');\n", (r, res) => {
+    assert.equal(res.code, 1, res.out + res.err);
+    assert.match(res.err, /install\.sh: setup\.mjs failed part way \(exit 1\); nothing after that point was done, the hooks were not installed/);
+    assert.doesNotMatch(res.err, /some files were refused/);
+    assert.doesNotMatch(res.out, /^done\. Next:/m);
+    assert.equal(fs.existsSync(path.join(r, 'home/alice/.claude/settings.json')), false);
+  }));
+
+test('install.sh: setup.mjs exit 4 (refused) runs the rest and ends with exit 1', withFakeSetup(
+  'process.exit(4);\n', (r, res) => {
+    assert.equal(res.code, 1, res.out + res.err);
+    assert.match(res.err, /some files were refused/);
+    assert.match(res.out, /^done\. Next:/m);
+    assert.ok(fs.existsSync(path.join(r, 'home/alice/.claude/settings.json')));
+  }));
+
+test('install.sh: setup.mjs exit 2 (bad arguments): exit 2 with its own message, nothing written, no hooks', withFakeSetup(
+  'process.exit(2);\n', (r, res) => {
+    assert.equal(res.code, 2, res.out + res.err);
+    assert.match(res.err, /install\.sh: setup\.mjs refused the arguments \(see above\); nothing was written/);
+    assert.doesNotMatch(res.out, /^done\. Next:/m);
+    assert.equal(fs.existsSync(path.join(r, 'home/alice/.claude/settings.json')), false);
+  }));

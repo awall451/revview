@@ -1320,8 +1320,10 @@ Tested in the unit suite only (fakes, injected timers); nothing run on a Pi.
   `--boot` without `--sessions` ends STARTING at once (nothing can start a session). Under `--data-lock`: INSERT KEY
   while locked with working buttons (as 4B (c)); the start and its 60 s bound begin at the unlock; a failed start
   there ends STARTING the same way.
-- **Presses are dropped only while the boot STARTING lasts** (phase `starting` and view `starting`), not during a
-  per-session STARTING.
+- **Presses are dropped only while the boot STARTING lasts** (the board flag `booting`, set only by the server's own
+  boot through the internal `RevviewBootBegin`, and view `starting`), not during a per-session STARTING. A POSTed
+  `RevviewStarting` keeps its old meaning (blanks the bar, placeholders come back as UNKNOWN) but never sets
+  `booting`, so it can neither drop presses nor turn placeholders into a STARTING nothing would end.
 - **r6-06:** while the boot lasts a quiet placeholder (window listed, no hook yet) shows STARTING, so a restart with
   one surviving window goes STARTING -> that session, without the "No session chosen" flash.
 - **Part D: a session revview starts (key-on or New session) shows STARTING until its first hook, at most 30 s.**
@@ -1331,18 +1333,21 @@ Tested in the unit suite only (fakes, injected timers); nothing run on a Pi.
   few seconds even on a slow machine *(not measured on a Pi: bench P20 times it)*; 30 s is long enough not to flip to
   UNKNOWN on a slow start and short enough that a lost SessionStart costs the driver half a minute, not the bar.
   The list is at most 8 ids.
-- **Push-to-talk while the shown session is STARTING: dropped, with the note "Claude is still starting: push-to-talk
+- **Push-to-talk while the selected session is STARTING: dropped, with the note "Claude is still starting: push-to-talk
   not sent".** Claude is still loading, so a Space could land before its input is ready (typed into the prompt or
   lost). The allow rule for who receives keys is unchanged (this only adds a refusal). The mic is crossed while the
-  view is STARTING. After the 30 s fallback push-to-talk is sent as for any quiet placeholder today.
+  view is STARTING. It keys on the selected session (the one the key goes to), not the shown one; with no selection nothing is refused here, and not while the data is locked (a session selected under INSERT KEY is already running). After the 30 s fallback push-to-talk is sent as for any quiet placeholder today.
 - **r6-04:** a bad `REVVIEW_NETMON_HOST` is logged and the default `api.anthropic.com:443` is used; the server no
   longer exits 2 (a bad optional setting must not cost the whole bar).
-- **Installer exit codes (r6-02, r6-03).** `setup.mjs`: 0 done; 1 a file refused or skipped so the appliance is half
+- **Installer exit codes (r6-02, r6-03).** `setup.mjs`: 0 done; 4 a file refused or skipped so the appliance is half
   set up (a symlink at ANY component of the path below the root, the home included; a missing `cmdline.txt` or
   `config.txt`; a `cmdline.txt` with several lines or no `root=`; files left byte-identical); 2 bad arguments; 3 an
-  unexpected error (message, no stack). `install.sh`: 1 as before (rest done, final exit 1); any other non-zero code
-  from `setup.mjs` stops it: no hooks, no "done" line, exit with that code. A missing `lightdm.conf` stays a note
-  (exit 0). With `--root` as an ordinary user nothing is chowned (only root can give a file away). The standard
-  merged-/usr links (`/bin`, `/lib`, ...) are on none of the written paths, so no exception is needed.
+  unexpected error caught in main (message, no stack). Not 1 for a refusal: node itself exits 1 on an error outside
+  main (an import or syntax error), which must not read as a refusal. `install.sh` keeps its own codes: setup's 4 ->
+  the rest runs, final exit 1; setup's 2 -> "refused the arguments", exit 2; any other non-zero code (1, 3, a signal)
+  stops it: no hooks, no "done" line, exit with that code. A missing `lightdm.conf` stays a note (exit 0). With
+  `--root` as an ordinary user nothing is chowned (only root can give a file away). The standard merged-/usr links
+  (`/bin`, `/lib`, ...) are on none of the written paths, so no exception is needed. Left as it is: `data.mjs write`
+  still exits 1 for a refusal and `data-setup.sh` reports any failure the same way (a vaguer message, it stops).
 - **The Pi needs no npm package** (checked: src/, hooks/, pi/ import only `node:` modules and relative files), so
   pi/README drops `sudo npm ci`; the repository comes by `git clone` over Wi-Fi or a copy from a laptop.

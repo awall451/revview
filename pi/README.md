@@ -98,8 +98,10 @@ and `audio`. The older set-up's `revview` system user is no longer used.
    - 1: a file was refused or skipped (a symlink, `cmdline.txt` or `config.txt` missing, a `cmdline.txt` with several
      lines or no `root=`, or hooks skipped): the rest is done; fix it and re-run.
    - 2: bad arguments, or a read-only root (nothing written).
-   - 3: `setup.mjs` failed part way: nothing after that point was done, the hooks were not installed, and there is no
-     "done" line.
+   - 3 (or any other code, including 1 when `setup.mjs` could not even load): `setup.mjs` failed part way: nothing
+     after that point was done, the hooks were not installed, and there is no "done" line.
+   - `node pi/setup.mjs` run alone uses 4 for "a file was refused" (0 done, 2 bad arguments, 3 a crash); `install.sh`
+     turns 4 into its own 1.
 8. **Settings** (optional), in `/etc/revview/server.env` (one `KEY=value` per line, no quotes):
    - `REVVIEW_START=/home/NAME/my-repo`: at key-on a Claude session starts there by itself. It must be an absolute
      folder. Without it (the default), with `--boot` the bar leaves STARTING once the boot is done and says "No session

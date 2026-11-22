@@ -3,7 +3,7 @@
 // live windows right now; never anything a POSTed event could set. While a list or menu is open a gesture only
 // navigates: it can never send a key or answer a permission request.
 import { performance } from 'node:perf_hooks';
-import { shownPrompt, selectedKey, boardView } from '../state/index.js';
+import { shownPrompt, selectedKey, boardView, sessionStarting } from '../state/index.js';
 
 export const CTRL_C_GAP_MS = 5000;
 export const NAV_TIMEOUT_MS = 10000;
@@ -149,7 +149,7 @@ export function createActions({
     if (button === 'read-aloud' && gesture === 'tap' && readAloud) return speakSelected();
     if (button === 'push-to-talk' && gesture === 'tap') {
       // Claude is still loading (the boot STARTING, or a session revview just started with no hook yet): drop it
-      if (boardView(b).activity === 'starting') {
+      if (!b.locked && sessionStarting(b, selectedKey(b))) {
         note('Claude is still starting: push-to-talk not sent');
         return out('push-to-talk', false, 'session starting');
       }

@@ -33,6 +33,8 @@ export function initialBoard() {
   };
 }
 
+// b.booting (absent = false): set only by the server's own boot (RevviewBootBegin), ended by RevviewBootDone; while
+// it is true a quiet placeholder shows STARTING and presses are dropped. A POSTed RevviewStarting never sets it.
 // b.launching (absent until the first RevviewLaunching): ids of sessions revview itself just started, at most 8,
 // oldest dropped; a quiet one shows STARTING
 const MAX_LAUNCHING = 8;
@@ -56,6 +58,7 @@ function isValidBoard(b) {
     && (b.nav === null || (isObj(b.nav) && NAV_KINDS.includes(b.nav.kind) && Number.isInteger(b.nav.row) && b.nav.row >= 0
       && (b.nav.id === undefined || typeof b.nav.id === 'string')))
     && (b.launching === undefined || (Array.isArray(b.launching) && b.launching.every((x) => typeof x === 'string')))
+    && (b.booting === undefined || typeof b.booting === 'boolean')
     && (b.note === undefined || b.note === null || typeof b.note === 'string')
     && Array.isArray(b.projects) && b.projects.every((x) => typeof x === 'string')
     && (b.projectsMissing === undefined || (Array.isArray(b.projectsMissing) && b.projectsMissing.every((x) => typeof x === 'string')))
@@ -363,21 +366,23 @@ function reduceInner(b, event) {
     }
     case 'RevviewButton': // a gesture is for the server's actions, never for the screen
       return b;
+    case 'RevviewBootBegin': // the server's own boot: what RevviewStarting does, and the boot STARTING rule is on
     case 'RevviewStarting': {
       // the sessions are forgotten, the driver's choice is not: it becomes `want`, so the same session is selected
       // again when its events come back (a posted RevviewStarting can blank the bar, never redirect a button)
       const want = b.want ?? b.selected;
+      const booting = event.hook_event_name === 'RevviewBootBegin' ? true : b.booting === true;
       if (b.phase === 'starting' && b.ended.length === 0 && Object.keys(b.sessions).length === 0
-        && b.selected === null && b.want === want && b.nav === null) return b;
-      return { ...b, phase: 'starting', sessions: {}, ended: [], selected: null, want, nav: null };
+        && b.selected === null && b.want === want && b.nav === null && (b.booting === true) === booting) return b;
+      return { ...b, phase: 'starting', sessions: {}, ended: [], selected: null, want, nav: null, ...(booting ? { booting } : {}) };
     }
     case 'RevviewBootDone': {
       // the key-on boot is over (a session came, or none will: nothing to start, or the start failed): the bar
       // leaves STARTING for the initial phase so its buttons work. Outside the boot STARTING it changes nothing.
-      if (b.phase !== 'starting') return b;
+      if (b.booting !== true) return b;
       const note = event.note;
       const ok = typeof note === 'string' && note.length >= 1 && note.length <= 120;
-      return { ...b, phase: 'unknown', note: ok ? note : b.note };
+      return { ...b, booting: false, phase: b.phase === 'starting' ? 'unknown' : b.phase, note: ok ? note : b.note };
     }
     case 'RevviewLaunching': {
       // revview just started this session's window: until its first hook it shows STARTING (see boardView)
@@ -736,7 +741,7 @@ function answeredOf(shown) {
 }
 
 // A quiet placeholder is STARTING while the boot lasts, or while revview's own start of it is recent (launching).
-const startingOf = (b, s, key) => s.quiet === true && (b.phase === 'starting' || (b.launching ?? []).includes(key));
+const startingOf = (b, s, key) => s.quiet === true && (b.booting === true || (b.launching ?? []).includes(key));
 
 // The keys every view state carries besides the shown session's own fields.
 function extrasOf(b, shownKey) {
@@ -825,4 +830,11 @@ export function replayView(events, board = initialBoard()) {
     out.push(boardView(b));
   }
   return out;
+}
+
+// True when the session `id` would show STARTING (the boot, or revview's own recent start of it)
+export function sessionStarting(board, id) {
+  const b = isValidBoard(board) ? board : initialBoard();
+  const s = typeof id === 'string' ? b.sessions[id] : undefined;
+  return s !== undefined && startingOf(b, s, id);
 }

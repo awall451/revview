@@ -4,9 +4,10 @@
 // The edit/render functions are pure (text in, text out). The CLI writes files at <root><path as seen on the Pi>.
 // Usage: node pi/setup.mjs --root R --user U --home H --dir D [--rotate 90|270] [--output HDMI-A-1]
 //                          [--node /usr/bin/node] [--owner UID:GID] [--dry-run]
-// Exit: 0 done; 1 a file was refused or skipped so that the appliance is half set up (a symlink anywhere in its path,
+// Exit: 0 done; 4 a file was refused or skipped so that the appliance is half set up (a symlink anywhere in its path,
 //   cmdline.txt or config.txt missing or malformed, no root=): left as it was, everything else done; 2 bad arguments;
-//   3 an unexpected error (the files after that point were not written).
+//   3 an unexpected error inside main (the files after that point were not written). Refusal is 4, not 1, because
+//   node itself exits 1 for an error outside main (an import failure, a syntax error): install.sh must tell them apart.
 // One line per file: wrote | unchanged | backup A -> B | skipped P: why | would write (--dry-run, nothing written).
 import fs from 'node:fs';
 import path from 'node:path';
@@ -222,7 +223,7 @@ function main(argv) {
   write(R('/etc/revview/server.env'), renderServerEnv(), { createOnly: true });
   write(path.join(homeAbs, '.config/labwc/autostart'), renderAutostart({ dir: o.dir, output: o.output, transform: o.rotate }),
     { owned: true, backup: 'foreign', mode: 0o755 });
-  if (w.failed()) process.exitCode = 1;
+  if (w.failed()) process.exitCode = 4;
 }
 
 if (process.argv[1] && fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url))) {

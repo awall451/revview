@@ -28,7 +28,8 @@ export function createWriter({ dry = false, owner, homeAbs = '', root = '/', say
   // First symlink among the components of p below root (p itself included), or null.
   const linkedComponent = (p) => {
     const rel = path.relative(root, p);
-    const inside = rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+    if (rel === '') return null; // the root itself: how it is reached is not ours to judge
+    const inside = !(rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel));
     let cur = inside ? root : path.parse(p).root;
     for (const part of (inside ? rel : path.relative(cur, p)).split(path.sep).filter(Boolean)) {
       cur = path.join(cur, part);

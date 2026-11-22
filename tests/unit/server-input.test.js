@@ -196,13 +196,29 @@ test('log keeps the last 32, oldest first', async () => {
   });
 });
 
-test('a gesture during starting is dropped', async () => {
-  await withServer({ devBridge: true }, async (s) => {
-    await postEvent(s, { hook_event_name: 'RevviewButton', button: 'up', gesture: 'tap' });
-    await postEvent(s, { hook_event_name: 'RevviewStarting' });
+test('a gesture during the boot starting is dropped (the server boot, not a posted RevviewStarting)', async () => {
+  await withServer({ devBridge: true, boot: true }, async (s) => {
     await postEvent(s, { hook_event_name: 'RevviewButton', button: 'down', gesture: 'tap' });
+    s.bootDone();
+    await postEvent(s, { hook_event_name: 'RevviewButton', button: 'up', gesture: 'tap' });
     const g = (await buttons(s)).gestures;
-    assert.deepEqual(g.map((x) => x.dropped), [false, true]);
+    assert.deepEqual(g.map((x) => x.dropped), [true, false]);
+  });
+});
+
+test('a POSTed RevviewStarting after the boot never drops presses, not even for a quiet placeholder', async () => {
+  const A = '11111111-1111-4111-8111-111111111111';
+  const runner = { list: async () => [{ id: A, window: '@1', cwd: '/tmp', name: 'one' }], target: async () => null, send: async () => ({ sent: false }) };
+  await withServer({ devBridge: true, boot: true, sessions: runner }, async (s) => {
+    s.select(A);
+    s.bootDone();
+    await postEvent(s, { hook_event_name: 'RevviewStarting' });
+    assert.equal(s.state().view, 'starting', 'the bar is blank until something comes back');
+    await s.refreshOwned();
+    s.select(A);
+    assert.notEqual(s.state().view, 'starting', 'the placeholder reads UNKNOWN, not STARTING');
+    await postEvent(s, { hook_event_name: 'RevviewButton', button: 'up', gesture: 'tap' });
+    assert.deepEqual((await buttons(s)).gestures.map((x) => x.dropped), [false]);
   });
 });
 

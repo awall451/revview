@@ -38,7 +38,7 @@ const BUTTON_RE = /^[a-z][a-z0-9-]{0,31}$/;
 const GESTURES = ['tap', 'hold', 'long-hold'];
 // made only by revview itself (the actions, the boot path): no POST may forge them, not even under --dev-bridge
 const LAUNCH_LIMIT_MS = 30000;
-const INTERNAL_EVENTS = ['RevviewInterrupted', 'RevviewAnswered', 'RevviewSelect', 'RevviewNav', 'RevviewOwned', 'RevviewProjects', 'RevviewNote', 'RevviewBootDone', 'RevviewLaunching', 'RevviewLaunchExpired'];
+const INTERNAL_EVENTS = ['RevviewInterrupted', 'RevviewAnswered', 'RevviewSelect', 'RevviewNav', 'RevviewOwned', 'RevviewProjects', 'RevviewNote', 'RevviewBootBegin', 'RevviewBootDone', 'RevviewLaunching', 'RevviewLaunchExpired'];
 export const MAX_SSE_CLIENTS = 8;
 export const MAX_CLIENT_BACKLOG_BYTES = 256 * 1024; // unread bytes after which a stalled SSE client is dropped
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -192,10 +192,10 @@ export async function startLiveServer({
   }
 
   // Gestures: an in-memory log, never part of the board. Presses while the boot STARTING lasts are dropped, not
-  // queued. The phase check matters: a placeholder session that shows 'starting' after the boot must not drop presses.
+  // queued. The booting flag matters (a POSTed RevviewStarting never sets it, nothing would end it): a placeholder session that shows 'starting' after the boot must not drop presses.
   const gestureLog = [];
   function acceptGesture({ button, gesture, source }) {
-    const entry = { button, gesture, source, at: Date.now(), dropped: board.phase === 'starting' && boardView(board).view === 'starting' };
+    const entry = { button, gesture, source, at: Date.now(), dropped: board.booting === true && boardView(board).view === 'starting' };
     gestureLog.push(entry);
     if (gestureLog.length > GESTURE_LOG_MAX) gestureLog.shift();
     try {
@@ -499,7 +499,7 @@ export async function startLiveServer({
   ownPort = server.address().port;
 
   applyProjects();
-  if (boot) apply({ hook_event_name: 'RevviewStarting' }, true);
+  if (boot) apply({ hook_event_name: 'RevviewBootBegin' }, true);
   let monitor = null;
   if (netmon) {
     monitor = createNetMonitor({

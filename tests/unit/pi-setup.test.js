@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { createWriter } from '../../pi/files.mjs';
 import {
   editCmdline, editConfigTxt, editLightdm, renderAutostart, renderTouchRule, renderUnit, renderServerEnv,
 } from '../../pi/setup.mjs';
@@ -241,7 +242,7 @@ test('CLI: missing files are skipped with a reason; a two-line cmdline is left a
   fs.rmSync(path.join(r, 'etc/lightdm'), { recursive: true });
   fs.writeFileSync(path.join(r, 'boot/firmware/cmdline.txt'), 'a\nb\n');
   const res = cli(r);
-  assert.equal(res.code, 1, res.err); // boot files skipped: the run ends non-zero (qa r6-03)
+  assert.equal(res.code, 4, res.err); // boot files skipped: the run ends non-zero (qa r6-03)
   assert.ok(res.lines.some((l) => l.startsWith('skipped ') && l.endsWith('config.txt: missing')));
   assert.ok(res.lines.some((l) => l.includes('cmdline.txt: ') && l.startsWith('skipped')));
   assert.ok(res.lines.some((l) => l.endsWith('no lightdm.conf; set Desktop Autologin with raspi-config')));
@@ -298,12 +299,12 @@ test('editCmdline: refuses a line without root=, accepts CRLF and a missing fina
   assert.equal(editCmdline(`${CMD_ROOT}\n\n`), want);
 });
 
-test('CLI: a cmdline.txt without root= is left byte-identical, warns, exits 1; the rest is still done', withRoot((r) => {
+test('CLI: a cmdline.txt without root= is left byte-identical, warns, exits 4; the rest is still done', withRoot((r) => {
   const f = path.join(r, 'boot/firmware/cmdline.txt');
   for (const body of ['', '  \n', 'console=tty1 quiet\n']) {
     fs.writeFileSync(f, body);
     const res = cli(r);
-    assert.equal(res.code, 1, JSON.stringify(body));
+    assert.equal(res.code, 4, JSON.stringify(body));
     assert.equal(fs.readFileSync(f, 'utf8'), body);
     assert.equal(fs.existsSync(`${f}.revview-backup`), false);
     assert.ok(res.lines.some((l) => l.startsWith('skipped ') && l.includes('cmdline.txt') && l.includes('root=')), res.out);
@@ -349,7 +350,7 @@ test('CLI: refuses to write through a symlink, nothing is written through it', w
     fs.rmSync(p);
     fs.symlinkSync(outside, p);
     const res = cli(r);
-    assert.equal(res.code, 1, rel);
+    assert.equal(res.code, 4, rel);
     assert.ok(res.lines.some((l) => l.startsWith('skipped ') && l.includes(rel) && /symlink/.test(l)), res.out);
     assert.equal(fs.readFileSync(outside, 'utf8'), 'keep\n', rel);
     assert.ok(fs.lstatSync(p).isSymbolicLink());
@@ -367,13 +368,13 @@ test('CLI: a symlinked ~/.config/labwc/autostart and a symlinked udev rule are r
   fs.mkdirSync(path.join(r, 'etc/udev/rules.d'), { recursive: true });
   fs.symlinkSync(outside, path.join(r, 'etc/udev/rules.d/71-revview-touch.rules'));
   const res = cli(r);
-  assert.equal(res.code, 1);
+  assert.equal(res.code, 4);
   assert.equal(fs.readFileSync(outside, 'utf8'), 'keep\n');
   assert.ok(fs.lstatSync(path.join(cfg, 'autostart')).isSymbolicLink());
   assert.equal(res.lines.filter((l) => l.startsWith('skipped ') && /symlink/.test(l)).length, 2, res.out);
   fs.rmSync(path.join(cfg, 'autostart'));
   fs.symlinkSync(path.join(r, 'nowhere'), path.join(cfg, 'autostart'));
-  assert.equal(cli(r).code, 1);
+  assert.equal(cli(r).code, 4);
   assert.equal(fs.existsSync(path.join(r, 'nowhere')), false);
 }));
 
@@ -387,7 +388,7 @@ test('CLI: a symlinked ~/.config/labwc is refused, nothing is written at the lin
   const elsewhere = path.join(r, 'elsewhere');
   symlinkedDir(r, 'home/alice/.config/labwc', elsewhere);
   const res = cli(r);
-  assert.equal(res.code, 1, res.out + res.err);
+  assert.equal(res.code, 4, res.out + res.err);
   assert.ok(res.lines.some((l) => l.startsWith('skipped ') && l.includes('autostart') && /labwc is a symlink/.test(l)), res.out);
   assert.deepEqual(fs.readdirSync(elsewhere), []);
   assert.ok(fs.existsSync(path.join(r, 'etc/udev/rules.d/71-revview-touch.rules')), 'the rest is still written');
@@ -397,13 +398,13 @@ test('CLI: a symlinked ~/.config, and a symlinked home, are refused', withRoot((
   const elsewhere = path.join(r, 'elsewhere');
   symlinkedDir(r, 'home/alice/.config', elsewhere);
   let res = cli(r);
-  assert.equal(res.code, 1, res.out + res.err);
+  assert.equal(res.code, 4, res.out + res.err);
   assert.match(res.out, /skipped .*autostart: .*\.config is a symlink/);
   assert.deepEqual(fs.readdirSync(elsewhere), []);
   fs.rmSync(path.join(r, 'home'), { recursive: true });
   symlinkedDir(r, 'home/alice', elsewhere);
   res = cli(r);
-  assert.equal(res.code, 1, res.out + res.err);
+  assert.equal(res.code, 4, res.out + res.err);
   assert.match(res.out, /skipped .*autostart: .*home\/alice is a symlink/);
   assert.deepEqual(fs.readdirSync(elsewhere), []);
 }));
@@ -412,7 +413,7 @@ test('CLI: a symlinked directory under the root is refused for system files (ude
   const elsewhere = path.join(r, 'elsewhere');
   symlinkedDir(r, 'etc/udev/rules.d', elsewhere);
   let res = cli(r);
-  assert.equal(res.code, 1, res.out + res.err);
+  assert.equal(res.code, 4, res.out + res.err);
   assert.equal(res.lines.filter((l) => l.startsWith('skipped ') && /rules\.d is a symlink/.test(l)).length, 2, res.out);
   assert.deepEqual(fs.readdirSync(elsewhere), []);
   fs.rmSync(path.join(r, 'etc/udev/rules.d'));
@@ -421,7 +422,7 @@ test('CLI: a symlinked directory under the root is refused for system files (ude
   fs.symlinkSync(boot, path.join(r, 'boot/firmware'));
   const before = fs.readFileSync(path.join(boot, 'cmdline.txt'), 'utf8');
   res = cli(r);
-  assert.equal(res.code, 1, res.out + res.err);
+  assert.equal(res.code, 4, res.out + res.err);
   assert.match(res.out, /skipped .*cmdline\.txt: .*firmware is a symlink/);
   assert.equal(fs.readFileSync(path.join(boot, 'cmdline.txt'), 'utf8'), before);
   assert.deepEqual(fs.readdirSync(boot).filter((f) => /tmp/.test(f)), []);
@@ -431,22 +432,22 @@ test('CLI: a symlinked parent of the enable symlink is refused', withRoot((r) =>
   const elsewhere = path.join(r, 'elsewhere');
   symlinkedDir(r, 'etc/systemd/user/default.target.wants', elsewhere);
   const res = cli(r);
-  assert.equal(res.code, 1, res.out + res.err);
+  assert.equal(res.code, 4, res.out + res.err);
   assert.deepEqual(fs.readdirSync(elsewhere), []);
 }));
 
-test('CLI: a missing cmdline.txt or config.txt, and a two-line cmdline.txt, end with exit 1', withRoot((r) => {
+test('CLI: a missing cmdline.txt or config.txt, and a two-line cmdline.txt, end with exit 4', withRoot((r) => {
   const cmd = path.join(r, 'boot/firmware/cmdline.txt');
   fs.writeFileSync(cmd, 'a root=x\nb\n');
   let res = cli(r);
-  assert.equal(res.code, 1, res.out + res.err);
+  assert.equal(res.code, 4, res.out + res.err);
   assert.equal(fs.readFileSync(cmd, 'utf8'), 'a root=x\nb\n');
   fs.rmSync(cmd);
   res = cli(r);
-  assert.equal(res.code, 1);
+  assert.equal(res.code, 4);
   assert.match(res.out, /skipped .*cmdline\.txt: missing/);
   fs.rmSync(path.join(r, 'boot/firmware/config.txt'));
-  assert.equal(cli(r).code, 1);
+  assert.equal(cli(r).code, 4);
 }));
 
 test('CLI: a missing lightdm.conf alone stays a note, exit 0', withRoot((r) => {
@@ -468,4 +469,35 @@ test('CLI: a fake passwd uid that is not ours does not crash a run as an ordinar
   const res = cli(r, ['--owner', `${process.getuid() + 1}:${process.getgid() + 1}`]);
   assert.equal(res.code, 0, res.out + res.err);
   assert.ok(fs.existsSync(path.join(r, 'home/alice/.config/labwc/autostart')));
+}));
+
+test('CLI: a refusal exits 4 and bad arguments exit 2', withRoot((r) => {
+  fs.writeFileSync(path.join(r, 'boot/firmware/cmdline.txt'), '');
+  assert.equal(cli(r).code, 4);
+  assert.equal(spawnSync(process.execPath, [SETUP], { encoding: 'utf8' }).status, 2);
+}));
+
+test('files.mjs: a root below a symlinked directory is fine for files directly in it and for a child named ..x', withRoot((r) => {
+  const real = path.join(r, 'real');
+  fs.mkdirSync(path.join(real, 'root'), { recursive: true });
+  fs.symlinkSync(real, path.join(r, 'lnk'));
+  const root = path.join(r, 'lnk', 'root'); // the root itself is reached through a symlink: not our business
+  const w = createWriter({ root, say: () => {} });
+  w.write(path.join(root, 'a.txt'), 'x\n');
+  w.write(path.join(root, '..x', 'b.txt'), 'y\n');
+  assert.equal(w.failed(), false);
+  assert.equal(fs.readFileSync(path.join(real, 'root/a.txt'), 'utf8'), 'x\n');
+  assert.equal(fs.readFileSync(path.join(real, 'root/..x/b.txt'), 'utf8'), 'y\n');
+}));
+
+test('files.mjs: a symlink below the root is still refused, also in a child named ..x', withRoot((r) => {
+  const w = createWriter({ root: r, say: () => {} });
+  fs.mkdirSync(path.join(r, 'elsewhere'));
+  fs.mkdirSync(path.join(r, '..x'));
+  fs.symlinkSync(path.join(r, 'elsewhere'), path.join(r, '..x', 'l'));
+  const err = process.stderr.write;
+  process.stderr.write = () => true;
+  try { w.write(path.join(r, '..x', 'l', 'f'), 'z'); } finally { process.stderr.write = err; }
+  assert.equal(w.failed(), true);
+  assert.deepEqual(fs.readdirSync(path.join(r, 'elsewhere')), []);
 }));
