@@ -1,33 +1,39 @@
-# systemd unit for the revview server on the Pi. UNTESTED: written without a Pi.
-# install.sh copies it to /etc/systemd/system/revview.service with @REVVIEW_DIR@ replaced.
+# systemd USER unit for the revview server on the Pi. UNTESTED: written without a Pi.
+# pi/install.sh (via pi/setup.mjs) renders it to /etc/systemd/user/revview.service with @REVVIEW_DIR@, @NODE@
+# and @USER@ replaced, and enables it with a symlink in /etc/systemd/user/default.target.wants/. Lingering is
+# on for that user, so the unit starts at boot in the user's manager (with XDG_RUNTIME_DIR: PipeWire audio and
+# the microphone work for Claude's /voice and for read aloud). The user's Claude sign-in and hooks live there too.
 #
-# Flags: --input (the wheel-button reader runs inside the server) and --sessions (revview's own tmux
-# sessions). NEVER add --dev-bridge: it opens POST /dev/key and is for the emulator only.
+# ConditionUser: /etc/systemd/user is read by every user's manager; only the kiosk user runs it.
+# No User= and no SupplementaryGroups= (not allowed in user units): the user is in groups input and audio.
+#
+# Flags: --input (the wheel-button reader runs inside the server), --sessions (revview's own tmux sessions),
+# --boot (STARTING at key-on, then the REVVIEW_START session) and --netmon (RevviewNetwork events).
+# NEVER add --dev-bridge: it opens POST /dev/key and is for the emulator only.
 #
 # Ordering: there is deliberately no Requires=, Wants= or After= on the kiosk, the network or the dongle.
-# The kiosk (labwc autostart, DESIGN.md) starts from the user's session and is not a unit; it shows NO LINK
-# until the server answers (bench 22). The reader looks for the dongle every second and backs off when it
-# is absent (src/input/reader.js), so a missing dongle at boot fails and delays nothing.
+# The kiosk (labwc autostart, pi/kiosk.sh) is not a unit; it shows NO LINK until the server answers (bench 22).
+# The reader looks for the dongle every second and backs off when it is absent (src/input/reader.js), so a
+# missing dongle at boot fails and delays nothing.
 [Unit]
 Description=revview server (view, wheel-button reader, sessions)
+ConditionUser=@USER@
 
 [Service]
 Type=simple
-User=revview
-# Read /dev/input/event* without root. Needs python3 for src/input/grab.py.
-SupplementaryGroups=input
 WorkingDirectory=@REVVIEW_DIR@
 Environment=REVVIEW_PORT=8138
-# Optional: REVVIEW_PROJECTS=/path/to/projects.json (see config/projects.example.json)
+# Claude Code's native install puts `claude` in ~/.local/bin; the tmux sessions inherit this PATH.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+# Optional: REVVIEW_PROJECTS, REVVIEW_START, REVVIEW_NETMON_HOST (see /etc/revview/server.env)
 EnvironmentFile=-/etc/revview/server.env
-ExecStart=/usr/bin/node @REVVIEW_DIR@/src/server/index.js --input @REVVIEW_DIR@/config/buttons.json --sessions
+ExecStart=@NODE@ @REVVIEW_DIR@/src/server/index.js --input @REVVIEW_DIR@/config/buttons.json --sessions --boot --netmon
 Restart=always
 RestartSec=2
 # Do not kill the private tmux server (revview's sessions) when the service restarts: only the node
 # process is stopped. grab.py exits by itself when its parent is gone (bench W5). Untested (bench D3).
 KillMode=process
-# Not set on purpose: PrivateDevices (it hides /dev/input).
 NoNewPrivileges=yes
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
