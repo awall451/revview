@@ -108,3 +108,21 @@ Payload assumptions the state core rests on that no recording covers yet (see `s
 | H8 | With the kiosk on the live page (loaded once from the running server), stop the server, wait 2 s, reload the page (F5 on a keyboard, or kill the Chromium renderer so it reloads), then start the server | NO LINK instead of Chromium's white error page, and live again within about 2 s of the server being up. If a white page shows, the service worker is not active on the Pi (check `chrome://serviceworker-internals`) and the kiosk must always start on `boot.html` with session restore off | untested |
 | H9 | On the Pi, with another Claude session open, let each session in turn ask for permission and finish its turn | WAITING FOR ME and NEEDS PERMISSION show `+1` and the repo of the session that needs you (in the band, or bold at the right end of row A), readable in a glance | untested |
 | H10 | Reboot the Pi and film the screen from the start of Chromium to the first live state | No frame is an empty coloured band: boot NO LINK, then NO LINK of the live page, then UNKNOWN. How long the NO LINK frames last on the Pi is not known | untested |
+
+## Wheel buttons 4: selection, list and menu, WB4 (2026-11-22)
+
+What WB4 could not prove here: it was built and screenshotted in the emulator with a stand-in and replayed boards
+only. Run with `--input --sessions --projects <file>` (see `config/projects.example.json`), at least two revview
+sessions, on the pods. Ids `V1`... are new.
+
+| # | Try | Should happen | State |
+|---|---|---|---|
+| V1 | Two or three revview sessions running. Tap right and left on the pod, past the last and the first | The bar swaps to the next session each tap and wraps; the band shows the position ("2/3") and the mic; push-to-talk and cancel then act on the shown session only | untested |
+| V2 | Tap up, down, then press to open the list; move with up and down; press on a row; open it again and press back | The list shows one row per session (chip, repo, state word); the highlighted row is clear in a glance (inverted, bar at its left edge); press selects that session and closes the list; back closes it with no change | untested |
+| V3 | Open the menu with the menu button; choose New session, then a project row from the projects file, and press | `claude` starts in that directory in the private tmux server (`tmux -L revview ls`), the list closes, and the bar selects the new session once its first hook event arrives (not before). Projects and Settings show their rows and a press changes nothing | untested |
+| V4 | Hold back, with the selected session not the neediest (another one asking for permission or waiting) | The selection goes to home: needs permission, then waiting, then done, then working | untested |
+| V5 | Open the list and leave the wheel alone for 10 s; then do the same in the menu and in Projects | Each closes to the normal bar by itself after about 10 s; a gesture within the 10 s starts the time again | untested |
+| V6 | With the real PermissionRequest hook (as S3): switch to a session that is asking, then press allow at once (under 1.5 s); repeat after a list was open and closed by the 10 s timer | Nothing is allowed by the early press; a press 2 s after the switch (or after the close) allows. While the list is open, a press or a deny never answers anything | untested |
+| V7 | Start `claude` by hand in another terminal (not through revview) and select it with left or right | The bar shows it with a crossed mic and the bottom note ("not a revview session"); push-to-talk, cancel, allow and deny do nothing for it; the crossed mic is visible at a glance | untested |
+| V8 | By day and at night, from the driving position: read the list rows (3.55 mm), the highlight, the state chips, the mic glyph and the crossed mic, and the `+N` hint with the triangle | Each is recognised in about one second; the highlighted row and the crossed mic are told apart by shape, not by colour. The emulator cannot judge size, contrast or glare | untested |
+| V9 | Put the projects file on the data partition (`--projects` or `REVVIEW_PROJECTS` in the service) with one good path, one relative path and one path with a `#`; reboot | The server log names the two refused entries; the menu lists only the good one; with the file missing the bar still runs and New session says "No projects" | untested |

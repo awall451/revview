@@ -186,6 +186,14 @@ reliable source of truth. The hook events are.
   the prompt.
 - When no session exists, push-to-talk does nothing and the bar says so.
 
+**Built in WB4 (2026-11-22), with changes:** the rule is built as written, with these differences. A session
+revview started becomes selected only when its first hook event arrives (`want`), not at once. Home is the
+rule above (done before working); it differs on purpose from the cap's order in `board.js`. Press on a shown
+NEEDS PERMISSION is an allow attempt and never opens the list; a refusal does nothing else. While a list or menu is
+open no button sends a key or answers a request, and closing one restarts the 1500 ms shown time. `RevviewSelect`,
+`RevviewNav`, `RevviewOwned` and `RevviewProjects` are refused on `POST /event` even under `--dev-bridge`. Emulator
+only, nothing on hardware. See DECISIONS "wheel buttons 4".
+
 **State core (`src/state/board.js`).**
 - `focus` becomes driver-owned (call it `selected`). The `refocus` heuristics (pending permission pre-empts,
   working beats done, sticky focus) apply only when nothing is selected: a single session, or boot.
@@ -210,6 +218,13 @@ All at the existing `TYPE_MM` (state word 6.05 mm, other text 3.55 mm; `src/view
 - **Back.** Closes one level. A view with no input for about 10 s returns to the bar.
 - **Glance first.** The state word of the selected session stays visible in the list and menu views (the
   band is not replaced). Whether to use list and menu while moving is the driver's choice.
+
+**Built in WB4 (2026-11-22), with changes:** the position and a mic mark sit in the band, but only when the server
+runs with sessions. A crossed mic and a bottom note row show when push-to-talk does not go to the shown session.
+The list shows a mic on the selected session's row. Back closes one level; the menu button opens and closes the
+menu. Menu items: New session (choose a project row, press), Projects (read-only), Settings (read-only, four
+facts). The list and menu auto-close after 10 s. All at `TYPE_MM`. The glance-first line is built as: the lower
+area is replaced, the band stays. Legibility on the dash is not proven (bench V8). See DECISIONS "wheel buttons 4".
 
 Describe only: the exact pixel layout is for whoever builds it, within the 7-row budget.
 
@@ -286,7 +301,7 @@ Sizes: S small, M medium, L large. Aligned with the owner's items Wheel buttons 
 |---|---|---|
 | WB2 | Input layer with an ordinary USB keyboard: service, config key map, gesture detector, NO BUTTONS tag, fake device. Needs the dependency decision. | S-M |
 | WB3 | Sessions the Pi owns, and the actions: tmux-owned sessions, Space/Esc/Ctrl+C by send-keys, waiting PermissionRequest hook, new session from a project list. | M-L |
-| WB4 | State core and bar: selected rule, position, list, menu, home. | M |
+| WB4 | State core and bar: selected rule, position, list, menu, home. **Built 2026-11-22 (emulator only; bench V1-V9 untested).** | M |
 | WB5 | Read aloud (new dependency). | M |
 | WB6 | Dongle and pod set-up: docs and the ZMK keymap reference (section 1). Hardware by the owner. | S for the team |
 

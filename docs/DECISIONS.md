@@ -692,3 +692,74 @@ Residual risks (honest):
 - The 5 s Ctrl+C gap is global, measured on the server's monotonic clock. A Ctrl+C typed by hand in the pane is not
   counted.
 - Not proven: voice (tap or hold) inside tmux, the hook and buttons on the Pi, the real pods (bench S1-S6).
+
+## 2026-11-22: wheel buttons 4, the driver's selection, list and menu (built; emulator only, not on hardware)
+
+Code: `src/state/board.js`, `src/sessions/` (`actions.js`, `runner.js`, `projects.js`), `src/server/index.js`,
+`src/view/view.js`; the READMEs of those folders; `config/projects.example.json`. Bench V1-V9. Everything below is
+tested in the emulator and with a stand-in; nothing was tried on the Pi or the pods.
+
+- **One selection.** The board's `selected` is the only source of where a key or an answer goes. The runner no
+  longer keeps a chosen session (`target(id)` and `send(key, id)` take the id from the caller). Every key and every
+  answer goes to `selectedKey(board)`, re-verified against the live tmux windows at that moment (`runner.target`).
+  `owned` is the list of ids of the runner's windows, read at start, after New session, and every 5 s. It is `null`
+  when the server runs without `--sessions` (then the old look stays).
+- **When the selection changes.** Only by: driver gestures (left/right step through the sessions in the order first
+  seen, with wrap; back hold = home; a row chosen in the list); a session revview started (New session, `--start`,
+  or the only existing window at boot), which is selected when its first hook event puts it on the board (`want`);
+  the selected session ending or being dropped (it falls to home). Never by another session's events. A prompt in
+  another session shows only as the `+N` hint with a triangle (`elsewhere`). The old focus heuristics (pending
+  prompt pre-empts, sticky focus, working beats idle) apply only while nothing is selected.
+- **Home ranking.** Needs permission, then waiting, then done, then working; the oldest ask first among equals
+  (pending `since`, else `touched`). Deviation: this follows BUTTONS.md section 3 (done before working), not the
+  cap's `PRIORITY` order in `board.js` (working before done). Reason: a done session needs the driver, a working one
+  does not. The cap still drops by its own order.
+- **Press and deny.** On the normal view with NEEDS PERMISSION shown, press is an allow attempt only: a refusal
+  does nothing else and never opens the list. Otherwise press opens the list. Deny is never navigation. While a
+  list or menu is open every button only navigates: no key is sent and no request is answered, and `shownPrompt` is
+  null. The 1500 ms rule is unchanged. A selection change, and a list or menu closing, both restart the shown time
+  (the prompt key includes the session; the registry saw `null` while the list was open). So a press right after a
+  switch, right after a timeout close, or right after a prompt appeared cannot allow. `answer` also re-checks after
+  its await that no list is open and the selection is unchanged.
+- **Auto-close and back.** A list or menu closes after 10 s with no gesture (a server timer, `NAV_TIMEOUT_MS`,
+  injected in tests; it is re-armed after every gesture). Back closes one level: new, projects or settings go to
+  the menu, the list and the menu go to the normal view. The menu button opens the menu from the list and closes
+  the menu and its screens (it toggles). Up and down move the row (no wrap); back hold = home from anywhere.
+- **Internal events.** `RevviewSelect`, `RevviewNav`, `RevviewOwned` and `RevviewProjects` get 403 on `POST /event`
+  always, also under `--dev-bridge` (stricter than `RevviewButton`, which `--dev-bridge` accepts). The dev bridge
+  reaches the list and menu only through `/dev/key` gestures. Dropped gestures and posted ones (source `post`) do
+  nothing.
+- **RevviewStarting** (any local process can post it) clears the selection but keeps it as `want`. It can blank
+  the bar; it cannot redirect a button: the same session is selected again when its events return.
+- **Projects file.** `--projects <file>` or `REVVIEW_PROJECTS`. Format `{"projects": ["/abs/dir", ...]}`
+  (`config/projects.example.json`), at most 32. Each entry must be absolute, normalised, at most 4096 characters
+  and free of `#` and control characters (the same rule as `runner.start`, which checks again and also that the
+  directory exists). A bad entry is logged and skipped; a missing or malformed file gives an empty list and the
+  bar still runs. **New session** = menu, New session, a project row, press: it starts `claude` in that directory
+  in tmux and the board selects it when its first hook arrives. **Projects** is the read-only list of those paths
+  (press does nothing). **Settings** is a read-only screen of four facts (voice tap mode, wheel buttons found or
+  not, session counts, projects count); it changes nothing.
+- **Bar looks** (view only; all at `TYPE_MM`, no new size). A mic mark and the position ("2/3") in the band, only
+  when the server runs with sessions; without, the old look is unchanged. A crossed mic and a note row at the
+  bottom when push-to-talk does not go to the shown session, in three wordings: "no session chosen", "not a revview
+  session", "no revview session". The list and menu widget: a title row and up to 6 rows of 40 px; in the list a
+  state chip, the label and the state word (a mic on the selected session's row); the highlighted row inverted with
+  a bar at its left edge; a chevron mark when rows are above or below; labels cut in the middle like paths. The
+  worst band (NEEDS PERMISSION, 9+, triangle, crossed mic, 12/13, NO BUTTONS) fits; its fixture is a hand-merged
+  content object (13 sessions cannot be replayed: `MAX_SESSIONS` is 8), like the other worst cases.
+
+Residual risks and what is not proven:
+
+- `owned` is polled: the mic mark can be up to 5 s stale. Actions re-verify, so a stale mark never sends a key to
+  the wrong window.
+- A hand-started `claude` (not in revview's tmux) can be selected and shown, but the buttons do nothing for it; the
+  bar says so (crossed mic and note).
+- Positions renumber when a session ends.
+- The list and menu can distract the driver; that is the owner's choice (BUTTONS question 8). Only the 10 s
+  auto-close limits it.
+- A posted `SessionEnd` of the selected session moves the selection to home. Any local process can do this; it
+  can never cause an allow, because the 1500 ms rule restarts.
+- A posted `SessionStart` carrying a revview session's uuid (visible in `ps`) makes a pending `want` select early;
+  it is the same session.
+- Not tried: the list, menu, switch and New session on the Pi, the pods or in the car; reading the 3.55 mm rows and
+  the mic glyph in daylight; a real PermissionRequest after a switch. See bench V1-V9.
