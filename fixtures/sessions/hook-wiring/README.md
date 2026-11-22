@@ -58,8 +58,10 @@ Result: events SessionStart, UserPromptSubmit, StopFailure, SessionEnd (same pay
 post reaches the server** (in this one run; the headless exit race does not exist here). Bar: unknown -> waiting ->
 working -> **waiting** (StopFailure; stays `waiting` while claude sits at the prompt with "API Error: Connection
 refused ..." and "Resend your message to try again" in the pane) -> ended after `/exit`. So the bar shows `waiting`
-after an API failure, the look QA issue r3-05 calls WAITING FOR ME; nothing distinguishes it from a normal finished turn
-other than the absence of `done`.
+after an API failure, the look QA issue r3-05 calls WAITING FOR ME. (As recorded the state `view` was `waiting`, with
+nothing to tell it from a finished turn. Since the r3-05 fix the core keeps `waiting` but sets `failed`, and the bar reads
+"Turn failed: server error" over the message; the recorded `states-*.jsonl`/`state-*.json` predate the `failed` key and
+are compared on the other fields only.)
 
 ## permission-denied
 

@@ -23,7 +23,7 @@ function deepFreeze(o) {
 test('initialState', () => {
   assert.deepEqual(initialState(), {
     view: 'unknown', activity: 'unknown', offline: false, locked: false, repo: null, branch: null,
-    tool: null, file: null, diff: { added: 0, removed: 0 }, command: null, output: null, outputLines: [],
+    tool: null, file: null, diff: { added: 0, removed: 0 }, command: null, output: null, outputLines: [], failed: null,
   });
   assert.notEqual(initialState(), initialState());
   assert.ok(isState(initialState().view));
@@ -432,6 +432,46 @@ test('outputLines: last 3 lines of a Bash result, output is the last one, cleare
   assert.deepEqual(t.outputLines, []);
   assert.equal(t.output, null);
   assert.equal(reduce(t, e('Notification', { notification_type: 'other' })), t);
+});
+
+// QA r3-05: a failed turn stays WAITING, with `failed` built only from the recorded StopFailure payload
+test('StopFailure sets failed {error, message}; the turn fields stay', () => {
+  const s = run([e('UserPromptSubmit', { prompt: 'x' }), e('PreToolUse', { tool_name: 'Bash', tool_input: { command: 'ls' } }),
+    e('StopFailure', { error: 'rate_limit', last_assistant_message: '  API Error: slow down\n\u001b[31mnow  ' })]);
+  assert.equal(s.activity, 'waiting');
+  assert.equal(s.view, 'waiting');
+  assert.deepEqual(s.failed, { error: 'rate_limit', message: 'API Error: slow down[31mnow' });
+  assert.equal(s.tool, 'Bash');
+  assert.equal(s.command, 'ls');
+  assert.equal(initialState().failed, null);
+});
+
+test('StopFailure: error only from /^[a-z_]{1,40}$/, message cut to 200 and null when absent', () => {
+  const f = (extra) => run([e('StopFailure', extra)]).failed;
+  assert.deepEqual(f({}), { error: 'unknown', message: null });
+  assert.deepEqual(f({ error: 'Bad Error!', last_assistant_message: 42 }), { error: 'unknown', message: null });
+  assert.equal(f({ error: 'x'.repeat(41) }).error, 'unknown');
+  assert.equal(f({ error: 7 }).error, 'unknown');
+  assert.equal(f({ error: 'overloaded', last_assistant_message: 'a'.repeat(500) }).message.length, 200);
+  assert.equal(f({ last_assistant_message: ' \n ' }).message, null);
+});
+
+test('every other event that changes the turn clears failed', () => {
+  const failed = run([e('UserPromptSubmit'), e('StopFailure', { error: 'server_error', last_assistant_message: 'boom' })]);
+  assert.ok(failed.failed);
+  const after = {
+    prompt: e('UserPromptSubmit', { prompt: 'again' }),
+    pre: e('PreToolUse', { tool_name: 'Read', tool_input: {} }),
+    post: e('PostToolUse', { tool_name: 'Read', tool_input: {} }),
+    perm: e('PermissionRequest', { tool_name: 'Bash', tool_input: { command: 'x' } }),
+    stop: e('Stop'),
+    start: e('SessionStart', { source: 'startup' }),
+    starting: { hook_event_name: 'RevviewStarting' },
+  };
+  for (const [k, ev] of Object.entries(after)) assert.equal(reduce(failed, ev).failed, null, k);
+  // events that leave the state untouched keep it (same reference)
+  assert.equal(reduce(failed, e('SubagentStop')), failed);
+  assert.equal(reduce(failed, e('SessionStart', { source: 'compact' })), failed);
 });
 
 test('a command up to 300 code points is kept', () => {

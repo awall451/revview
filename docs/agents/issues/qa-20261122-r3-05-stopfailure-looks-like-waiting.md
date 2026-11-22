@@ -1,5 +1,5 @@
 ---
-status: open
+status: closed (2026-11-22, work/qa5-fixes: failed turn shows "Turn failed: <error>" under WAITING FOR ME, see DECISIONS)
 id: qa-20261122-r3-05
 title: A failed turn (StopFailure) shows a plain WAITING FOR ME; nothing says the work did not finish
 severity: minor

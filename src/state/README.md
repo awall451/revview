@@ -47,7 +47,7 @@ Pure logic that turns Claude Code hook events into the view state (no DOM, no I/
 | `PermissionDenied` | `working` |
 | `Notification` | `notification_type` `permission_prompt` / `worker_permission_prompt` -> `permission`; `idle_prompt` -> `waiting`; anything else ignored (message text is never used) |
 | `Stop` | `done`; `working` while `background_tasks` lists a `subagent` with status `running` (async subagents, recorded) |
-| `StopFailure` | `waiting` |
+| `StopFailure` | `waiting` and `failed = {error, message}`: `error` from the payload only when it matches `/^[a-z_]{1,40}$/` (else `unknown`), `message` = `last_assistant_message` (control characters removed, trimmed, at most 200 chars; `null` if absent or not a string). Recorded (`fixtures/sessions/hook-wiring/events-stop-failure*.jsonl`: `error: "server_error"`, `last_assistant_message`, no `error_details`, no `Stop`). Any other event that changes the state (a driver prompt, a tool event, `Stop`, `SessionStart` not compact, `RevviewStarting`) sets `failed` back to `null`; tool/file/command/output are kept in the state, but `boardView` shows them as null/[] while `failed` is set and the output is the message (QA r3-05, DECISIONS) |
 | `SubagentStop`, `SubagentStart`, `SessionEnd`, `PreCompact`, `PostCompact`, unknown | ignored |
 | `RevviewContext` `{cwd?, branch?}` (synthetic) | repo from cwd, branch (string or null) |
 | `RevviewStarting` (synthetic) | `starting`; clears per-turn fields like UserPromptSubmit |
@@ -57,7 +57,7 @@ Pure logic that turns Claude Code hook events into the view state (no DOM, no I/
 | `RevviewButton` `{button, gesture}` (synthetic) | ignored by the board (same reference, never makes a session) |
 
 `repo` is never renamed by other events, so a hook fired from a subdirectory keeps the repo name. On `Stop`
-(and `StopFailure`/idle) tool, file, command, output and outputLines are kept on purpose: at `done` the driver can still
+(and `StopFailure`/idle; `boardView` hides them under a failed turn) tool, file, command, output and outputLines are kept on purpose: at `done` the driver can still
 see the last command and its result (e.g. "2 passed"). Fields persist through `done`/`waiting` until the next
 `UserPromptSubmit` resets them; the renderer decides what to show per state. Activity keeps updating under the
 offline/locked overlays and shows again when they clear.
@@ -186,7 +186,7 @@ then review the diff of the expected files.
 
 ## Payload assumptions not covered by a recording
 
-Recorded (Claude Code 2.1.330, `fixtures/sessions/`): subagent `agent_id` on PreToolUse/PermissionRequest/
+Recorded (Claude Code 2.1.330, `fixtures/sessions/`): `StopFailure` (`error`, `last_assistant_message`; `fixtures/sessions/hook-wiring/events-stop-failure*.jsonl`), subagent `agent_id` on PreToolUse/PermissionRequest/
 PostToolUse, no `tool_use_id` on PermissionRequest, async subagents with `Stop.background_tasks`, the injected
 `<task-notification>` prompt, an Esc'd prompt sending nothing, `SessionStart` `compact` mid-turn (auto, forced
 with `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=1`) and after `/compact`. **Assumed, not recorded** (shapes from the

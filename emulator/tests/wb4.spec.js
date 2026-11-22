@@ -209,6 +209,27 @@ test('offline-denied: OFFLINE keeps "Denied: Edit" next to Claude: ... and the n
   await shot(page, 'wb4-offline-denied');
 });
 
+test('failed-turn: WAITING FOR ME says "Turn failed: server error" and shows the error message (QA r3-05)', async ({ openView, page }, testInfo) => {
+  await openView(wb4State('failed-turn'));
+  await expect(page.locator('#state-word')).toHaveText('WAITING FOR ME');
+  await expect(page.locator('#tool')).toHaveText('Turn failed: server error');
+  await expect(page.locator('#tool')).toHaveAttribute('data-failed', '1');
+  await expect(page.locator('#cmdbox')).toBeHidden();
+  await expect(page.locator('#out3')).toContainText('API Error: Connection refused');
+  await common(page, 'failed-turn', testInfo);
+  await shot(page, 'wb4-failed-turn');
+});
+
+test('offline-failed: OFFLINE keeps "Turn failed: server error" on the tool row (QA r3-05)', async ({ openView, page }, testInfo) => {
+  await openView(wb4State('offline-failed'));
+  await expect(page.locator('#state-word')).toHaveText('OFFLINE');
+  await expect(page.locator('#tool')).toHaveText('Turn failed: server error');
+  await expect(page.locator('#tool')).toHaveAttribute('data-failed', '1');
+  await expect(page.locator('#note2')).toHaveText('No network: voice input will not work');
+  await common(page, 'offline-failed', testInfo);
+  await shot(page, 'wb4-offline-failed');
+});
+
 // ---- worst band ----
 for (const [id, file] of [['worst-band', 'wb4-worst-band'], ['worst-band-permission', 'wb4-worst-band-permission']]) {
   test(`${id}: hint, mic, position and NO BUTTONS tag do not overlap or leave the band`, async ({ openView, page }, testInfo) => {

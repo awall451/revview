@@ -17,6 +17,7 @@
       "command": null,
       "output": null,
       "outputLines": [],
+      "failed": null,
       "others": 0,
       "diffIncomplete": false,
       "buttons": "unknown",
@@ -46,6 +47,7 @@
       "command": null,
       "output": null,
       "outputLines": [],
+      "failed": null,
       "others": 0,
       "diffIncomplete": false,
       "buttons": "unknown",
@@ -75,6 +77,7 @@
       "command": "rm -f /tmp/revrec/repo/old.log && echo removed",
       "output": null,
       "outputLines": [],
+      "failed": null,
       "others": 0,
       "diffIncomplete": false,
       "buttons": "unknown",
@@ -106,6 +109,7 @@
       "outputLines": [
         "removed"
       ],
+      "failed": null,
       "others": 0,
       "diffIncomplete": false,
       "buttons": "unknown",
@@ -137,6 +141,7 @@
       "outputLines": [
         "removed"
       ],
+      "failed": null,
       "others": 0,
       "diffIncomplete": false,
       "buttons": "unknown",
@@ -168,6 +173,7 @@
       "outputLines": [
         "removed"
       ],
+      "failed": null,
       "others": 0,
       "diffIncomplete": false,
       "buttons": "unknown",
@@ -199,6 +205,7 @@
       "outputLines": [
         "removed"
       ],
+      "failed": null,
       "others": 0,
       "diffIncomplete": false,
       "buttons": "unknown",
@@ -228,6 +235,7 @@
       "command": null,
       "output": null,
       "outputLines": [],
+      "failed": null,
       "others": 0,
       "diffIncomplete": false,
       "buttons": "unknown",

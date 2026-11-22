@@ -57,6 +57,12 @@ function editAnswered(id, decision, ...after) {
   return [...asking, { hook_event_name: 'RevviewAnswered', session_id: id, agent: p.agent, since: p.since, decision }, ...after.map((e) => ({ ...e, session_id: id }))];
 }
 
+// A failed turn (QA r3-05): the REAL interactive recording of a StopFailure (API unreachable), up to the StopFailure.
+function failedTurn(id, repo = 'revview') {
+  return [...upTo(recording('hook-wiring/events-stop-failure-interactive'), is('StopFailure')).map((ev) => ({ ...ev, session_id: id, cwd: `/home/user/${repo}` })),
+    { hook_event_name: 'RevviewContext', session_id: id, cwd: `/home/user/${repo}`, branch: 'main' }];
+}
+
 const owned = (...ids) => ({ hook_event_name: 'RevviewOwned', ids });
 const select = (id) => ({ hook_event_name: 'RevviewSelect', session_id: id });
 const nav = (...buttons) => buttons.map((button) => ({ hook_event_name: 'RevviewNav', button, gesture: 'tap' }));
@@ -123,6 +129,9 @@ export const RECIPES = Object.freeze({
   'denied-edit-after-bash': [...editAnswered('s1', 'deny', { hook_event_name: 'Stop' }), owned('s1'), select('s1')],
   // r5-02: the same answer given while OFFLINE keeps its row
   'offline-denied': [...editAnswered('s1', 'deny'), owned('s1'), select('s1'), { hook_event_name: 'RevviewNetwork', online: false }],
+  // QA r3-05: the turn ended with an API error: WAITING FOR ME that says "Turn failed: server error" and the message
+  'failed-turn': [...failedTurn('s1'), owned('s1'), select('s1')],
+  'offline-failed': [...failedTurn('s1'), owned('s1'), select('s1'), { hook_event_name: 'RevviewNetwork', online: false }],
   // revview allowed the prompt; the command is running
   allowed: [...answered('s1', 'allow'), owned('s1'), select('s1')],
   // an owned session after a restart: no event yet, selected, UNKNOWN with its note

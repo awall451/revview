@@ -194,6 +194,11 @@ export function render(input) {
   let outRows = 0;
 
   delete el.tool.dataset.answer;
+  delete el.tool.dataset.failed;
+  // a turn that ended with an API error (StopFailure): said in words, not by colour alone ("Turn failed: rate limit")
+  const failedWord = (view === 'waiting' || (view === 'offline' && s.activity === 'waiting'))
+    && s.failed && typeof s.failed === 'object' && typeof s.failed.error === 'string' && s.failed.error !== ''
+    ? `Turn failed: ${s.failed.error.replaceAll('_', ' ')}` : '';
   // revview's own answer to the shown call, in words (not by colour alone): "Denied: Bash" / "Allowed: Bash"
   const answerWord = (tool) => (tool !== '' && (s.answered === 'deny' || s.answered === 'allow') ? `${s.answered === 'deny' ? 'Denied' : 'Allowed'}: ${tool}` : '');
   if (note) {
@@ -206,6 +211,9 @@ export function render(input) {
       if (word !== '') {
         set(el.tool, word);
         el.tool.dataset.answer = s.answered;
+      } else if (failedWord !== '') {
+        set(el.tool, failedWord);
+        el.tool.dataset.failed = '1';
       }
       set(el.note1, activity);
       set(el.note2, 'No network: voice input will not work');
@@ -216,6 +224,10 @@ export function render(input) {
     if (answerWord(str(s.tool)) !== '') {
       set(el.tool, answerWord(str(s.tool)));
       el.tool.dataset.answer = s.answered;
+    }
+    if (failedWord !== '') {
+      set(el.tool, failedWord);
+      el.tool.dataset.failed = '1';
     }
     file = str(s.file);
     el.cmdbox.hidden = !str(s.command);

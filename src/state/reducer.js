@@ -19,6 +19,7 @@ export function initialState() {
     command: null,
     output: null,
     outputLines: [],
+    failed: null,
   };
 }
 
@@ -79,6 +80,15 @@ function subagentsRunning(event) {
     && event.background_tasks.some((t) => isObj(t) && t.type === 'subagent' && t.status === 'running');
 }
 
+const ERROR_WORD = /^[a-z_]{1,40}$/;
+
+function failedOf(event) {
+  const error = typeof event.error === 'string' && ERROR_WORD.test(event.error) ? event.error : 'unknown';
+  const text = typeof event.last_assistant_message === 'string'
+    ? event.last_assistant_message.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim().slice(0, 200).trim() : '';
+  return { error, message: text === '' ? null : text };
+}
+
 // Returns a patch (object) to merge into the state, or null to ignore the event.
 function patchFor(event) {
   switch (event.hook_event_name) {
@@ -124,7 +134,9 @@ function patchFor(event) {
     case 'Stop':
       return { activity: subagentsRunning(event) ? 'working' : 'done' };
     case 'StopFailure':
-      return { activity: 'waiting' };
+      // the turn ended with an API error: the driver is waited for (the terminal says "Resend your message"), and
+      // `failed` says the work did not finish. Built from the recorded payload only (fixtures/sessions/hook-wiring).
+      return { activity: 'waiting', failed: failedOf(event) };
     default:
       return null;
   }
@@ -141,7 +153,7 @@ function syntheticPatch(event) {
       return 'repo' in patch || 'branch' in patch ? patch : null;
     }
     case 'RevviewStarting':
-      return { activity: 'starting', ...TURN_RESET };
+      return { activity: 'starting', failed: null, ...TURN_RESET };
     case 'RevviewNetwork':
       return typeof event.online === 'boolean' ? { offline: !event.online } : null;
     case 'RevviewDataLock':
@@ -150,6 +162,8 @@ function syntheticPatch(event) {
       return null;
   }
 }
+
+const sameFailed = (a, b) => (a === null || b === null || a === undefined || b === undefined ? (a ?? null) === (b ?? null) : a.error === b.error && a.message === b.message);
 
 function isValidState(s) {
   return isObj(s) && typeof s.activity === 'string' && isObj(s.diff);
@@ -163,6 +177,9 @@ export function reduce(state, event) {
   if (patch === null) {
     patch = patchFor(event);
     if (patch === null) return base;
+    // any event that changes the turn ends a failed turn; idle_prompt (Claude Code still idle ~60 s later) does not
+    const idle = event.hook_event_name === 'Notification' && event.notification_type === 'idle_prompt';
+    if (!('failed' in patch) && !idle) patch.failed = null;
     // Only SessionStart sets repo; other events fill it in when still unknown.
     const repo = repoFromCwd(event.cwd);
     if (repo !== null && (event.hook_event_name === 'SessionStart' || base.repo === null)) patch.repo = repo;
@@ -178,7 +195,7 @@ export function reduce(state, event) {
 
   const changed = Object.keys(next).some((k) => (k === 'diff'
     ? next.diff.added !== base.diff.added || next.diff.removed !== base.diff.removed
-    : next[k] !== base[k]));
+    : k === 'failed' ? !sameFailed(next.failed, base.failed) : next[k] !== base[k]));
   return changed ? next : base;
 }
 

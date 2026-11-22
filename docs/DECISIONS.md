@@ -964,3 +964,30 @@ Code: `src/state/board.js`, `tests/unit/board-hardening.test.js`, `tests/unit/sp
 - **Install on the Pi**: as the user that runs the Claude sessions (stage 4 still has to decide that user, see
   `pi/README.md`). One settings file only: the same hook installed twice (user and project settings) would post every
   event twice.
+
+## 2026-11-22: failed turn (StopFailure, QA r3-05)
+
+QA r3-05: after an API error the bar showed a plain WAITING FOR ME, like a turn that ended well. Recorded now (Claude Code
+2.1.330, `fixtures/sessions/hook-wiring/events-stop-failure*.jsonl`): `StopFailure` with `error: "server_error"` and
+`last_assistant_message` ("API Error: Connection refused ..."); the terminal says "Resend your message to try again".
+
+- **No new state word and no new shape.** The session really waits for the driver, so the state stays `waiting`
+  (WAITING FOR ME); the body says the turn failed. A new word would be a state the events cannot prove apart from
+  the recorded ones, and the driver's action is the same (speak again).
+- **Reducer:** `StopFailure` sets `activity: waiting` and `failed: {error, message}`, built only from the payload:
+  `error` only if it matches `/^[a-z_]{1,40}$/` (else `unknown`), `message` from `last_assistant_message` (control
+  characters removed, trimmed, 200 chars, `null` if absent). Every other event that changes the state clears `failed`
+  (a driver prompt, tool events, `Stop`, `SessionStart` not compact, `RevviewStarting`); events that leave the state
+  untouched keep it. `RevviewNetwork`/`RevviewDataLock`/`RevviewContext` do not clear it, nor does the
+  `idle_prompt` Notification (Claude Code is still idle about 60 s later; nothing was resent). Tool, file, command and diff
+  stay in the state as before.
+- **boardView:** flat key `failed` (`null` or `{error, message}`; present in every view, also with no session). While
+  failed with nothing pending and no answered request, tool/file/command are null and `output`/`outputLines` are the
+  message, so the old command's output does not sit under it.
+- **View:** on `waiting` (and on `offline` over a waiting turn, on the row the Denied/Allowed word uses) the tool row reads
+  "Turn failed: <error with _ as space>" (e.g. "Turn failed: rate limit"), bold and white with `data-failed="1"`
+  (words, not colour alone); the message shows in the output rows and is cut to fit.
+- Looks: `failed-turn` and `offline-failed` in `emulator/wb4/recipes.js`, made from the real interactive recording
+  (`out/shots/wb4-failed-turn.png`, `wb4-offline-failed.png`).
+- Not changed: headless `claude -p` still loses the StopFailure post (the process exits first); the car runs
+  interactive claude.

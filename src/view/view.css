@@ -224,3 +224,4 @@ span:empty { display: none; }
 
 /* "Denied: Bash" / "Allowed: Bash" on the tool row: revview's own answer, said in words */
 #tool[data-answer] { font-weight: 700; color: #fff; }
+#tool[data-failed] { font-weight: 700; color: #fff; }

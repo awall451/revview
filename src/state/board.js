@@ -712,6 +712,7 @@ export function boardView(board) {
       command: null,
       output: null,
       outputLines: [],
+      failed: null,
       others: 0,
       diffIncomplete: false,
       buttons,
@@ -724,6 +725,8 @@ export function boardView(board) {
   const ans = ask === null && shown.answer !== undefined ? shown.answer : null;
   const ownOutput = ans === null || (ans.tool === 'Bash' && ans.command !== null && s.command === ans.command);
   const activity = act(shown);
+  // a failed turn (StopFailure, QA r3-05): the old call's tool, command and output do not sit under the message
+  const failed = ask === null && ans === null && s.failed ? s.failed : null;
   const repo = s.repo ?? b.context.repo;
   // the board's branch belongs to the board's repo only
   const branch = s.branch ?? (b.context.repo !== null && b.context.repo === repo ? b.context.branch : null);
@@ -734,12 +737,13 @@ export function boardView(board) {
     locked: b.locked,
     repo,
     branch,
-    tool: ask !== null ? ask.tool : ans !== null ? ans.tool : s.tool,
-    file: ask !== null ? ask.file : ans !== null ? ans.file : s.file,
+    tool: ask !== null ? ask.tool : ans !== null ? ans.tool : failed !== null ? null : s.tool,
+    file: ask !== null ? ask.file : ans !== null ? ans.file : failed !== null ? null : s.file,
     diff: { added: s.diff.added, removed: s.diff.removed },
-    command: ask !== null ? ask.command : ans !== null ? ans.command : s.command,
-    output: ask !== null ? ask.output : ownOutput ? s.output : null,
-    outputLines: ask !== null ? ask.outputLines : ownOutput ? s.outputLines : [],
+    command: ask !== null ? ask.command : ans !== null ? ans.command : failed !== null ? null : s.command,
+    output: failed !== null ? failed.message : ask !== null ? ask.output : ownOutput ? s.output : null,
+    outputLines: failed !== null ? (failed.message === null ? [] : [failed.message]) : ask !== null ? ask.outputLines : ownOutput ? s.outputLines : [],
+    failed: failed === null ? null : { error: failed.error, message: failed.message },
     others: Object.keys(b.sessions).filter((k) => k !== '').length - (shownKey === '' ? 0 : 1),
     diffIncomplete: shown.dropped,
     buttons,

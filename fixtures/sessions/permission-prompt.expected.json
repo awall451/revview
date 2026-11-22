@@ -17,6 +17,7 @@
       "command": null,
       "output": null,
       "outputLines": [],
+      "failed": null,
       "others": 0,
       "diffIncomplete": false,
       "buttons": "unknown",
@@ -46,6 +47,7 @@
       "command": null,
       "output": null,
       "outputLines": [],
+      "failed": null,
       "others": 0,
       "diffIncomplete": false,
       "buttons": "unknown",
@@ -75,6 +77,7 @@
       "command": "python3 -c \"print('ok')\"",
       "output": null,
       "outputLines": [],
+      "failed": null,
       "others": 0,
       "diffIncomplete": false,
       "buttons": "unknown",
@@ -104,6 +107,7 @@
       "command": "python3 -c \"print('ok')\"",
       "output": null,
       "outputLines": [],
+      "failed": null,
       "others": 0,
       "diffIncomplete": false,
       "buttons": "unknown",
@@ -133,6 +137,7 @@
       "command": "python3 -c \"print('ok')\"",
       "output": null,
       "outputLines": [],
+      "failed": null,
       "others": 0,
       "diffIncomplete": false,
       "buttons": "unknown",
@@ -164,6 +169,7 @@
       "outputLines": [
         "ok"
       ],
+      "failed": null,
       "others": 0,
       "diffIncomplete": false,
       "buttons": "unknown",
@@ -195,6 +201,7 @@
       "outputLines": [
         "ok"
       ],
+      "failed": null,
       "others": 0,
       "diffIncomplete": false,
       "buttons": "unknown",
@@ -226,6 +233,7 @@
       "outputLines": [
         "ok"
       ],
+      "failed": null,
       "others": 0,
       "diffIncomplete": false,
       "buttons": "unknown",
@@ -257,6 +265,7 @@
       "outputLines": [
         "ok"
       ],
+      "failed": null,
       "others": 0,
       "diffIncomplete": false,
       "buttons": "unknown",
@@ -286,6 +295,7 @@
       "command": null,
       "output": null,
       "outputLines": [],
+      "failed": null,
       "others": 0,
       "diffIncomplete": false,
       "buttons": "unknown",

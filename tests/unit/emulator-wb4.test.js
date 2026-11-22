@@ -6,7 +6,7 @@ import { WB4_IDS, RECIPES, wb4State } from '../../emulator/wb4/recipes.js';
 // each recipe really produces the fields its look is meant to show.
 
 test('every look has a recipe and a state, and the state carries the new keys', () => {
-  assert.equal(WB4_IDS.length, 21);
+  assert.equal(WB4_IDS.length, 23);
   for (const id of WB4_IDS) {
     const s = wb4State(id);
     for (const k of ['voice', 'position', 'elsewhere', 'nav']) assert.ok(k in s, `${id} has ${k}`);
@@ -98,4 +98,16 @@ test('quiet, start-failed note, list-not-owned, offline-mic', () => {
   assert.equal(o.view, 'offline');
   assert.equal(o.voice, 'here');
   assert.equal(o.offline, true);
+});
+
+test('failed-turn and offline-failed: the real StopFailure recording, WAITING (or OFFLINE over it) with failed set', () => {
+  const f = wb4State('failed-turn');
+  assert.equal(f.view, 'waiting');
+  assert.equal(f.failed.error, 'server_error');
+  assert.equal(f.tool, null);
+  assert.match(f.output, /^API Error: Connection refused/);
+  const o = wb4State('offline-failed');
+  assert.equal(o.view, 'offline');
+  assert.equal(o.activity, 'waiting');
+  assert.deepEqual(o.failed, f.failed);
 });
