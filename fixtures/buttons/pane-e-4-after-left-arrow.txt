@@ -1,0 +1,7 @@
+# captured 06:21:44 from tmux pane e
+❯ ✻ btn-two       Running node script that waits 40 seconds                                                                                        28s
+  · btn-one       Running a 60-second Node timer                                                                                                   29s
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ describe a task for a new session
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  enter to return · space to reply · ctrl+x to remove · ? for shortcuts

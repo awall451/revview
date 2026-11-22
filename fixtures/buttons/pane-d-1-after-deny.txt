@@ -1,0 +1,11 @@
+# captured 06:20:41 from tmux pane c
+     │ Reason: denied by wheel button
+  ⎿  Denied by PermissionRequest hook
+● The command date > out2.txt was denied, so I didn't write out2.txt. I won't retry it. If you want the file created, approve the command or tell me
+  another way to do it.
+✻ Cooked for 3s · done 6:20 AM
+                                                tmux focus-events off · add 'set -g focus-events on' to ~/.tmux.conf and reattach for focus tracking
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts

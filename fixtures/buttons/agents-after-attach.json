@@ -1,0 +1,24 @@
+[
+  {
+    "pid": 496452,
+    "id": "5015e19a",
+    "cwd": "/tmp/rvbtn-repo",
+    "kind": "background",
+    "startedAt": 1795328475907,
+    "sessionId": "5015e19a-26c7-4d94-9133-41c8f8738e22",
+    "name": "btn-one",
+    "status": "busy",
+    "state": "working"
+  },
+  {
+    "pid": 496453,
+    "id": "cba61fff",
+    "cwd": "/tmp/rvbtn-repo",
+    "kind": "background",
+    "startedAt": 1795328476155,
+    "sessionId": "cba61fff-2509-4ec2-9299-94aa22d22fcf",
+    "name": "btn-two",
+    "status": "idle",
+    "state": "working"
+  }
+]

@@ -1,0 +1,9 @@
+# captured 06:19:00 from tmux pane a
+  ⎿  Interrupted · What should Claude do instead?
+❯ say hi
+● Hi! The 40-second wait command was rejected, so I haven't run it. I'm waiting for your next instruction.
+✻ Cogitated for 1s · done 6:18 AM
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts
