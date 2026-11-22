@@ -6,7 +6,7 @@ import { WB4_IDS, RECIPES, wb4State } from '../../emulator/wb4/recipes.js';
 // each recipe really produces the fields its look is meant to show.
 
 test('every look has a recipe and a state, and the state carries the new keys', () => {
-  assert.equal(WB4_IDS.length, 13);
+  assert.equal(WB4_IDS.length, 15);
   for (const id of WB4_IDS) {
     const s = wb4State(id);
     for (const k of ['voice', 'position', 'elsewhere', 'nav']) assert.ok(k in s, `${id} has ${k}`);
@@ -74,4 +74,15 @@ test('worst band: needs the 9+ hint, a prompt elsewhere, not-owned, position 12/
     assert.equal(s.buttons, 'missing');
   }
   assert.equal(wb4State('worst-band-permission').view, 'permission');
+});
+
+test('denied-done and allowed: the answer is in the view, the command is the one answered', () => {
+  const d = wb4State('denied-done');
+  assert.equal(d.view, 'done');
+  assert.equal(d.answered, 'deny');
+  assert.ok(d.command);
+  const a = wb4State('allowed');
+  assert.equal(a.view, 'working');
+  assert.equal(a.answered, 'allow');
+  assert.equal(a.command, d.command);
 });

@@ -220,3 +220,6 @@ span:empty { display: none; }
 #nav .word { flex: none; font-weight: 700; white-space: nowrap; }
 #nav .row-mic { flex: none; width: 1.1em; height: 1.1em; display: block; }
 #nav .mic { width: 100%; height: 100%; display: block; }
+
+/* "Denied: Bash" / "Allowed: Bash" on the tool row: revview's own answer, said in words */
+#tool[data-answer] { font-weight: 700; color: #fff; }

@@ -141,6 +141,19 @@ test('elsewhere: the hint gets the permission triangle and a longer data-full', 
   await expect(page.locator('#others svg')).toHaveCount(0);
 });
 
+// ---- the answer revview gave: said in words on the tool row (QA r4-04) ----
+for (const [id, word, file] of [['denied-done', 'Denied: Bash', 'wb4-denied-done'], ['allowed', 'Allowed: Bash', 'wb4-allowed']]) {
+  test(`${id}: the tool row reads "${word}"`, async ({ openView, page }, testInfo) => {
+    const state = wb4State(id);
+    await openView(state);
+    await expect(page.locator('#tool')).toHaveText(word);
+    await expect(page.locator('#tool')).toHaveAttribute('data-full', word);
+    await expect(page.locator('#command')).not.toHaveText('');
+    await common(page, id, testInfo);
+    await shot(page, file);
+  });
+}
+
 // ---- worst band ----
 for (const [id, file] of [['worst-band', 'wb4-worst-band'], ['worst-band-permission', 'wb4-worst-band-permission']]) {
   test(`${id}: hint, mic, position and NO BUTTONS tag do not overlap or leave the band`, async ({ openView, page }, testInfo) => {

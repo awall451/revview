@@ -335,8 +335,10 @@ function reduceInner(b, event) {
       if (typeof event.since !== 'number' || (event.decision !== 'allow' && event.decision !== 'deny')) return b;
       const kept = live.pending.filter((p) => !(p.since === event.since && p.agent === event.agent));
       if (kept.length === live.pending.length) return b;
+      const gone = live.pending.find((p) => p.since === event.since && p.agent === event.agent);
+      const answer = { decision: event.decision, tool: gone.tool, file: gone.file, command: gone.command };
       const tick = b.tick + 1;
-      return { ...b, tick, sessions: withSession(b.sessions, id, { ...live, pending: kept, touched: tick }) };
+      return { ...b, tick, sessions: withSession(b.sessions, id, { ...live, pending: kept, answer, touched: tick }) };
     }
     case 'RevviewButton': // a gesture is for the server's actions, never for the screen
       return b;
@@ -366,23 +368,23 @@ function reduceInner(b, event) {
         if (!nameOf.has(id)) nameOf.set(id, ok ? n.trim().slice(0, 64) || null : null);
       });
       const owned = [...new Set(ids)];
-      const tick = b.tick + 1;
+      // one tick per placeholder, in owned order, so the list order (born) follows the order revview started them
+      let tick = b.tick;
       let sessions = b.sessions;
       for (const id of Object.keys(b.sessions)) {
         if (b.sessions[id].quiet === true && !owned.includes(id)) sessions = withoutSession(sessions, id);
       }
-      let added = 0;
       for (const id of owned) {
         if (!UUID.test(id) || has(sessions, id) || b.ended.includes(id)) continue;
+        tick += 1;
         sessions = withSession(sessions, id, {
           state: { ...initialState(), repo: nameOf.get(id) ?? null }, open: [], pending: [], pre: [], touched: tick, born: tick, dropped: false, quiet: true,
         });
-        added++;
       }
       const same = b.owned !== null && owned.length === b.owned.length && owned.every((x) => b.owned.includes(x));
       if (same && sessions === b.sessions) return b;
       sessions = capSessions(sessions, null, b.selected ?? b.focus, b.selected, b.want, owned);
-      return { ...b, owned, sessions, tick: added > 0 ? tick : b.tick };
+      return { ...b, owned, sessions, tick };
     }
     case 'RevviewProjects': {
       const paths = event.paths;
@@ -514,11 +516,15 @@ function applyToSession(b, live, id, event) {
   }
 
   // Commits the result; the board is returned as is when nothing changed (an ignored event makes no session).
+  // revview's answer to a prompt (RevviewAnswered) stays until the session's next call, request, start or driver prompt
+  const clears = name === 'PreToolUse' || name === 'PermissionRequest' || name === 'SessionStart' || isDriverPrompt(event)
+    || (name === 'Notification' && PERMISSION_TYPES.has(event.notification_type));
+  const answer = live !== null && live.answer !== undefined && !clears ? live.answer : undefined;
   const commit = (state, open, dropped) => {
     if (state === prev && sameList(open, prevOpen) && (live === null || dropped === live.dropped)
-      && pending === prevPending && pre === prevPre) return b;
+      && pending === prevPending && pre === prevPre && answer === (live === null ? undefined : live.answer)) return b;
     const tick = b.tick + 1;
-    const sessions = capSessions(withSession(b.sessions, id, { state, open, touched: tick, born: live === null ? tick : live.born, dropped, pending, pre }), id, b.selected ?? b.focus, b.selected, b.want, b.owned);
+    const sessions = capSessions(withSession(b.sessions, id, { state, open, touched: tick, born: live === null ? tick : live.born, dropped, pending, pre, ...(answer === undefined ? {} : { answer }) }), id, b.selected ?? b.focus, b.selected, b.want, b.owned);
     const ended = b.ended.includes(id) ? b.ended.filter((x) => x !== id) : b.ended;
     return { ...b, sessions, ended, tick };
   };
@@ -640,6 +646,14 @@ function navView(b) {
   return { kind, row: clampRow(b.nav.row, rows.length), rows };
 }
 
+// 'allow' | 'deny' while the shown session still shows the call revview answered (nothing pending, same tool, file, command).
+function answeredOf(shown) {
+  const a = shown === null ? undefined : shown.answer;
+  if (a === undefined || shown.pending.length > 0) return null;
+  const s = shown.state;
+  return s.tool === a.tool && s.file === a.file && s.command === a.command ? a.decision : null;
+}
+
 // The keys every view state carries besides the shown session's own fields.
 function extrasOf(b, shownKey) {
   const order = orderOf(b);
@@ -653,6 +667,7 @@ function extrasOf(b, shownKey) {
     elsewhere: order.filter((k) => k !== shownKey && b.sessions[k].pending.length > 0).length,
     nav: navView(b),
     note: typeof b.note === 'string' ? b.note : shownKey !== null && b.sessions[shownKey].quiet === true ? 'No events from this session yet' : null,
+    answered: answeredOf(shownKey === null ? null : b.sessions[shownKey]),
   };
 }
 

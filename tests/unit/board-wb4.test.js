@@ -474,3 +474,12 @@ test('capSessions: sessions not owned go before owned ones', () => {
   assert.ok(ids.every((id) => b.sessions[id]), 'all owned kept');
   assert.equal(Object.keys(b.sessions).filter((k) => !ids.includes(k)).length, 2);
 });
+
+test('owned placeholders keep the owned order in the list (born), not the id order', () => {
+  const late = 'ffffffff-0000-4000-8000-000000000001';
+  const early = '00000000-0000-4000-8000-000000000002';
+  const b = run([ev('RevviewOwned', { ids: [late, early], names: ['first', 'second'] })]);
+  assert.deepEqual(sessionOrder(b), [late, early]);
+  const after = run([start(early), start(late)], b);
+  assert.deepEqual(sessionOrder(after), [late, early], 'a first hook event keeps the place');
+});

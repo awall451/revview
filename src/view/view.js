@@ -201,6 +201,13 @@ export function render(input) {
     }
   } else {
     set(el.tool, str(s.tool));
+    delete el.tool.dataset.answer;
+    // revview's own answer to the shown call, in words (not by colour alone): "Denied: Bash" / "Allowed: Bash"
+    if (str(s.tool) !== '' && (s.answered === 'deny' || s.answered === 'allow')) {
+      const full = `${s.answered === 'deny' ? 'Denied' : 'Allowed'}: ${str(s.tool)}`;
+      set(el.tool, full);
+      el.tool.dataset.answer = s.answered;
+    }
     file = str(s.file);
     el.cmdbox.hidden = !str(s.command);
     outRows = outputLines(s).reverse().map((line, i) => set(el[`out${3 - i}`], line)).length;

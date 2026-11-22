@@ -4,7 +4,7 @@
 // RevviewInput) are the ones the server sends. The one exception is worst-band.json: the board holds at most 8 sessions, so
 // `others: 12` and position 12/13 (the worst band) are merged over a real view, like emulator/worst-case/*.json.
 import fs from 'node:fs';
-import { initialBoard, boardView, replayView } from '../../src/state/index.js';
+import { initialBoard, boardView, replayView, reduceBoard, pendingPrompts } from '../../src/state/index.js';
 
 function recording(name) {
   const url = new URL(`../../fixtures/sessions/${name}.jsonl`, import.meta.url);
@@ -38,6 +38,14 @@ function session(id, phase, repo = id, branch = 'main') {
     };
   });
   return repo === '' ? events : [...events, { hook_event_name: 'RevviewContext', session_id: id, cwd: `/home/user/${repo}`, branch }];
+}
+
+// The session's events up to a permission prompt, then revview's answer to it (its `since` is read off the real board).
+function answered(id, decision, ...after) {
+  const asking = session(id, 'permission');
+  const board = asking.reduce((b, ev) => reduceBoard(b, ev), initialBoard());
+  const p = pendingPrompts(board).find((x) => x.session === id);
+  return [...asking, { hook_event_name: 'RevviewAnswered', session_id: id, agent: p.agent, since: p.since, decision }, ...after.map((e) => ({ ...e, session_id: id }))];
 }
 
 const owned = (...ids) => ({ hook_event_name: 'RevviewOwned', ids });
@@ -99,6 +107,10 @@ export const RECIPES = Object.freeze({
   projects: [...three, owned('s1', 's2', 's3'), select('s2'), projects(PROJECTS), ...nav('menu', 'down', 'press', 'down')],
   'new-session': [...three, owned('s1', 's2', 's3'), select('s2'), projects(PROJECTS), ...nav('menu', 'press', 'down')],
   settings: [...three, owned('s1', 's2', 's3'), select('s2'), projects(PROJECTS), ...nav('menu', 'down', 'down', 'press')],
+  // revview denied the prompt and the turn stopped: DONE must say the command was denied
+  'denied-done': [...answered('s1', 'deny', { hook_event_name: 'Stop' }), owned('s1'), select('s1')],
+  // revview allowed the prompt; the command is running
+  allowed: [...answered('s1', 'allow'), owned('s1'), select('s1')],
   'worst-band': worst('working'),
   'worst-band-permission': worst('permission'),
 });
