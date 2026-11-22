@@ -86,3 +86,6 @@ overlap or overflow, inverted row with its bar, scroll marks, the old look witho
 `wb4-mic-position`, `wb4-not-target`, `wb4-no-session`, `wb4-none`, `wb4-elsewhere`, `wb4-list`, `wb4-list-long`
 (8 sessions, scrolled), `wb4-menu`, `wb4-projects`, `wb4-new-session`, `wb4-settings`, `wb4-worst-band`,
 `wb4-worst-band-permission` (all 1280x400 in `out/shots/`).
+
+`tests/wb4-live.spec.js`: the same looks driven by key presses (dev key bridge, `/?devkeys=1`) against a live server with a
+fake session runner (no tmux): switch, list, back, home, New session, list timeout, and the 403 for posted internal events.
