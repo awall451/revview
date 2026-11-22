@@ -125,7 +125,8 @@ Not Claude hook events; the future hook-wiring and boot scripts send them on the
 | `{hook_event_name:"RevviewNetwork", online: boolean}` | `offline` overlay on/off. |
 | `{hook_event_name:"RevviewDataLock", locked: boolean}` | `insert-key` overlay on/off. |
 
-`view` = `insert-key` if locked, else `offline` if offline, else the Claude-derived activity; the activity
+`view` = `insert-key` if locked, else `offline` if offline (except a pending permission since QA round 3, see
+"2026-11-22: QA round 3"), else the Claude-derived activity; the activity
 keeps updating underneath, so when the network returns the view shows the current activity again.
 
 ## 2026-11-21: panel emulator
