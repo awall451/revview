@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
-  checkDevices, renderDataConf, renderDataEnv, renderProfile, renderUnlockUnit, renderKeyRule, checkRootOwned,
+  checkDevices, renderDataConf, renderDataEnv, renderProfile, renderUnlockUnit, renderKeyRule, checkRootOwned, checkTrustedPath,
 } from '../../pi/data.mjs';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
@@ -103,6 +103,36 @@ test('checkRootOwned', () => {
   assert.match(checkRootOwned({ uid: 0, mode: 0o100757 }), /writable/);
 });
 
+const D = (uid = 0, mode = 0o755) => ({ uid, mode: 0o040000 | mode, isSymbolicLink: () => false });
+const F = (uid = 0, mode = 0o755) => ({ uid, mode: 0o100000 | mode, isSymbolicLink: () => false });
+const LINK = { uid: 0, mode: 0o120777, isSymbolicLink: () => true };
+const TP = '/opt/revview/pi/unlock.sh';
+const fakeLstat = (over = {}) => {
+  const m = { '/': D(), '/opt': D(), '/opt/revview': D(), '/opt/revview/pi': D(), [TP]: F(), ...over };
+  return (p) => { if (!m[p]) throw new Error(`no ${p}`); return m[p]; };
+};
+
+test('checkTrustedPath: all root-owned and not writable is fine', () => {
+  assert.deepEqual(checkTrustedPath(TP, fakeLstat()), []);
+});
+test('checkTrustedPath: a user-owned parent, a user-owned pi/, a group-writable dir', () => {
+  assert.match(checkTrustedPath(TP, fakeLstat({ '/opt': D(1000) })).join('\n'), /\/opt\b.*not root/);
+  assert.match(checkTrustedPath(TP, fakeLstat({ '/opt/revview/pi': D(1000) })).join('\n'), /\/opt\/revview\/pi\b.*not root/);
+  assert.match(checkTrustedPath(TP, fakeLstat({ '/opt/revview': D(0, 0o775) })).join('\n'), /\/opt\/revview\b.*writable/);
+});
+test('checkTrustedPath: a symlink component is refused', () => {
+  assert.match(checkTrustedPath(TP, fakeLstat({ '/opt/revview': LINK })).join('\n'), /symlink/);
+  assert.match(checkTrustedPath(TP, fakeLstat({ [TP]: LINK })).join('\n'), /symlink/);
+});
+test('checkTrustedPath: world-writable root-owned sticky dir is accepted, non-sticky refused; files never', () => {
+  assert.deepEqual(checkTrustedPath('/tmp/x/unlock.sh', (p) => ({ '/': D(), '/tmp': D(0, 0o1777), '/tmp/x': D(), '/tmp/x/unlock.sh': F() })[p]), []);
+  assert.match(checkTrustedPath('/tmp/x/unlock.sh', (p) => ({ '/': D(), '/tmp': D(0, 0o777), '/tmp/x': D(), '/tmp/x/unlock.sh': F() })[p]).join('\n'), /\/tmp\b.*writable/);
+  assert.match(checkTrustedPath(TP, fakeLstat({ [TP]: F(0, 0o1777) })).join('\n'), /writable/);
+});
+test('checkTrustedPath: a missing component is an error', () => {
+  assert.match(checkTrustedPath(TP, () => { throw new Error('ENOENT'); }).join('\n'), /cannot check/);
+});
+
 // ---- the CLI ----
 
 const node = (args) => {
@@ -133,7 +163,7 @@ test('write: every file, modes, enable symlink, mount dir', withRoot((r) => {
   assert.equal(res.code, 0, res.err);
   const p = (x) => path.join(r, x);
   for (const f of ['etc/revview/data.conf', 'etc/revview/data.env', 'etc/profile.d/revview-claude.sh',
-    'etc/udev/rules.d/72-revview-key.rules', 'etc/systemd/system/revview-unlock.service']) {
+    'etc/udev/rules.d/72-revview-key.rules', 'etc/systemd/system/revview-unlock.service', 'etc/systemd/system/revview-unlock-stick.service']) {
     assert.ok(fs.statSync(p(f)).isFile(), f);
     assert.equal(fs.statSync(p(f)).mode & 0o777, 0o644, f);
     assert.ok(res.out.split('\n').includes(`wrote ${p(f)}`), f);
@@ -143,9 +173,12 @@ test('write: every file, modes, enable symlink, mount dir', withRoot((r) => {
   const unit = fs.readFileSync(p('etc/systemd/system/revview-unlock.service'), 'utf8');
   assert.match(unit, /^ExecStart=\/bin\/bash \/opt\/revview\/pi\/unlock\.sh$/m);
   assert.doesNotMatch(unit, /@REVVIEW_DIR@/);
+  assert.equal(fs.readFileSync(p('etc/systemd/system/revview-unlock-stick.service'), 'utf8'), unit);
+  assert.ok(!fs.existsSync(p('etc/systemd/system/multi-user.target.wants/revview-unlock-stick.service')), 'the stick unit is not enabled');
   const rule = fs.readFileSync(p('etc/udev/rules.d/72-revview-key.rules'), 'utf8');
   assert.match(rule, /=="1234-ABCD"/);
   assert.doesNotMatch(rule, /@KEY_UUID@/);
+  assert.match(rule, /SYSTEMD_WANTS\}\+="revview-unlock-stick\.service"/);
   assert.match(fs.readFileSync(p('etc/revview/data.conf'), 'utf8'), /^DATA_UUID=0b1f/m);
 }));
 
@@ -156,7 +189,7 @@ test('write: a second run says unchanged for everything and changes nothing', wi
   assert.equal(res.code, 0, res.err);
   assert.deepEqual(snapshot(r), before);
   assert.doesNotMatch(res.out, /^(wrote|would|backup) /m);
-  assert.equal(res.out.trim().split('\n').filter((l) => l.startsWith('unchanged ')).length, 7);
+  assert.equal(res.out.trim().split('\n').filter((l) => l.startsWith('unchanged ')).length, 8);
 }));
 
 test('write: a symlink where a file goes is refused, the rest is written, exit 1', withRoot((r) => {
@@ -174,7 +207,7 @@ test('write: --dry-run writes nothing and says would write', withRoot((r) => {
   const res = node(wargs(r, ['--dry-run']));
   assert.equal(res.code, 0, res.err);
   assert.deepEqual(fs.readdirSync(r), []);
-  assert.equal(res.out.split('\n').filter((l) => l.startsWith('would write ')).length, 7);
+  assert.equal(res.out.split('\n').filter((l) => l.startsWith('would write ')).length, 8);
 }));
 
 test('write: bad arguments exit 2 and write nothing', withRoot((r) => {

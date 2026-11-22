@@ -7,7 +7,7 @@
 //          exit 0 and one JSON line describing both devices; exit 1 and the reasons (one per line) on stderr; 2 bad args
 //        node pi/data.mjs write --root R --user U --home H --dir D --data-uuid X --key-uuid Y [--owner UID:GID] [--dry-run]
 //          One line per file: wrote | unchanged | backup A -> B | skipped P: why | would write (--dry-run).
-//          Exit 1 when a file was refused, or (R is /) when D or D/pi/unlock.sh is not root-owned.
+//          Exit 1 when a file was refused, or (R is /) when any part of the path to D/pi/unlock.sh is a symlink, not root-owned or writable by others.
 // lsblk is the parsed JSON of: lsblk -J -b -o NAME,PATH,TYPE,FSTYPE,UUID,LABEL,SIZE,MOUNTPOINTS,TRAN,RM  (FROM MEMORY)
 import fs from 'node:fs';
 import path from 'node:path';
@@ -165,6 +165,32 @@ export function checkRootOwned({ uid, mode }) {
   return null;
 }
 
+// Every component from / down to absPath must be a real (not symlink) root-owned entry that group/others cannot
+// write; the one exception is a root-owned directory with the sticky bit (like /tmp). lstat is injected.
+// -> [error messages]. Whoever can change any component can swap what root runs.
+export function checkTrustedPath(absPath, lstat) {
+  const errors = [];
+  const parts = path.resolve(absPath).split('/').filter(Boolean);
+  const comps = ['/'];
+  for (let i = 0; i < parts.length; i++) comps.push(`/${parts.slice(0, i + 1).join('/')}`);
+  for (const p of comps) {
+    let st;
+    try {
+      st = lstat(p);
+    } catch (e) {
+      errors.push(`cannot check ${p}: ${e.message}`);
+      continue;
+    }
+    if (st.isSymbolicLink()) { errors.push(`${p} is a symlink`); continue; }
+    const isDir = (st.mode & 0o170000) === 0o040000;
+    if (st.uid !== 0) { errors.push(`${p} is owned by uid ${st.uid}, not root`); continue; }
+    if ((st.mode & 0o022) && !(isDir && (st.mode & 0o1000))) {
+      errors.push(`${p} is writable by group or others (mode ${(st.mode & 0o7777).toString(8)})`);
+    }
+  }
+  return errors;
+}
+
 // ---- CLI ----
 
 const USAGE = 'usage:\n  node pi/data.mjs check --lsblk FILE --mounts FILE --device D --key-device K\n'
@@ -232,20 +258,12 @@ function cmdWrite(argv) {
 
   const realRoot = path.resolve(o.root) === '/';
   if (realRoot) {
-    // The unit runs <dir>/pi/unlock.sh as root: nothing the user can write may be on that path's last two steps.
-    for (const p of [o.dir, path.join(o.dir, 'pi/unlock.sh')]) {
-      let st;
-      try {
-        st = fs.statSync(p);
-      } catch (e) {
-        process.stderr.write(`revview data: cannot check ${p}: ${e.message}\n`);
-        process.exit(1);
-      }
-      const bad = checkRootOwned({ uid: st.uid, mode: st.mode });
-      if (bad) {
-        process.stderr.write(`revview data: ${p} is ${bad}: it is run as root at boot, so the user must not be able to change it; install the repository root-owned (for example in /opt/revview) and run this again\n`);
-        process.exit(1);
-      }
+    // The unit runs <dir>/pi/unlock.sh as root: nothing the user can change may be on the way from / to it.
+    const errs = checkTrustedPath(path.join(o.dir, 'pi/unlock.sh'), (p) => fs.lstatSync(p));
+    if (errs.length) {
+      for (const e of errs) process.stderr.write(`revview data: ${e}\n`);
+      process.stderr.write(`revview data: pi/unlock.sh is run as root at boot, so the user must not be able to change any part of its path; put the repository in a root-owned place such as /opt/revview (sudo chown -R root:root /opt/revview, no write for group or others) and run this again\n`);
+      process.exit(1);
     }
   }
 
@@ -256,6 +274,8 @@ function cmdWrite(argv) {
   w.write(R('/etc/profile.d/revview-claude.sh'), files.profile);
   w.write(R('/etc/udev/rules.d/72-revview-key.rules'), files.rule);
   w.write(R('/etc/systemd/system/revview-unlock.service'), files.unit);
+  // started by the udev rule (not enabled): a start of the boot unit would merge into its running job
+  w.write(R('/etc/systemd/system/revview-unlock-stick.service'), files.unit);
   w.link(R('/etc/systemd/system/multi-user.target.wants/revview-unlock.service'), '/etc/systemd/system/revview-unlock.service');
   const mnt = R(DATA_MOUNT);
   if (w.isLink(mnt)) w.refuse(mnt, 'is a symlink; not used as the mount point');

@@ -118,8 +118,8 @@ data is locked.
 flash may keep the old copy. Sign in again after the set-up (and replace old push keys): `docs/REVOKE.md`.
 
 **4. Find the names.** `lsblk -o NAME,PATH,TYPE,FSTYPE,SIZE,LABEL,TRAN,MOUNTPOINTS` lists them. The data device is a
-partition such as `/dev/sda1` or `/dev/mmcblk0p3`; the key stick is a USB partition (FAT, exFAT or ext4) such as
-`/dev/sdb1`. The script never guesses either. Install the tool if it is missing: `sudo apt install cryptsetup`
+partition such as `/dev/sda1` or `/dev/mmcblk0p3`; the key stick is a USB partition (FAT, exFAT or ext4; FAT or exFAT preferred: an ext4 stick replays its journal
+even when mounted read-only) such as `/dev/sdb1`. The script never guesses either. Install the tool if it is missing: `sudo apt install cryptsetup`
 *(from memory: it may already be there)*.
 
 **5. Dry run, then format.**
@@ -144,6 +144,10 @@ anything was changed. It refuses, in plain words: a device that is not in `lsblk
 partition; a mounted device, or one with something on it; the data device on the same disk as the key stick; a key
 stick that is not on USB, is mounted, has another file system or has no UUID; no confirmation; the read-only root
 being on; and, without `--format`, a device that is not already encrypted.
+
+**SSH login keys move too.** `~/.ssh` goes onto the encrypted partition whole, `authorized_keys` included: while the
+data is locked, logging in to the Pi over SSH with a key does not work (a password login still does, if you allow it).
+Keep a keyboard or password login for the times you boot without the stick.
 
 **6. Reboot with the stick in.** Then `echo $CLAUDE_CONFIG_DIR` in a terminal should print `/home/NAME/.claude`: it
 comes from `/etc/profile.d/revview-claude.sh`, and for the server (and every Claude it starts) from
@@ -178,7 +182,9 @@ makes no sense under the overlay)*. Run this step LAST, after the install, the d
 1. `sudo bash /opt/revview/pi/readonly.sh disable` (round 1: turns the overlay off). Reboot.
 2. `sudo bash /opt/revview/pi/readonly.sh disable` again (round 2: turns the read-only boot partition off).
 3. `sudo apt update && sudo apt full-upgrade`.
-4. `cd /opt/revview && git pull && sudo npm ci` (or however the repository got there).
+4. `sudo git -C /opt/revview pull && cd /opt/revview && sudo npm ci` (or however the repository got there). The
+   repository must stay owned by root and not writable by your user: the unlock runs `pi/unlock.sh` from it as root,
+   and `data-setup.sh` refuses a path your user could change. Never `chown` it to your user.
 5. `claude update`, as the kiosk user, with the data unlocked (the stick in). Claude's own auto-updater is off
    (`DISABLE_AUTOUPDATER=1` in the unit): under the overlay it would write to memory and the update would vanish.
 6. Run `install.sh` again (step 7). It refuses (exit 2, nothing written) under the overlay, and when `/boot/firmware`

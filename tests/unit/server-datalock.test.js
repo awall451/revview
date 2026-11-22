@@ -129,9 +129,28 @@ test('parseArgs: --data-lock, --data-lock DIR, env, bad path', () => {
     process.env.REVVIEW_DATA_MOUNT = 'rel';
     assert.throws(() => parseArgs([]), /data-lock/);
     delete process.env.REVVIEW_DATA_MOUNT;
-    assert.throws(() => parseArgs(['--data-lock', 'rel']), /data-lock/);
+    assert.throws(() => parseArgs(['--data-lock', 'rel']), /unexpected argument rel/); // changed: a non-absolute word is no longer taken as the dir
     assert.throws(() => parseArgs(['--data-lock', '/a b']), /data-lock/);
     assert.throws(() => parseArgs(['--data-lock', '/a;b']), /data-lock/);
+  } finally {
+    if (env === undefined) delete process.env.REVVIEW_DATA_MOUNT; else process.env.REVVIEW_DATA_MOUNT = env;
+  }
+});
+
+test('parseArgs: --data-lock leaves a port alone; --start with a data lock needs --boot', () => {
+  const env = process.env.REVVIEW_DATA_MOUNT;
+  delete process.env.REVVIEW_DATA_MOUNT;
+  try {
+    const a = parseArgs(['--data-lock', '9000']);
+    assert.equal(a.dataLock, '/srv/revview-data');
+    assert.equal(a.port, 9000);
+    assert.throws(() => parseArgs(['--data-lock', '--start', '/tmp']), /--start with a data lock needs --boot/);
+    assert.throws(() => parseArgs(['--data-lock', '/x', '--start', '/tmp']), /needs --boot/);
+    process.env.REVVIEW_DATA_MOUNT = '/mnt/data';
+    assert.throws(() => parseArgs(['--start', '/tmp']), /needs --boot/);
+    assert.deepEqual(parseArgs(['--boot', '--start', '/tmp']).start, ['/tmp']);
+    delete process.env.REVVIEW_DATA_MOUNT;
+    assert.deepEqual(parseArgs(['--start', '/tmp']).start, ['/tmp']);
   } finally {
     if (env === undefined) delete process.env.REVVIEW_DATA_MOUNT; else process.env.REVVIEW_DATA_MOUNT = env;
   }

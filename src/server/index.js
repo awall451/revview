@@ -548,7 +548,7 @@ export function parseArgs(argv) {
     else if (a === '--netmon') out.netmon = true;
     else if (a === '--data-lock') {
       const next = argv[i + 1];
-      if (next !== undefined && !next.startsWith('--')) { out.dataLock = next; i++; } else out.dataLock = DEFAULT_DATA_MOUNT;
+      if (next !== undefined && next.startsWith('/')) { out.dataLock = next; i++; } else out.dataLock = DEFAULT_DATA_MOUNT;
     }
     else if (a === '--start') {
       const next = argv[i + 1];
@@ -578,6 +578,7 @@ export function parseArgs(argv) {
   if (out.boot && out.start.length === 0 && process.env.REVVIEW_START) out.start = [process.env.REVVIEW_START];
   if (out.dataLock === undefined && process.env.REVVIEW_DATA_MOUNT) out.dataLock = process.env.REVVIEW_DATA_MOUNT;
   if (out.dataLock !== undefined && !/^\/[A-Za-z0-9._/-]+$/.test(out.dataLock)) throw new Error(`--data-lock needs an absolute directory (letters, digits, . _ / -), got ${out.dataLock}`);
+  if (out.dataLock !== undefined && out.start.length > 0 && !out.boot) throw new Error('--start with a data lock needs --boot (the key-on session waits for the unlock)');
   if (out.projects === null) out.projects = process.env.REVVIEW_PROJECTS || null;
   // the key exists only when a speech file was named (flag or REVVIEW_SPEECH)
   if (out.speech === undefined && process.env.REVVIEW_SPEECH) out.speech = process.env.REVVIEW_SPEECH;

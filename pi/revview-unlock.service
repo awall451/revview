@@ -1,7 +1,9 @@
 # System unit template: pi/data-setup.sh renders @REVVIEW_DIR@ and installs it as
 # /etc/systemd/system/revview-unlock.service. From memory, UNTESTED on a Pi.
-# Unlocks the data partition with the key stick (pi/unlock.sh). Not RemainAfterExit: the udev rule
-# 72-revview-key.rules starts it again when the stick is plugged in later (a finished oneshot can be restarted).
+# Unlocks the data partition with the key stick (pi/unlock.sh). Not RemainAfterExit. Also installed, rendered
+# the same and NOT enabled, as revview-unlock-stick.service: the udev rule 72-revview-key.rules starts that one
+# when the stick is plugged in, so the start is not merged into this unit's boot job while it is still running.
+# pi/unlock.sh's flock serialises the two.
 [Unit]
 Description=revview: unlock the data partition with the key stick
 After=local-fs.target

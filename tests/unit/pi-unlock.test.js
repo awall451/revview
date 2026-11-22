@@ -306,7 +306,7 @@ test('unit and udev rule templates', () => {
   assert.doesNotMatch(unit, /^RemainAfterExit/m);
   const rule = fs.readFileSync(path.join(ROOT, 'pi/72-revview-key.rules'), 'utf8');
   assert.match(rule, /ENV\{ID_FS_UUID\}=="@KEY_UUID@"/);
-  assert.match(rule, /ENV\{SYSTEMD_WANTS\}\+="revview-unlock\.service"/);
+  assert.match(rule, /ENV\{SYSTEMD_WANTS\}\+="revview-unlock-stick\.service"/); // changed: a second unit, so the start is not merged into the boot job
   const sh = fs.readFileSync(UNLOCK, 'utf8');
   for (const c of ['/etc/revview/data.conf', 'revview-data', '/srv/revview-data', '/run/revview-key',
     'http://127.0.0.1:8138/event']) assert.ok(sh.includes(c), c);

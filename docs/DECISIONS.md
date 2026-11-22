@@ -1281,3 +1281,24 @@ documentation reachable from the VM, no Pi): every such step is a bench item, `u
 - Not verified anywhere: that util-linux `mount` records `/dev/mapper/revview-data` (and not `/dev/dm-0`) as the
   source in `/proc/self/mountinfo`. If it shows `dm-N` on the Pi, the bar stays INSERT KEY although the data is
   mounted (bench B-items say what to look at); the fix would be to accept the mapper's major:minor too.
+
+### Review fixes (stage 4B)
+
+Opus review: changes needed, 1 blocking, 8 smaller. Fixed:
+- **Blocking: the path to `pi/unlock.sh` must be trusted.** The unlock unit runs `<repo>/pi/unlock.sh` as root, so a
+  user-owned parent directory or `pi/` would let the kiosk user swap in their own script and become root. `data.mjs
+  write` (and so `data-setup.sh`, before anything destructive) now checks EVERY component from `/` to
+  `pi/unlock.sh` (`checkTrustedPath`): no symlink, owned by root, not group/other writable (a root-owned sticky
+  directory excepted). README "Updating" now pulls with `sudo git -C` and says never to chown the repository.
+- **Boot race:** a stick event during the boot run of `revview-unlock.service` would merge into the running job and
+  leave the data locked. The udev rule now starts a second unit, `revview-unlock-stick.service` (same script, not
+  enabled); `flock` in `unlock.sh` serialises the two.
+- `--start` with a data lock but without `--boot` is refused (it would start a session before the server, past the
+  lock). `--data-lock` takes the next argument only when it starts with `/`.
+- REVOKE (c): mount the new stick `uid=0,gid=0,umask=077` (a plain FAT mount makes the key readable by every user).
+- Documented: `authorized_keys` moves with `~/.ssh`, so SSH key login does not work while locked; FAT/exFAT sticks
+  preferred (an ext4 stick replays its journal even when mounted read-only).
+- **Kept on purpose: `DISABLE_AUTOUPDATER=1` for every install**, with or without the data set-up. The car cuts power
+  at key-off, so an update in progress can be cut at any time with or without the overlay; Claude Code is updated in
+  the update procedure. The criterion "behaviour stays as today without the data set-up" is about the key-on session,
+  which does stay as today.

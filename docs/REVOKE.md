@@ -43,16 +43,19 @@ power-off.
 2. Remove the lost stick's slot: `sudo cryptsetup luksKillSlot /dev/X N` (N is the slot number). It asks for a
    passphrase of a remaining slot: use the recovery passphrase. *(from memory)*
 3. Make a new stick by hand. `pi/data-setup.sh` without `--format` only rewrites the configuration; it does not
-   make a key. Plug in the new stick (FAT, exFAT or ext4), mount it (say on `/mnt`), then:
+   make a key. Plug in the new stick (FAT or exFAT), and mount it so that only root can read it: `sudo mount -o uid=0,gid=0,umask=077
+   /dev/NEWSTICK /mnt` *(from memory)*. A plain mount makes the files on a FAT stick readable by every user, and
+   `chmod` does nothing on FAT. Then:
 
    ```
    sudo mkdir -p /mnt/revview
    head -c 4096 /dev/urandom | sudo tee /mnt/revview/data.key > /dev/null
-   sudo chmod 600 /mnt/revview/data.key
    sudo cryptsetup luksAddKey /dev/X /mnt/revview/data.key
    ```
 
-   `luksAddKey` asks for the recovery passphrase. *(from memory)* Unmount the stick.
+   `luksAddKey` asks for the recovery passphrase. *(from memory)* Unmount the stick (`sudo umount /mnt`).
+   While the data is locked, SSH login with a key does not work (`~/.ssh` is on the encrypted partition): use the
+   Pi's own keyboard or a password login for step 4.
 4. Record the new stick's UUID. `data-setup.sh` refuses while the read-only root is on and while the data is open,
    so: `sudo bash pi/readonly.sh disable` (both rounds, see `pi/README.md` "Updating"), boot WITHOUT any stick in
    (the data stays locked), then `sudo bash pi/data-setup.sh --user NAME --device /dev/X --key-device /dev/NEWSTICK`

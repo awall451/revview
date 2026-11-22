@@ -1,4 +1,6 @@
 # udev rule template: pi/data-setup.sh renders @KEY_UUID@ (the key stick's file system UUID) and installs it as
 # /etc/udev/rules.d/72-revview-key.rules. From memory, UNTESTED on a Pi.
-# The stick plugged in late (after boot) starts revview-unlock.service, which unlocks the data by itself.
-ACTION=="add", SUBSYSTEM=="block", ENV{ID_FS_UUID}=="@KEY_UUID@", TAG+="systemd", ENV{SYSTEMD_WANTS}+="revview-unlock.service"
+# The stick plugged in late (after boot) starts revview-unlock-stick.service, which unlocks the data by itself.
+# A second unit (same ExecStart, not enabled): starting revview-unlock.service while the boot run is still
+# going would merge into that job and the data would stay locked. pi/unlock.sh's flock serialises the two.
+ACTION=="add", SUBSYSTEM=="block", ENV{ID_FS_UUID}=="@KEY_UUID@", TAG+="systemd", ENV{SYSTEMD_WANTS}+="revview-unlock-stick.service"
