@@ -1,6 +1,9 @@
 /* global navigator, caches */
 // QA round 2026-11-22, view and server polish: issues 03, 08, 09, 10, 11 (view), 12, 13, 14.
 import net from 'node:net';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { test, expect } from './harness.js';
 import { loadFixture } from '../fixtures.js';
 import { startLiveServer } from '../../src/server/index.js';
@@ -22,11 +25,11 @@ async function freePort() {
   });
 }
 
-async function listenOn(port) {
+async function listenOn(port, viewDir) {
   let last;
   for (let i = 0; i < 50; i++) {
     try {
-      return await startLiveServer({ port });
+      return await startLiveServer({ port, viewDir });
     } catch (e) {
       last = e;
       if (e.code !== 'EADDRINUSE') throw e;
@@ -186,6 +189,85 @@ test.describe('08 reload of the live page while the server is down', () => {
       server = await listenOn(port);
       await expect(page.locator('html')).toHaveAttribute('data-link', 'up', { timeout: 10000 });
       await expect(page.locator('body')).not.toHaveAttribute('data-view', 'no-link');
+    } finally {
+      await server.close();
+    }
+  });
+});
+
+// A copy of the view directory whose view.js ends with a version marker, to tell old scripts from new ones.
+function viewCopy(marker) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'revview-view-'));
+  const src = path.resolve('src/view');
+  for (const f of fs.readdirSync(src)) fs.copyFileSync(path.join(src, f), path.join(dir, f));
+  fs.appendFileSync(path.join(dir, 'view.js'), `\nwindow.__viewVersion = '${marker}';\n`);
+  return dir;
+}
+
+async function controlled(page, url) {
+  await page.goto(url);
+  await expect(page.locator('html')).toHaveAttribute('data-link', 'up');
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+    for (let i = 0; i < 50 && !(await caches.keys()).length; i++) await new Promise((r) => setTimeout(r, 100));
+  });
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-link', 'up');
+  expect(await page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+}
+
+test.describe('service worker: fresh scripts and never the live data', () => {
+  test('after the server is back, a reload gets the new script; a page loaded from the cache reloads itself once', async ({ page }) => {
+    test.setTimeout(60000);
+    const port = await freePort();
+    let server = await startLiveServer({ port, viewDir: viewCopy('v1') });
+    try {
+      await controlled(page, `${server.url}/`);
+      expect(await page.evaluate(() => window.__viewVersion)).toBe('v1');
+      await server.close();
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'no-link');
+      await page.waitForTimeout(1500);
+      await page.reload(); // from the cache: still the old script
+      expect(await page.evaluate(() => window.__viewVersion)).toBe('v1');
+      let loads = 0;
+      page.on('load', () => { loads += 1; });
+      server = await listenOn(port, viewCopy('v2')); // same address, new script
+      // no manual reload: the page loaded from the cache reloads itself once the link is up
+      await expect.poll(() => page.evaluate(() => window.__viewVersion), { timeout: 15000 }).toBe('v2');
+      await expect(page.locator('html')).toHaveAttribute('data-link', 'up');
+      await page.waitForTimeout(2500);
+      expect(loads).toBe(1);
+      // a manual reload also gets the new script from the network
+      await page.reload();
+      expect(await page.evaluate(() => window.__viewVersion)).toBe('v2');
+    } finally {
+      await server.close();
+    }
+  });
+
+  test('/state, /events and /event are never answered by the worker', async ({ page }) => {
+    test.setTimeout(40000);
+    const port = await freePort();
+    const server = await startLiveServer({ port });
+    try {
+      await controlled(page, `${server.url}/`);
+      const ask = (url, init) => page.evaluate(async ([u, i]) => {
+        try { return (await fetch(u, i)).status; } catch { return 'network-error'; }
+      }, [url, init]);
+      expect(await ask('/state')).toBe(200);
+      expect(await ask('/event', { method: 'POST', body: '{"hook_event_name":"Stop","session_id":"sw"}' })).toBe(204);
+      // nothing of the live data is in the worker's cache
+      const cached = await page.evaluate(async () => {
+        const out = [];
+        for (const k of await caches.keys()) for (const r of await (await caches.open(k)).keys()) out.push(new URL(r.url).pathname);
+        return out;
+      });
+      expect(cached.filter((p) => /\/(state|events?)$/.test(p))).toEqual([]);
+      await server.close();
+      // with the server gone the same requests fail: a cached answer would still resolve
+      expect(await ask('/state')).toBe('network-error');
+      expect(await ask('/event', { method: 'POST', body: '{}' })).toBe('network-error');
+      expect(await ask('/events')).toBe('network-error');
     } finally {
       await server.close();
     }

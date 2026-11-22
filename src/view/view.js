@@ -234,9 +234,17 @@ function live() {
     delete root.dataset.seq;
     render({ view: 'no-link' });
   };
+  // A page that was loaded while the server was away comes from the service worker's cache and may have old
+  // scripts: it never saw the link up before it went down, so it reloads once when the link first comes up.
+  let everUp = false;
+  let loadedDown = false;
   const connect = () => {
     const es = new EventSource('/events');
-    es.onopen = () => { root.dataset.link = 'up'; };
+    es.onopen = () => {
+      root.dataset.link = 'up';
+      if (loadedDown && !everUp) { everUp = true; location.reload(); return; }
+      everUp = true;
+    };
     es.onmessage = (ev) => {
       let msg;
       try { msg = JSON.parse(ev.data); } catch { return; }
@@ -245,6 +253,7 @@ function live() {
       if (Number.isInteger(msg.seq)) root.dataset.seq = String(msg.seq);
     };
     es.onerror = () => {
+      if (!everUp) loadedDown = true;
       down();
       if (es.readyState === EventSource.CLOSED) {
         es.close();

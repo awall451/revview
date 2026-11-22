@@ -97,6 +97,7 @@ kiosk should therefore always start Chromium on `boot.html` (not on the live URL
 (a fresh profile per boot also clears the worker's cache: then only `boot.html` protects the first load) and use
 `--disable-session-crashed-bubble`. Neither the service worker nor these flags are proven on the Pi
 (BENCH-TEST H8).
+A page loaded from the cache keeps its old scripts until the next reload after the server is back: the live page therefore reloads itself once when its link first comes up after it never saw it up (loaded while the server was away). `/state`, `/events` and `/event` are never answered by the worker (emulator tests).
 
 ## Attributes (for tests)
 

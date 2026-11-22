@@ -421,6 +421,7 @@ Not solved here: a DONE session stays shown over a working one for the
   and its scripts from its cache when the server does not answer. Rejected: a second always-on static server
   (more moving parts), a kiosk-side watchdog (not in this repo yet). Not fixable: the first load of a fresh
   profile. The kiosk must still start on `boot.html`; BENCH-TEST H8 is the proof and is untested.
+  A page loaded from the cache reloads itself once when its link first comes up (fresh scripts); the worker is network first and never answers `/state`, `/events`, `/event`.
 - **First paint (10).** `index.html` contains the NO LINK look itself, so the page never paints an empty band
   before `view.js` runs. (Static fixture pages also start NO LINK for a moment; they are for tests and the
   developer page.)
