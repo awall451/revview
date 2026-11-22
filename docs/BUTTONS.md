@@ -47,6 +47,9 @@ firmware. **[proposal]**
 - Node core cannot call `ioctl`. The grab needs python3-evdev (a Debian package) or a tiny C helper. That is a
   new dependency, so it gets its own DECISIONS entry when phase WB2 is built, not now.
 - The page must not depend on key events. On the Pi the grab keeps keys away from Chromium.
+- **Built in WB2 (2026-11-22), with changes:** the reader runs inside the server, not as a separate service. The
+  grab is a python3 standard-library helper (`src/input/grab.py`), not python3-evdev or C. See DECISIONS "wheel
+  buttons 2" and `src/input/README.md`. Not tried on hardware.
 
 **keyd.** DESIGN.md names keyd for the single button. keyd remaps one key to another key for whatever window has
 focus. With several sessions, and with actions that are not keys (hook answers, menu, speech), that is not

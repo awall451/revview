@@ -523,3 +523,49 @@ Recorded facts (Claude Code 2.1.330, `fixtures/buttons/`):
 - Two `claude --bg` sessions are listed by `claude agents --json` (`agents.json`). `claude attach` in a tmux
   pane takes keys for that session only (`pane-e-3-attached-after-esc.txt`); Left opens the agent list
   (`pane-e-4-after-left-arrow.txt`). No command to send input to a `--bg` session was found in the binary.
+
+## 2026-11-22: wheel buttons 2, the input layer (built, not tried on hardware)
+
+The owner approved the full wheel-buttons scope (inbox 20261122T064434Z-o-942fed: "build as phased in
+docs/BUTTONS.md section 8"). WB2 is built: key events in, named gestures out (`src/input/README.md`). Nothing acts
+on Claude Code yet (WB3).
+
+- **The grab: a python3 helper using only its standard library, no new dependency.** Node core has no
+  `ioctl`. `src/input/grab.py` opens the node, calls `fcntl.ioctl(fd, EVIOCGRAB, 1)` (0x40044590, the same on arm64
+  and x86-64), and copies the raw bytes to stdout; Node parses them. Why not the others:
+  - python3-evdev (BUTTONS.md suggested it) is a Debian package the team cannot install, and the stdlib `fcntl` call
+    is all it would be used for.
+  - A tiny C helper needs a compiler and a build step on the Pi and in the check.
+  - A native npm addon needs node-gyp and a compiler, and it would be a new pinned dependency.
+  python3 ships with Raspberry Pi OS. Its version is not pinned by the repo, but the helper uses only `os`,
+  `fcntl`, `signal`, `errno` and `sys`, which have been stable for years. If python3 is missing on the image,
+  the Pi image scripts (charter stage 4) must install it (bench W2). The grab ends when the helper's fd
+  closes, so a dead helper never leaves the keyboard grabbed. The grab succeeding is not proven here: only the
+  failure paths ran (ENOTTY on a regular file, a missing path).
+- **The reader runs inside the server, not as a separate service** (`--input [config]`). This supersedes the
+  "small input service" and `RevviewInput` HTTP proposal in BUTTONS.md section 1. Presence is then known
+  exactly: no heartbeat, no lost-service case. The server is the process that starts early anyway (the kiosk
+  waits for it). Gestures from the device, from the dev bridge and from a POSTed `RevviewButton` event all
+  end up in one log (`GET /buttons`). WB3 acts on them through the `onGesture` seam.
+- **The device is found by name/vendor/product in `/proc/bus/input/devices`** (or a fixed `path`), taking the first
+  `kbd` node whose `B: KEY=` bits include a bound key, so a dongle's consumer-control node is skipped. An
+  explicit `path` that is missing is "not found". It never falls back to "any keyboard", which would grab the
+  console's. Retries every 1 s and re-opens by itself.
+- **struct input_event = 24 bytes** (64-bit userspace, Pi OS Trixie arm64 per DESIGN.md). The 16-byte 32-bit
+  layout is parsed only on request. Times are arrival times on Node's monotonic clock, not kernel timestamps.
+- **Gesture rules** as BUTTONS.md section 1: a button without hold or long hold fires on press. Otherwise a tap
+  is a release before 400 ms, a hold fires at 400 ms and a long hold at 1000 ms. A release after 400 ms gives
+  no tap, so cancel released between 400 and 1000 ms does nothing. Repeats (value 2) are ignored, and so is a
+  press within 30 ms of that key's release. A lost device or `SYN_DROPPED` resets the detector: a key that
+  was still down gives no gesture. The timings can be set in the config.
+- **Key map in `config/buttons.json`**, validated loudly (the file and field are named; unknown fields are
+  errors). The server exits 2 on a bad config. Only F1-F24 plus Ctrl/Shift/Alt/Meta combos are accepted.
+- **NO BUTTONS** is a quiet outlined tag at the right end of the band, at the detail size (measured 3.41 mm
+  cap height). It is not a takeover, and it is hidden during STARTING and NO LINK. `boardView` gained the key
+  `buttons` (`unknown`/`present`/`missing`), so every expected file gained `"buttons": "unknown"`.
+- **Dev bridge** for the emulator: `POST /dev/key` exists only when the server is started with `--dev-bridge`
+  (`npm run start:dev`; `devBridge: true` in tests). Without it the route does not exist. It keeps the 127.0.0.1
+  bind and the Origin/Host checks. The page sends keys only at `/?devkeys=1`; otherwise it has no key listener.
+  The bridge feeds the same detector as the device. The Pi's server unit must never pass `--dev-bridge`.
+- Presses during `starting` are logged as `dropped` (WB3 must not act on them). The "bar briefly marks a
+  dropped press" part of BUTTONS.md is not built.
