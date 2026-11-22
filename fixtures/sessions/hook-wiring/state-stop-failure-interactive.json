@@ -1,0 +1,29 @@
+{
+  "seq": 5,
+  "state": {
+    "view": "waiting",
+    "activity": "waiting",
+    "offline": false,
+    "locked": false,
+    "repo": "repo",
+    "branch": "main",
+    "tool": null,
+    "file": null,
+    "diff": {
+      "added": 0,
+      "removed": 0
+    },
+    "command": null,
+    "output": null,
+    "outputLines": [],
+    "others": 0,
+    "diffIncomplete": false,
+    "buttons": "unknown",
+    "voice": null,
+    "position": null,
+    "elsewhere": 0,
+    "nav": null,
+    "note": null,
+    "answered": null
+  }
+}

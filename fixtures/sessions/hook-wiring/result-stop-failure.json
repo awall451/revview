@@ -1,0 +1,13 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": true,
+  "duration_ms": 231,
+  "num_turns": 1,
+  "result": "API Error: Connection refused — a firewall or proxy may be blocking it (ECONNREFUSED)",
+  "session_id": "0157a028-d18a-4cf9-afd1-65a6bca205ee",
+  "total_cost_usd": 0,
+  "permission_denials": [],
+  "exit_code": 1,
+  "wall_seconds": 3.8
+}

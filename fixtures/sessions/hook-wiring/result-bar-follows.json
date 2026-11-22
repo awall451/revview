@@ -1,0 +1,13 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "duration_ms": 5613,
+  "num_turns": 5,
+  "result": "Stopped after step 4. The `ls` failed with exit code 2 (\"No such file or directory\"), which was expected.",
+  "session_id": "e4c73224-381f-4f0e-9222-fb736d9a093c",
+  "total_cost_usd": 0.0025703600000000003,
+  "permission_denials": [],
+  "exit_code": 0,
+  "wall_seconds": 9.4
+}
