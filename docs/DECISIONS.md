@@ -380,7 +380,7 @@ Decisions:
 - **01 and 04, which session is shown**: only a pending permission pre-empts. Otherwise the bar shows the
   **focus**: the session the driver last spoke to (a driver `UserPromptSubmit`). It is sticky: events of
   other sessions never move it, so two working sessions do not alternate. It moves only when (a) another
-  session asks for permission (the first one asked wins; answering it leaves the focus there), (b) the driver
+  session asks for permission (the first one asked wins; when the last prompt is answered the bar goes back to `spokenTo`, the session the driver last spoke to with a real prompt, if it is live; injected prompts do not set it), (b) the driver
   speaks to another session, (c) the focus ends or is dropped (then: working > done > waiting > rest, most
   recent), or (d) the focus is idle (WAITING via `idle_prompt` or SessionStart, unknown, starting) while
   another session works (then the most recently active working one). No timer: a DONE focus stays until
@@ -393,13 +393,21 @@ Decisions:
 - **07**: a `SessionEnd` of a session the board never saw only remembers its id; the phase stays (UNKNOWN or
   STARTING stay). CLAUDE EXITED needs the end of the last session the board knew.
 
-Not solved here: after an Esc'd main-thread prompt the bar stays at NEEDS PERMISSION until the driver's next
-prompt (Claude Code sends no hook for the rejection); a DONE session stays shown over a working one for the
+- **Esc on a main-thread prompt.** Claude Code sends no hook for the rejection, but its `idle_prompt` timer
+  (2.1.330 binary) fires only when the UI is not loading and `isDialogOnScreen()` is false, so it cannot fire
+  while a permission dialog is open. Hence `idle_prompt` clears the session's main-thread prompts (WAITING after
+  about 60 s); a subagent's prompt stays (background agents also hold the timer back). The recordings do not
+  contain an idle_prompt during a dialog (permission-interrupted has none; permission-prompt's comes after the
+  Stop). A Stop with no `background_tasks` list means no subagent runs, so subagent prompts clear too.
+- **Prompt to call matching.** Open PreToolUse calls are kept per agent; a PermissionRequest takes a call's id
+  only when exactly one open call has its tool (and input, when carried); otherwise the id stays empty.
+
+Not solved here: a DONE session stays shown over a working one for the
 ~60 s until its `idle_prompt`; the bar still does not say which repo a `+N` session is in (issue 03, view).
 
 - **Id-less lost event (11, state half).** The lost Edit/Write can only come from a session in a turn, so the
-  `≥` mark goes to the live sessions in a turn (working, asking, a tool open); if none is, to the shown session
-  (a late result after Stop); never to all. Claude Code writes `session_id` first, so this is a fallback for a
+  `≥` mark goes to EVERY live session in a turn (working, asking, a tool open); if none is, to the shown session
+  only (a late result after Stop); never to sessions that are not in a turn. Claude Code writes `session_id` first, so this is a fallback for a
   garbled prefix; a wrong guess shows one session exact when it was not, which the wide rule would have avoided
   at the cost of marking sessions that lost nothing.
 

@@ -26,7 +26,7 @@ test('fresh board is unknown; RevviewStarting -> starting and clears sessions; S
 test('initialBoard shape', () => {
   assert.deepEqual(initialBoard(), {
     phase: 'unknown', offline: false, locked: false, context: { repo: null, branch: null },
-    sessions: {}, ended: [], tick: 0, focus: null,
+    sessions: {}, ended: [], tick: 0, focus: null, spokenTo: null,
   });
 });
 
@@ -299,8 +299,10 @@ test('idle_prompt while a tool is still open (unanswered prompt) does not freeze
   const b = run([ev('SessionStart', A), ev('UserPromptSubmit', A), PRE('t1'),
     ev('Notification', { ...A, notification_type: 'permission_prompt' }),
     ev('Notification', { ...A, notification_type: 'idle_prompt' })]);
-  // QA round 2: the prompt is still open (a pending permission), so the bar says permission, not waiting
-  assert.equal(boardView(b).view, 'permission');
+  // idle_prompt is only sent when no dialog is open (Claude Code 2.1.330: isDialogOnScreen, not loading), so a
+  // main-thread prompt still pending was dismissed with Esc: the bar says waiting again
+  assert.equal(boardView(b).view, 'waiting');
+  assert.deepEqual(b.sessions.A.pending, []);
   assert.equal(boardView(reduceBoard(b, POST('t1'))).view, 'working');
 });
 
@@ -464,9 +466,10 @@ test('QA 02: main Stop keeps a prompt of a subagent still listed as running, cle
   assert.equal(boardView(running).view, 'permission');
   const none = reduceBoard(b, ev('Stop', { ...S('k1', REV), background_tasks: [] }));
   assert.equal(boardView(none).view, 'done');
-  // without a background_tasks list nothing proves the subagent is gone: its prompt stays
+  // without a background_tasks list no subagent runs (as reducer.js): its prompt is cleared too
   const noList = reduceBoard(b, ev('Stop', S('k1', REV)));
-  assert.equal(boardView(noList).view, 'permission');
+  assert.equal(boardView(noList).view, 'done');
+  assert.deepEqual(noList.sessions.k1.pending, []);
 });
 
 test('QA 02: a main-thread prompt is cleared by the next driver prompt, not by a task-notification', () => {
@@ -494,7 +497,7 @@ test('QA 02: a subagent PermissionRequest after the main Stop is not late', () =
   assert.equal(boardView(b).view, 'permission');
 });
 
-test('a permission in session B while A is focus pre-empts; after it is answered focus stays on B', () => {
+test('a permission in session B while A is focus pre-empts; after it is answered the bar returns to A, the one spoken to', () => {
   let b = run([...start('A', REV), ...start('B', OTHER)]);
   b = run([ev('UserPromptSubmit', S('A', REV))], b);
   assert.equal(b.focus, 'A');
@@ -503,8 +506,73 @@ test('a permission in session B while A is focus pre-empts; after it is answered
   assert.equal(boardView(b).view, 'permission');
   assert.equal(boardView(b).repo, 'other-project');
   b = run([ev('PostToolUse', { ...S('B', OTHER), ...BASH, tool_use_id: 'x1' })], b);
-  assert.equal(b.focus, 'B');
+  assert.equal(b.focus, 'A');
   assert.equal(boardView(b).view, 'working');
+});
+
+const ask = (id, cwd, tuid, extra = BASH) => [ev('PreToolUse', { ...S(id, cwd), ...extra, tool_use_id: tuid }), ev('PermissionRequest', { ...S(id, cwd), ...extra })];
+
+test('after a prompt is answered the bar goes back to the session the driver last spoke to', () => {
+  let b = run([ev('SessionStart', S('A', REV)), ev('SessionStart', S('B', OTHER)),
+    ev('UserPromptSubmit', S('A', REV)), ev('UserPromptSubmit', S('B', OTHER))]);
+  assert.equal(b.focus, 'B');
+  b = run(ask('A', REV, 'a1'), b);
+  assert.equal(b.focus, 'A');
+  assert.equal(boardView(b).view, 'permission');
+  b = run([ev('PostToolUse', { ...S('A', REV), ...BASH, tool_use_id: 'a1' }), ev('Stop', S('A', REV))], b);
+  assert.equal(b.focus, 'B');
+  assert.equal(boardView(b).repo, 'other-project');
+  assert.equal(boardView(b).view, 'working');
+});
+
+test('A keeps working after approval: the bar is back on B, and A events do not move it', () => {
+  let b = run([ev('SessionStart', S('A', REV)), ev('SessionStart', S('B', OTHER)),
+    ev('UserPromptSubmit', S('A', REV)), ev('UserPromptSubmit', S('B', OTHER)), ...ask('A', REV, 'a1')]);
+  b = run([ev('PostToolUse', { ...S('A', REV), ...BASH, tool_use_id: 'a1' })], b);
+  assert.equal(b.focus, 'B');
+  b = run([ev('PreToolUse', { ...S('A', REV), tool_name: 'Read', tool_input: {}, tool_use_id: 'a2' })], b);
+  assert.equal(b.focus, 'B');
+});
+
+test('an injected task-notification prompt does not change who the driver spoke to', () => {
+  let b = run([ev('SessionStart', S('A', REV)), ev('SessionStart', S('B', OTHER)),
+    ev('UserPromptSubmit', S('A', REV)), ev('UserPromptSubmit', S('B', OTHER))]);
+  b = run([ev('UserPromptSubmit', { ...S('A', REV), prompt: '<task-notification>\n<task-id>x</task-id>' })], b);
+  assert.equal(b.spokenTo, 'B');
+  b = run(ask('A', REV, 'a1'), b);
+  b = run([ev('PostToolUse', { ...S('A', REV), ...BASH, tool_use_id: 'a1' })], b);
+  assert.equal(b.focus, 'B');
+});
+
+test('a spoken-to session that ended is not restored', () => {
+  let b = run([ev('SessionStart', S('A', REV)), ev('SessionStart', S('B', OTHER)),
+    ev('UserPromptSubmit', S('A', REV)), ev('UserPromptSubmit', S('B', OTHER)), ...ask('A', REV, 'a1')]);
+  b = run([ev('SessionEnd', S('B', OTHER)), ev('PostToolUse', { ...S('A', REV), ...BASH, tool_use_id: 'a1' })], b);
+  assert.equal(b.focus, 'A');
+  assert.equal(b.spokenTo, null);
+});
+
+test('a subagent prompt is cleared by a Stop without a background_tasks list', () => {
+  const sub = (name, x) => ev(name, { ...S('k1', REV), agent_id: 'ag1', ...x });
+  const b = run([...start('k1', REV), sub('PreToolUse', { ...BASH, tool_use_id: 's1' }), sub('PermissionRequest', BASH)]);
+  assert.equal(boardView(b).view, 'permission');
+  assert.notEqual(boardView(reduceBoard(b, ev('Stop', S('k1', REV)))).view, 'permission');
+});
+
+test('a prompt is tied to the one open call that fits, never to the wrong one', () => {
+  const rm = { tool_name: 'Bash', tool_input: { command: 'rm x' } };
+  const ls = { tool_name: 'Bash', tool_input: { command: 'ls' } };
+  const base = [...start('A', REV), ev('PreToolUse', { ...S('A', REV), ...rm, tool_use_id: 't2' }),
+    ev('PreToolUse', { ...S('A', REV), ...ls, tool_use_id: 't1' })];
+  let b = run([...base, ev('PermissionRequest', { ...S('A', REV), ...rm })]);
+  assert.equal(b.sessions.A.pending[0].tuid, 't2');
+  // the other call finishing does not answer it
+  b = run([ev('PostToolUse', { ...S('A', REV), ...ls, tool_use_id: 't1' })], b);
+  assert.equal(boardView(b).view, 'permission');
+  assert.equal(boardView(run([ev('PostToolUse', { ...S('A', REV), ...rm, tool_use_id: 't2' })], b)).view, 'working');
+  // two open calls that both fit (no input on the request): no id, so another call's Post cannot clear it
+  const amb = run([...base, ev('PermissionRequest', { ...S('A', REV), tool_name: 'Bash' })]);
+  assert.equal(amb.sessions.A.pending[0].tuid, null);
 });
 
 test('the cap does not drop the focus session when another victim exists', () => {

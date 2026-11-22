@@ -67,27 +67,26 @@ the parent's `session_id`, so they never make a second session). Pure, never thr
 when nothing changes. Board: `{phase, offline, locked, context: {repo, branch}, sessions, ended, tick, focus}`;
 `sessions[id] = {state, open, touched, dropped, pending, pre}` (`state` from `reduce`, `open` = tool_use_ids
 with a PreToolUse and no Post yet, `touched` = board tick of the last applied event, `pending` = unanswered
-permission prompts, `pre` = the last PreToolUse per agent; `focus` = id of the session the bar shows, or null).
+permission prompts, `pre` = the open PreToolUse calls per agent (at most 32); `focus` = id of the session the bar shows, or null; `spokenTo` = id of the session the driver last spoke to (a real driver prompt only), or null).
 
 - Pending prompts: `pending = [{agent, tuid, tool, file, command, output, since}]`, `pre = [{agent, tuid,
-  tool}]`; the agent key is `agent_id` if it is a non-empty string, else `''` (main thread). A
-  `PermissionRequest` (no `tool_use_id` in Claude Code 2.1.330) takes the `tuid` of the agent's last PreToolUse
-  when its tool is the same; it is appended unless the same agent+tuid is already pending. Only the main
+  tool, input}]`; the agent key is `agent_id` if it is a non-empty string, else `''` (main thread). A
+  `PermissionRequest` (no `tool_use_id` in Claude Code 2.1.330) is tied to a `tuid` only when exactly one open
+  PreToolUse of that agent has the same tool (and the same input, if the request carries one), else the `tuid` stays empty; it is appended unless the same agent+tuid is already pending. Only the main
   thread's request is "late" after Stop; a subagent's never is. A `permission_prompt` Notification adds a
   generic entry (`agent: null`) only when nothing is pending and the turn is not finished. The session's
   `state.activity` is NOT changed by them: the effective activity is `permission` while `pending` is not empty
   (and tool/file/command/output come from `pending[0]`). Answered (entry removed) by `PostToolUse`,
   `PostToolUseFailure`, `PermissionDenied` with the same `tool_use_id` (or, without a tuid, the same agent and
   tool; a main-thread Post also clears generic entries); `SubagentStop` clears that agent (and its `pre`);
-  `Stop` clears the main-thread and generic entries, and a subagent's only when `background_tasks` is an array
-  that does not list it as running; a driver prompt clears main-thread and generic entries (an Esc'd prompt
+  `Stop` clears the main-thread and generic entries, and a subagent's unless `background_tasks` lists it as running (a missing list means none runs, as in the reducer); an `idle_prompt` Notification clears main-thread and generic entries (Claude Code sends it only when no dialog is open: an Esc'd prompt); a driver prompt clears main-thread and generic entries (an Esc'd prompt
   sends nothing else); an injected `<task-notification>` prompt clears nothing.
 
 - `RevviewNetwork`, `RevviewDataLock`: board overlays. `RevviewStarting`: clears all sessions and the `ended`
   list, phase `starting`. `RevviewContext`: applied to its live session if it has a `session_id` of one,
   otherwise to `board.context`.
 - `RevviewDropped` (internal, sent by the server when an event body was too large to read): marks that live
-  session `dropped` (the diff may be incomplete). Without a session id it marks the live sessions that are in a turn (working, asking, or a tool open), or the shown one if none is, never all of them. A late `PostToolUse` of Edit/Write/MultiEdit after `Stop` that cannot be placed (no `tool_use_id`, or one not open) also marks it, since its lines are lost, or, without a usable id, the live sessions in a turn (else the shown one); an id the board
+  session `dropped` (the diff may be incomplete). Without a session id it marks every live session that is in a turn (working, asking, or a tool open), or only the shown one if none is. This is deliberate: marking too few would show a wrong diff as exact, marking one more only shows `≥` on a diff that may be exact. A late `PostToolUse` of Edit/Write/MultiEdit after `Stop` that cannot be placed (no `tool_use_id`, or one not open) also marks it, since its lines are lost, or, without a usable id, the live sessions in a turn (else the shown one); an id the board
   does not know marks nothing. Reset by a driver `UserPromptSubmit` (not by an injected one).
 - `SessionEnd` of a session the board never saw only remembers its id in `ended` (not `''`); the phase is not
   touched (an `unknown`/`starting` board stays so: one end proves nothing about the others).
@@ -106,7 +105,7 @@ permission prompts, `pre` = the last PreToolUse per agent; `focus` = id of the s
   Claude never sends `SessionEnd`). A session at `permission` is never dropped: if all others need permission, the newcomer is still admitted and the cap is exceeded (`+N` may have two digits).
 - Shown session = `focus` (recomputed after every change by `refocus(board, spoke)`; `spoke` = the session a
   driver prompt was applied to). In order: no live session -> null; a pending permission pre-empts (keep the
-  focus if it has one, else the one asked first); the session the driver just spoke to; a focus that is no
+  focus if it has one, else the one asked first); when the last pending prompt was just answered, `spokenTo` if live; the session the driver just spoke to; a focus that is no
   longer live -> the best of working > done > waiting > rest, then the highest `touched`; a focus that is
   idle/unknown/starting while another session works -> the most recently touched working one; else keep
   (sticky: other sessions' events never move it; a `done` focus stays until its idle_prompt). The cap avoids

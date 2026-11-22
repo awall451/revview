@@ -22,6 +22,7 @@ export function initialBoard() {
     ended: [],
     tick: 0,
     focus: null,
+    spokenTo: null,
   };
 }
 
@@ -34,6 +35,7 @@ function isValidSession(s) {
 function isValidBoard(b) {
   return isObj(b) && typeof b.phase === 'string' && isObj(b.context) && isObj(b.sessions)
     && Array.isArray(b.ended) && Number.isInteger(b.tick) && (b.focus === null || typeof b.focus === 'string')
+    && (b.spokenTo === null || typeof b.spokenTo === 'string')
     && Object.keys(b.sessions).every((k) => isValidSession(b.sessions[k]));
 }
 
@@ -107,10 +109,12 @@ function capSessions(sessions, keepId, focus) {
 }
 
 // Which session the bar shows. Rules in order: none live -> null; a pending permission prompt pre-empts (keep
-// the focus if it has one, else the one asked first); the session the driver just spoke to; a dead focus falls
+// the focus if it has one, else the one asked first); once the last prompt is answered (`restore`) the bar goes
+// back to the session the driver last spoke to (`spokenTo`) if it is still live; the session the driver just
+// spoke to; a dead focus falls
 // back to the busiest (working > done > waiting > rest, most recently touched); a focus that is idle or
 // unknown gives way to a working session; else keep it (sticky: other sessions' events never move it).
-function pickFocus(b, spoke) {
+function pickFocus(b, spoke, restore = false) {
   const ids = Object.keys(b.sessions);
   if (ids.length === 0) return null;
   const sess = (k) => b.sessions[k];
@@ -120,6 +124,7 @@ function pickFocus(b, spoke) {
     return asking.reduce((best, k) => (sess(k).pending[0].since < sess(best).pending[0].since ? k : best));
   }
   if (spoke !== null && has(b.sessions, spoke)) return spoke;
+  if (restore && b.spokenTo !== null && has(b.sessions, b.spokenTo)) return b.spokenTo;
   const touchedMax = (list) => list.reduce((best, k) => (sess(k).touched > sess(best).touched ? k : best));
   if (b.focus === null || !has(b.sessions, b.focus)) {
     const rank = (k) => ({ working: 3, done: 2, waiting: 1 })[act(sess(k))] ?? 0;
@@ -147,8 +152,12 @@ export function reduceBoard(board, event) {
   const spoke = isDriverPrompt(event) && has(next.sessions, tid) ? tid : null;
   // a driver prompt that changes nothing else (the session was already working) still moves the focus
   if (next === b && spoke === null) return b;
-  const focus = pickFocus(next, spoke);
-  return focus === next.focus ? next : { ...next, focus };
+  // `spokenTo` is set by real driver prompts only (never the injected ones) and kept while that session is live
+  const spokenTo = spoke !== null ? spoke : next.spokenTo !== null && has(next.sessions, next.spokenTo) ? next.spokenTo : null;
+  const base = spokenTo === next.spokenTo ? next : { ...next, spokenTo };
+  const asked = (x) => Object.keys(x.sessions).some((k) => x.sessions[k].pending.length > 0);
+  const focus = pickFocus(base, spoke, asked(b) && !asked(base));
+  return focus === base.focus ? base : { ...base, focus };
 }
 
 function reduceInner(b, event) {
@@ -218,12 +227,22 @@ const DIFF_TOOLS = new Set(['Edit', 'Write', 'MultiEdit']);
 const POST = new Set(['PostToolUse', 'PostToolUseFailure']);
 const PERMISSION_TYPES = new Set(['permission_prompt', 'worker_permission_prompt']);
 
+const MAX_PRE = 32;
+// A comparable signature of a tool input ('' when there is none).
+const sig = (x) => {
+  try {
+    const j = isObj(x) ? JSON.stringify(x) : '';
+    return j.length > 4096 ? `${j.slice(0, 4096)}#${j.length}` : j;
+  } catch { return ''; }
+};
+
 const withoutPending = (pending, drop) => {
   const kept = pending.filter((p) => !drop(p));
   return kept.length === pending.length ? pending : kept;
 };
 
-const runningAgent = (event, agent) => event.background_tasks.some((t) => isObj(t) && t.id === agent && t.status === 'running');
+// a missing list counts as "no subagents running", as in reducer.js
+const runningAgent = (event, agent) => Array.isArray(event.background_tasks) && event.background_tasks.some((t) => isObj(t) && t.id === agent && t.status === 'running');
 
 // Pending permission prompts after `event` (arrays keep their reference when nothing changes).
 function pendingAfter(pending, event, agent, toolUseId) {
@@ -236,7 +255,12 @@ function pendingAfter(pending, event, agent, toolUseId) {
   if (name === 'SubagentStop') return isStr(event.agent_id) ? withoutPending(pending, (p) => p.agent === event.agent_id) : pending;
   if (name === 'Stop') {
     return withoutPending(pending, (p) => p.agent === '' || p.agent === null
-      || (Array.isArray(event.background_tasks) && !runningAgent(event, p.agent)));
+      || !runningAgent(event, p.agent));
+  }
+  // idle_prompt is only sent when Claude Code is not loading and no dialog is open (2.1.330 binary), so a
+  // main-thread prompt still pending was dismissed (Esc); a subagent's may still be open
+  if (name === 'Notification' && event.notification_type === 'idle_prompt') {
+    return withoutPending(pending, (p) => p.agent === '' || p.agent === null);
   }
   if (isDriverPrompt(event)) return withoutPending(pending, (p) => p.agent === '' || p.agent === null);
   return pending;
@@ -254,8 +278,12 @@ function applyToSession(b, live, id, event) {
   let pending = pendingAfter(prevPending, event, agent, toolUseId);
   let pre = prevPre;
   if (name === 'SubagentStop' && isStr(event.agent_id)) pre = withoutPending(prevPre, (p) => p.agent === event.agent_id);
+  if ((POST.has(name) || name === 'PermissionDenied') && toolUseId !== null) pre = withoutPending(pre, (p) => p.tuid === toolUseId);
+  if (name === 'Stop') pre = withoutPending(pre, (p) => p.agent === '');
+  if (isDriverPrompt(event)) pre = prevPre.length === 0 ? prevPre : [];
   if (name === 'PreToolUse' && toolUseId !== null && isStr(event.tool_name)) {
-    pre = [...prevPre.filter((p) => p.agent !== agent), { agent, tuid: toolUseId, tool: event.tool_name }];
+    // every open call is kept (bounded), so a prompt can be tied to the right one
+    pre = [...pre.filter((p) => p.tuid !== toolUseId), { agent, tuid: toolUseId, tool: event.tool_name, input: sig(event.tool_input) }].slice(-MAX_PRE);
   }
 
   // Commits the result; the board is returned as is when nothing changed (an ignored event makes no session).
@@ -276,8 +304,11 @@ function applyToSession(b, live, id, event) {
 
   if (name === 'PermissionRequest' && isStr(event.tool_name)) {
     if (agent === '' && finished) return b; // a main-thread request needs a running turn
-    const entry = pre.find((p) => p.agent === agent);
-    const tuid = entry !== undefined && entry.tool === event.tool_name ? entry.tuid : null;
+    // tie the prompt to a call only when exactly one open call of this agent fits (tool name, and the input when
+    // the request carries one); otherwise leave the id empty so only the other end conditions clear it
+    const want = sig(event.tool_input);
+    const fits = pre.filter((p) => p.agent === agent && p.tool === event.tool_name && (want === '' || p.input === want));
+    const tuid = fits.length === 1 ? fits[0].tuid : null;
     if (tuid !== null && pending.some((p) => p.agent === agent && p.tuid === tuid)) return b;
     const shown = reduce(prev, event);
     pending = [...pending, { agent, tuid, tool: shown.tool, file: shown.file, command: shown.command, output: shown.output, since: b.tick + 1 }];
