@@ -1152,3 +1152,104 @@ Owner steps: `pi/README.md`. Bench items P1-P14 in `docs/BENCH-TEST.md`, all unt
 - **Finding 2 (reason split):** the registry now refuses with `too-early` when the prompt is the shown one but under 1500 ms old, and with `not-shown-long-enough` when nothing, or another prompt, is shown. Only `too-early` sets the note. The allow rule did not change; a second fast press is refused again.
 - **Stale "Too early" note:** `RevviewAnswered` clears any board note (`reduceBoard`, with the `RevviewNav` clear). Also, while the note is "Too early: press again", a change of the shown prompt (another session or prompt on the bar, or none) clears it, so it cannot sit under a prompt it was not meant for. No timer: with the same prompt shown the note stays until a press, a gesture or a selection change.
 - **Tests added:** missing-once session kept at the cap by a later `RevviewOwned` (mutation: dropping `...missing` fails it); `9+` with more than 9 other sessions needing permission; no U+200B in commands without a token over 24 characters.
+
+## 2026-11-22: stage 4B, power cuts and the locked data (decided before building; nothing run on a Pi)
+
+DESIGN leaves the power-cut answer open ("propose one") and decides the encryption (LUKS, Adiantum, a key file on a
+stick on the keychain, no password prompt at boot, "insert key" while locked, `docs/REVOKE.md`). These are the
+decisions for part B. Everything about raspi-config, cryptsetup, udev and systemd below is FROM MEMORY (no
+documentation reachable from the VM, no Pi): every such step is a bench item, `untested`.
+
+### (a) Power cuts: a read-only root, made by raspi-config's overlay
+
+- **Read-only root, not a shutdown HAT.** DESIGN offers both. The overlay needs no hardware, no wiring to the ignition
+  and no extra part on a dash in the sun; a HAT can still be added later and changes nothing here. With the overlay the
+  SD card's root and boot partitions are never written while driving, so a cut at key-off cannot damage them. The only
+  file system written in the car is the encrypted data partition (below): ext4 with its journal (`data=ordered`, the
+  default commit every 5 s), checked with `e2fsck -p` before every mount. What a cut can still lose: the last seconds
+  of writes on the data partition (a Claude transcript line, a file being saved, an unfinished `git` operation: bench
+  B-items say how to check with `git fsck`). It cannot lose the system or the sign-in.
+- **raspi-config's overlay file system, not an own initramfs hook.** It is the stock Pi OS way (Performance Options,
+  Overlay File System; `raspi-config nonint do_overlayfs 0` turns it on, `1` off, *from memory*), it is maintained by
+  Raspberry Pi with the kernel and initramfs it ships, and an own hook would be early-boot code we cannot run or test
+  here. Its boot partition read-only option (`nonint enable_bootro` / `disable_bootro`, *from memory*) is turned on
+  too, so `/boot/firmware` (FAT, the most fragile) is not written either.
+- **A separate step, run last:** `pi/readonly.sh status|enable|disable`. `install.sh` and `data-setup.sh` refuse
+  (exit 2, nothing written) when `/` is an overlay right now, and `install.sh` also when `/boot/firmware` is mounted
+  read-only (`pi/lib.sh` reads `/proc/mounts`; in a fake root `<root>/proc/mounts`). Updating = `readonly.sh disable`,
+  reboot, update/re-run the installer, `readonly.sh enable`, reboot (pi/README.md "Updating"). `disable` takes two
+  rounds when the boot partition is read-only under an active overlay: the first turns the overlay off (after making
+  `/boot/firmware` writable for that boot), the second, after the reboot, turns the boot read-only option off.
+- **Claude Code's auto-updater is off in the unit** (`DISABLE_AUTOUPDATER=1`; the name is in the 2.1.330 binary, its
+  effect is from memory): under the overlay an update would land in RAM and vanish at the next boot. Claude Code is
+  updated in the update procedure (`claude update`, overlay off).
+
+### (b) The key stick and the data partition
+
+- **What is encrypted:** ONLY Claude Code's state (`~/.claude`, including the sign-in `.credentials.json` and the
+  former `~/.claude.json`), the repositories (`~/repos`) and the push credentials (`~/.ssh`: per-repository deploy
+  keys, or a fine-grained token in a credential file there). `~/.config/labwc` and `~/.config/revview` stay on the
+  root, so the kiosk and the bar run while the data is locked.
+- **Where it is mounted:** the LUKS partition opens as `/dev/mapper/revview-data` and mounts (ext4,
+  `noatime,nosuid,nodev`) on `/srv/revview-data`, a root-owned directory. In the home, `~/.claude`, `~/.ssh` and
+  `~/repos` are SYMLINKS to `/srv/revview-data/{claude,ssh,repos}`, made once by the set-up. Why symlinks and not bind
+  mounts into the home: root would mount onto paths the user can change (a user's symlink swapped in at the right
+  moment would make root mount the data over, say, `/etc`); with the symlinks root never mounts anything in the home,
+  and a locked partition leaves them dangling into an empty root-owned directory, so nothing can write secrets to the
+  root by accident.
+- **`~/.claude.json` moves into `~/.claude`** through `CLAUDE_CONFIG_DIR=$HOME/.claude` (checked here with Claude
+  Code 2.1.330: with `CLAUDE_CONFIG_DIR` set, `.claude.json` is written inside that directory and the home's copy is
+  not touched). A symlinked or bind-mounted single file would break when Claude replaces it by rename. The variable is
+  set for the server (and so for every Claude in its tmux sessions) by `/etc/revview/data.env`, and for the user's
+  terminals by `/etc/profile.d/revview-claude.sh` (only for that user). Both are written by the data set-up only:
+  without the data set-up nothing changes (Claude would otherwise miss its existing `~/.claude.json`).
+- **The stick is found by its file system UUID**, recorded at set-up in `/etc/revview/data.conf` (not by label: a
+  label is easy to repeat on another stick, and the set-up never guesses a device). The key is a file of 4096 random
+  bytes at `revview/data.key` on the stick (FAT, exFAT or ext4), made by the set-up straight from `/dev/urandom` onto the
+  stick: it never exists on the root. The set-up also adds a recovery passphrase to a second key slot (asked
+  interactively; `--no-recovery-passphrase` skips it): it opens the data if the stick is lost and is needed to remove
+  the lost stick's key slot (docs/REVOKE.md).
+- **LUKS2 with Adiantum** exactly as DESIGN: `--cipher xchacha12,aes-adiantum-plain64 --key-size 256`. The key-file
+  slot uses `--pbkdf pbkdf2 --iter-time 500` (4096 random bytes cannot be guessed, so a slow key derivation only slows
+  every boot on a Pi 4B); the passphrase slot keeps cryptsetup's default (argon2id). Options *from memory*.
+- **Set-up is destructive only on request:** `pi/data-setup.sh --user NAME --device /dev/X --key-device /dev/Y`
+  never picks a device itself; `--format` is needed to erase, and the device name must be typed again (or given as
+  `--confirm /dev/X`); `--dry-run` writes and erases nothing. It refuses a device that is not a partition, is mounted
+  or in use, is the key stick or on the stick's disk, and a key device that is not on USB or is mounted. Without
+  `--format` it only (re)writes the configuration for an existing LUKS partition.
+- **Unlocking:** `pi/unlock.sh`, run as root by `revview-unlock.service` (a system oneshot unit) at boot and again by a
+  udev rule (`72-revview-key.rules`, matching the stick's UUID) when the stick is plugged in later. It mounts the stick
+  read-only (`ro,nosuid,nodev,noexec`) on a 0700 directory under `/run`, hands the key file's path to
+  `cryptsetup open --key-file`, and unmounts the stick at once. The key is never copied, printed or logged. A symlink
+  on the way to the key file, a key of the wrong size, a wrong key or a failed `e2fsck` leave the data locked (logged,
+  exit 1). It is idempotent (already open or mounted: nothing to do) and serialised with `flock`. `data.conf` is read
+  as data, never sourced; each value is checked against an allow-list.
+- **Stick pulled while running: nothing happens.** The partition stays open until power-off; the key is only in the
+  kernel. Locking at once would kill the running Claude mid-write and the driver loses the session for nothing: in the
+  car the power goes at key-off anyway, and then the data is locked again. Cost: someone who takes the Pi while it runs
+  and keeps it powered has the data; that is why the credentials must be revocable (REVOKE.md).
+- Not chosen: `/etc/crypttab` with systemd's key-file-on-a-device form (no clean "stick inserted later" path, no hook
+  for telling the server, and a missing stick makes boot wait); Clevis/Tang (DESIGN: later, maybe).
+
+### (c) What the bar shows and what works while locked
+
+- **INSERT KEY** (the state core's `insert-key` look: "Data locked", "Insert the key stick to unlock"), over STARTING.
+  The bar, the network check, the buttons (list, menu, back) and read aloud work. **No Claude session starts:** the
+  key-on `REVVIEW_START` session waits for the unlock, and the menu's New session is refused while locked (the server
+  wraps the runner's `start`; nothing in `src/sessions/` changes). After the unlock the bar goes on to STARTING and the
+  key-on session starts once, exactly as before.
+- **The server decides "locked" itself, from the kernel's mount table.** With `--data-lock [DIR]` (or
+  `REVVIEW_DATA_MOUNT=DIR`, set by `/etc/revview/data.env`; default DIR `/srv/revview-data`) it reads
+  `/proc/self/mountinfo` at start, every 3 s, and when poked: unlocked = the topmost mount on DIR is ext4 from
+  `/dev/mapper/revview-data`. It applies `RevviewDataLock {locked}` in-process.
+- **Trust decision.** A posted `RevviewDataLock` is today accepted over HTTP, and any local process may POST to
+  127.0.0.1. If that post decided the lock, any local process could fake an unlock and make the key-on session start.
+  So with `--data-lock` a posted `RevviewDataLock` is only a poke: its `locked` value is ignored, the server re-reads
+  the mount table and answers 204. An unprivileged process cannot fake that mount: `/srv/revview-data` is owned by
+  root (no FUSE mount there without write access to it), and FUSE would show as `fuse.*`, not ext4 from the mapper
+  device. `unlock.sh` posts the poke so the bar changes at once; if the post is lost (the server is not up yet) the
+  next 3 s check or the server's own start finds it. Without `--data-lock` (development, the emulator) the event
+  is applied as before. A local process as the kiosk user can still start a Claude by hand in tmux; nothing here tries
+  to stop the user's own processes, only to keep a forged event from starting one.
+- **Behaviour without the data set-up stays as today:** no `data.env`, no `--data-lock`, `--boot` starts the key-on
+  session at server start.
