@@ -1,6 +1,7 @@
 // Pure string helpers for display. Every shortener returns a string no longer than `max`
 // (Unicode code points), or null for non-string / empty input.
-export const LIMITS = Object.freeze({ path: 40, command: 60, output: 80 });
+// `path` is only a memory/payload guard: the view fits the file name to real pixels (keeping the base name).
+export const LIMITS = Object.freeze({ path: 200, command: 60, output: 80 });
 
 const ELLIPSIS = '…';
 const ESC = '\u001b';

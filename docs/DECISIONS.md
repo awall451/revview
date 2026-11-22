@@ -179,19 +179,24 @@ fallback.
 
 ### Colour and shape per state (colour is never the only cue)
 
-| View | Band colour | Shape | Lowest contrast of any text in that state (measured) |
+| View | Band colour | Shape | Lowest contrast over everything that can be shown in that state (computed) |
 |---|---|---|---|
-| working | `#5eb1ff` blue | filled circle | 8.32:1 |
-| waiting | `#c8a2ff` violet | two bars (pause) | 10.07:1 |
-| permission | `#ffb020` amber | triangle | 10.59:1 |
-| done | `#4fdc7a` green | check mark | 8.32:1 |
-| starting | `#e0e0e0` light grey | ring | 15.91:1 |
-| offline | `#ff6b6b` red | cross | 7.57:1 |
-| insert-key | `#ff8ad8` pink | key | 9.88:1 |
+| working | `#5eb1ff` blue | filled circle | 8.32:1 (`#ff7a7a` removed count) |
+| waiting | `#c8a2ff` violet | two bars (pause) | 8.32:1 (`#ff7a7a`) |
+| permission | `#ffb020` amber | triangle | 8.32:1 (`#ff7a7a`) |
+| done | `#4fdc7a` green | check mark | 8.32:1 (`#ff7a7a`) |
+| starting | `#e0e0e0` light grey | ring | 15.91:1 (black on band) |
+| offline | `#ff6b6b` red | cross | 7.57:1 (black on band) |
+| insert-key | `#ff8ad8` pink | key | 9.88:1 (black on band) |
 
-Detail text is white `#fff` or grey `#b8b8b8` on black. The minimum per state comes from the Playwright
-test, which computes the WCAG ratio of every text element from its computed colour and its effective
-(opaque) background; the floor is **7:1** (WCAG AAA for normal text) because the panel is read in daylight
+Detail text is white `#fff` (21:1) or grey `#b8b8b8` (10.59:1) on black; diff counts are `#5fe08a` added
+(12.52:1) and `#ff7a7a` removed (8.32:1) on black; band text is black on the band colour (9.21 working, 10.07
+waiting, 11.48 permission, 11.85 done, 15.91 starting, 7.57 offline, 9.88 insert-key). The table gives, per
+state, the lowest ratio over every colour pair that state can show; the diff counts appear in every state
+except starting and insert-key (`showDiff` in `src/view/view.js`), so they set the minimum in working,
+waiting, permission and done. The ratios were computed with the WCAG formula from the colours in
+`src/view/view.css`. The Playwright test computes the ratio of every text element from its computed colour
+and its effective (opaque) background, but only for the fixtures, which are a subset of what can be shown; the floor is **7:1** (WCAG AAA for normal text) because the panel is read in daylight
 through glare.
 
 ### Type sizes in mm (cap height of a capital H, at 1280/190 px/mm)
@@ -312,3 +317,14 @@ inverted on purpose: a display fault must not look like any coloured Claude stat
   session pushes it out or `RevviewStarting` clears the board: the state core has no clock by design.
 - With two sessions, voice goes to whichever terminal has focus; the bar shows the neediest session and the
   `+N` hint, but cannot say where push-to-talk will land.
+
+## Detail lines polish (QA round 1: 06 07 08 09 12)
+
+- Line 3 for a non-Bash tool shows `$ command`, then a grey `→` separator, then the output line (the
+  separator only when both are shown; the command box is at most 40% of the line).
+- The tool name uses the whole line when there is no file (MCP names).
+- The file path is cut once, in the view, to real pixels (middle cut keeping the base name); the state core
+  only guards payload size with `LIMITS.path = 200` (was 40).
+- The band's `repo · branch` keeps the repo whole and cuts the branch in its middle (the end survives),
+  falling back to the old end-cut only when the repo alone does not fit.
+- A Bash event with an empty command clears the stale command and output.

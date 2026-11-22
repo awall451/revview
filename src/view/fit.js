@@ -44,6 +44,21 @@ export function middleEllipsis(text, fits) {
   return cutMiddle(cps, Math.max(n, 4));
 }
 
+// "repo · branch" for the band: the repo stays whole, the branch is cut in its middle (about 1/3 from the
+// front, the rest from the end, so the end of the branch survives). Returns the full text when it fits, and
+// null when even a minimal cut (4 graphemes of branch) does not fit: the caller then clips at the end.
+export function fitWhere(repo, branch, fits) {
+  const head = typeof repo === 'string' ? repo : '';
+  const b = typeof branch === 'string' ? branch : '';
+  const join = (x) => (head && x ? `${head} · ${x}` : head || x);
+  const full = join(b);
+  if (full === '' || fits(full)) return full;
+  const cps = graphemes(b);
+  if (cps.length < 5) return null;
+  const n = largest(4, cps.length - 1, (m) => fits(join(cutMiddle(cps, m))));
+  return n < 4 ? null : join(cutMiddle(cps, n));
+}
+
 // Compact diff number: short enough for a slot that never shrinks. Rounds DOWN (never overstates),
 // at most 4 digits: 9999, 12.3k, 999k, 1.2M, 999M, 3G.
 export function formatCount(n) {

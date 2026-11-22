@@ -104,7 +104,8 @@ with `type: 'create'` counts the lines of its content; otherwise falls back to `
 
 ## Limits
 
-`LIMITS = {path: 40, command: 60, output: 80}`; longer text is cut with a trailing `…` (paths keep the file
+`LIMITS = {path: 200, command: 60, output: 80}`; longer text is cut with a trailing `…` (the path limit is only a
+payload guard, the view fits the file to pixels; paths keep the file
 name and the trailing directories after `…/`).
 
 ## Tests and expected files

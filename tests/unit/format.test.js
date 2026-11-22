@@ -6,7 +6,7 @@ const REAL_STDOUT =
   ' src/app.py | 2 \u001b[32m+\u001b[m\u001b[31m-\u001b[m\n 1 file changed, 1 insertion(+), 1 deletion(-)\n\u001b[32m2 passed\u001b[0m in 0.01s';
 
 test('LIMITS are frozen and have the agreed values', () => {
-  assert.deepEqual({ ...LIMITS }, { path: 40, command: 60, output: 80 });
+  assert.deepEqual({ ...LIMITS }, { path: 200, command: 60, output: 80 });
   assert.ok(Object.isFrozen(LIMITS));
 });
 
@@ -86,7 +86,7 @@ test('shortenPath keeps the most trailing segments that fit', () => {
 });
 
 test('shortenPath with a file name that is too long keeps its tail', () => {
-  const out = shortenPath('dir/' + 'n'.repeat(60) + '.js');
+  const out = shortenPath('dir/' + 'n'.repeat(250) + '.js');
   assert.equal(out.length, LIMITS.path);
   assert.ok(out.startsWith('…'));
   assert.ok(out.endsWith('n.js'));

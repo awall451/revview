@@ -97,10 +97,12 @@ body[data-view="no-link"] #band {
 #where { overflow: hidden; text-overflow: ellipsis; }
 span:empty { display: none; }
 
-#tool { flex: 0 1 auto; max-width: 28%; color: var(--grey); }
+#tool { flex: 0 1 auto; max-width: none; color: var(--grey); }
+#tool:has(+ #file:not(:empty)) { max-width: 28%; }
 #file { flex: 1 1 0; }
 #note1, #note2 { flex: 1 1 0; }
 #output { flex: 1 1 0; }
+#sep { flex: none; color: var(--grey); }
 #diff {
   flex: none;
   margin-left: auto;
@@ -114,7 +116,7 @@ span:empty { display: none; }
 
 #cmdbox {
   flex: 0 1 auto;
-  max-width: 45%;
+  max-width: 40%;
   min-width: 0;
   display: flex;
   gap: 0.4em;

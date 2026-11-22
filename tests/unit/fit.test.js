@@ -89,3 +89,25 @@ test('cuts never strand a combining mark, split a ZWJ emoji or a flag', () => {
     }
   }
 });
+
+test('fitWhere: full text when it fits', async () => {
+  const { fitWhere } = await import('../../src/view/fit.js');
+  assert.equal(fitWhere('rev', 'main', maxLen(40)), 'rev · main');
+  assert.equal(fitWhere('rev', '', maxLen(40)), 'rev');
+});
+
+test('fitWhere: keeps the repo whole and the end of the branch', async () => {
+  const { fitWhere } = await import('../../src/view/fit.js');
+  const out = fitWhere('revview', 'feature/very-long-branch-name-2026', maxLen(24));
+  assert.equal(Array.from(out).length, 24);
+  assert.ok(out.startsWith('revview · feat'), out);
+  assert.ok(out.endsWith('name-2026'), out);
+  assert.ok(out.includes('…'));
+});
+
+test('fitWhere: null when even a minimal cut does not fit; never splits graphemes', async () => {
+  const { fitWhere } = await import('../../src/view/fit.js');
+  assert.equal(fitWhere('a-very-long-repository', 'abcdefghij', maxLen(10)), null);
+  const out = fitWhere('r', 'éééééééé', maxLen(9));
+  assert.ok(!/^́|…́/u.test(out), out);
+});

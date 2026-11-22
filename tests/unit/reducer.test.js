@@ -65,8 +65,8 @@ test('PreToolUse sets tool, relative+shortened file, Bash command', () => {
   assert.equal(s.activity, 'working');
   assert.equal(s.tool, 'Read');
   assert.equal(s.file, 'src/app.py');
-  const long = reduce(s, e('PreToolUse', { tool_name: 'Edit', tool_input: { file_path: `${CWD}/a/very/long/dir/structure/src/components/Button.jsx` } }));
-  assert.ok(long.file.length <= 40 && long.file.endsWith('Button.jsx') && long.file.startsWith('…/'));
+  const long = reduce(s, e('PreToolUse', { tool_name: 'Edit', tool_input: { file_path: `${CWD}/${'d/'.repeat(120)}src/components/Button.jsx` } }));
+  assert.ok(long.file.length <= 200 && long.file.endsWith('Button.jsx') && long.file.startsWith('…/'));
   const abs = reduce(s, e('PreToolUse', { tool_name: 'Read', tool_input: { file_path: '/etc/hosts' } }));
   assert.equal(abs.file, '/etc/hosts');
   const nb = reduce(s, e('PreToolUse', { tool_name: 'NotebookEdit', tool_input: { notebook_path: `${CWD}/n.ipynb` } }));
@@ -340,4 +340,31 @@ test('repo: SessionStart and RevviewContext set it; other events only fill a nul
   assert.equal(s.repo, 'third');
   const mid = reduce(initialState(), { hook_event_name: 'UserPromptSubmit', cwd: CWD });
   assert.equal(mid.repo, 'repo');
+});
+
+test('a long cwd-relative path is not cut by the state core', () => {
+  const rel = 'packages/frontend/src/components/dashboard/widgets/chartpanel/VeryLongComponentNameHandler.tsx';
+  assert.ok(rel.length >= 70 && rel.length < 200);
+  const s = run([e('PreToolUse', { tool_name: 'Edit', tool_input: { file_path: `${CWD}/${rel}` } })]);
+  assert.equal(s.file, rel);
+});
+
+test('an empty or whitespace Bash command clears command and output', () => {
+  for (const blank of ['', '   ']) {
+    const s = run([
+      e('PreToolUse', { tool_name: 'Bash', tool_input: { command: 'echo hi' } }),
+      e('PostToolUse', { tool_name: 'Bash', tool_input: { command: 'echo hi' }, tool_response: { stdout: 'hi' } }),
+      e('PreToolUse', { tool_name: 'Bash', tool_input: { command: blank } }),
+    ]);
+    assert.equal(s.command, null);
+    assert.equal(s.output, null);
+  }
+});
+
+test('a Bash event without a string command keeps the previous command', () => {
+  const s = run([
+    e('PreToolUse', { tool_name: 'Bash', tool_input: { command: 'echo hi' } }),
+    e('PostToolUse', { tool_name: 'Bash', tool_input: {} }),
+  ]);
+  assert.equal(s.command, 'echo hi');
 });

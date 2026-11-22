@@ -1,7 +1,7 @@
 // The glance view: renders a reducer state (see src/state/README.md) as a state band and two lines.
 import { mmToPx } from './panel.js';
 import { TYPE_MM } from './type.js';
-import { middleEllipsis, formatCount } from './fit.js';
+import { middleEllipsis, fitWhere, formatCount } from './fit.js';
 
 const LABELS = {
   working: 'WORKING',
@@ -49,7 +49,7 @@ const NO_OTHERS = new Set(['starting', 'insert-key', 'unknown', 'no-link']);
 const $ = (id) => document.getElementById(id);
 const str = (v) => (typeof v === 'string' ? v : '');
 const ids = ['band', 'shape', 'state-word', 'others', 'where', 'tool', 'file', 'note1', 'note2', 'diff', 'diff-approx', 'diff-added',
-  'diff-removed', 'cmdbox', 'command', 'output', 'line2', 'line3'];
+  'diff-removed', 'cmdbox', 'sep', 'command', 'output', 'line2', 'line3'];
 const el = Object.fromEntries(ids.map((id) => [id, $(id)]));
 
 // ---- type sizes: cap height in mm -> font-size px, using the real font's cap-height ratio ----
@@ -108,6 +108,7 @@ export function render(input) {
   // everything below starts empty; only what applies is filled in
   for (const k of ['tool', 'file', 'note1', 'note2', 'command', 'output']) set(el[k], '');
   el.cmdbox.hidden = true;
+  el.sep.hidden = true;
   el.diff.hidden = true;
 
   const where = view === 'no-link' ? '' : [str(s.repo), str(s.branch)].filter(Boolean).join(' · ');
@@ -138,6 +139,7 @@ export function render(input) {
     set(el.command, str(s.command));
     el.cmdbox.hidden = !s.command;
     set(el.output, str(s.output));
+    el.sep.hidden = !(s.command && s.output);
   }
   if (showDiff) {
     el['diff-approx'].textContent = approx ? '≥' : '';
@@ -162,6 +164,14 @@ export function render(input) {
   set(el.where, where);
   el.where.hidden = false;
   if (where) {
+    const w = el.where;
+    if (str(s.branch) && w.scrollWidth > w.clientWidth) {
+      const cut = fitWhere(str(s.repo), str(s.branch), (c) => {
+        w.textContent = c;
+        return w.scrollWidth <= w.clientWidth;
+      });
+      w.textContent = cut ?? where;
+    }
     const charPx = 0.6 * parseFloat(getComputedStyle(el.where).fontSize);
     // a stub like "rev…" says nothing: show it only with room for about 8 characters
     if (el.where.scrollWidth > el.where.clientWidth && el.where.clientWidth < 8 * charPx) el.where.hidden = true;

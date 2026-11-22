@@ -29,6 +29,8 @@ these are the first ones.
 | 21 | With the kiosk showing the live page, stop the server (Ctrl-C), wait 10 s, start it again | The page shows STARTING while the server is away and follows events again by itself after it is back, with no reload and no touch | untested |
 | 22 | Boot the Pi with the server started before Chromium, and once with Chromium started first | Both end with the live page following events; with Chromium first it shows STARTING until the server is up (if Chromium shows an error page instead, the kiosk start script must wait for the server) | untested |
 | 23 | On the Pi, measure the time from a curl POST to the change on the screen, and the CPU use of Chromium while idle on the page | Change well under a second; idle CPU near zero (the page has no animation or polling) | untested |
+| 24 | Check the Pi has a colour-emoji font: `fc-list | grep -i emoji` (e.g. `fonts-noto-color-emoji`) | A colour emoji font is present; without one, emoji in commands or output render as boxes or monochrome glyphs of other widths and the layout is not proven (the emulator VM has Noto Color Emoji; see `emulator/worst-case/cjk-wide.json`) | untested |
+| 25 | On the Pi run `node --version` (and note how Node was installed: the Debian / Raspberry Pi OS package may be older, not checkable here) | Version 22 or newer (`package.json` engines; DECISIONS pins Node 22); otherwise `npm start` fails or misbehaves | untested |
 
 ## Honest states (2026-11-22)
 

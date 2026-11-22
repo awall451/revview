@@ -40,15 +40,16 @@ function targetFile(event) {
 }
 
 function bashCommand(event) {
-  if (event.tool_name !== 'Bash' || !isObj(event.tool_input)) return null;
-  return typeof event.tool_input.command === 'string' ? shortenCommand(event.tool_input.command) : null;
+  // undefined: no string command (keep the previous one); null: blank command (clear it).
+  if (event.tool_name !== 'Bash' || !isObj(event.tool_input)) return undefined;
+  return typeof event.tool_input.command === 'string' ? shortenCommand(event.tool_input.command) : undefined;
 }
 
 // Fields common to PreToolUse / PermissionRequest / PostToolUse(Failure).
 function toolPatch(event, activity) {
   const patch = { activity, tool: event.tool_name, file: targetFile(event) };
   const command = bashCommand(event);
-  if (command !== null) patch.command = command;
+  if (command !== undefined) patch.command = command;
   return patch;
 }
 
