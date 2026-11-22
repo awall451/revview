@@ -37,3 +37,15 @@ Process notes:
 - A scout of the first area lead stopped early saying it had seen an "[agent-kit owner notice]". The lead received no notice and the inbox had no new message; treated as not from the owner, nothing was acted on.
 - Parallel area leads on the same view file cost one extra integration run; next time split by files that do not overlap, or run them one after the other.
 - An empty leftover directory `.claude/worktrees/agent-af03c2039440df9d8` from cycle 4 was removed at the start.
+
+## 2026-11-22: cycle 7 (reconstructed) and cycle 8 (dense layout)
+
+Cycle 7 left no notes (cut short). From the gate and the git log: the owner approved `real-check` (merged 03:49 as f1fc82b, 320 tests; the gallery gets screenshots since then), and `qa-round-2` merged 04:24 as 15dd3f0 (384 tests): all 15 round 2 issues closed, three more real recordings (async subagents with a prompt, Esc'd prompt, auto and manual compaction), a service worker for reload while the server is down. At 04:29 the owner sent priority message 20261122T042927Z-o-d9a077 (text far too big: state word about 6 mm, the rest about 3.5 mm, more lines, lower the tested minimums, show screenshots). An area lead had started on it in a worktree (`work/dense-layout`, 36 files uncommitted) when the cycle was killed.
+
+Cycle 8: the lead committed that leftover as a wip checkpoint on `work/dense-layout`, removed the worktree, and gave the branch to a new area-lead-core (Opus, two Sonnet builders, about 12 minutes). It kept most of the wip, fixed two bugs in it (an empty notes element took a row and silently cut the ellipsis row of the command; reserved slots left empty rows) and recommitted as three commits. Result: state word 5.94 mm, other text 3.41 mm (whole-pixel measurement; 24 px is the nearest to 3.5 mm), two-sided ranges in the tests (5.8-6.3, 3.3-3.7), band 84 px, rows of 40 px: tool/file/diff, full command wrapped over up to 6 rows, last 3 output lines; core keeps `outputLines` (3, CRLF-safe, 80 per line) and commands up to 300 code points. Reviewer (Sonnet, fresh context; core logic and tests touched): approve, no blocking findings; it broke four things on purpose (bigger type, third output line dropped, command overflow, CRLF) and tests caught each; four non-blocking notes are in STATE.md Next 2. `ready/dense-layout` merged first try as 3e8f199 (423 tests, 22 shots). `tools/check` untouched. Owner message answered `done` with four screenshots.
+
+Not proven: legibility of 3.4 mm text on the real panel (bench item 26, untested); the per-state shots are sparse for permission/waiting because the recordings are; no QA round has used main since 0f38005 (next cycle).
+
+Process notes:
+- A killed cycle leaves a locked worktree with uncommitted work: `git add -u` + a wip commit inside it (check for untracked files first), `git worktree unlock`, `remove --force`, then hand the branch to a new area lead. The lead's shell loses its cwd if it was inside the removed worktree: `cd` back before spawning agents.
+- When only one product branch is in flight, waiting about 3 minutes for the gate before writing notes lets the notes say "merged" and be based on the new main.
