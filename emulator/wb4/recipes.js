@@ -57,6 +57,12 @@ function editAnswered(id, decision, ...after) {
   return [...asking, { hook_event_name: 'RevviewAnswered', session_id: id, agent: p.agent, since: p.since, decision }, ...after.map((e) => ({ ...e, session_id: id }))];
 }
 
+// A permission request for any tool after a Bash call of the turn (QA r5-05): the working session's events, then the call's request.
+function requested(id, tool_name, tool_input) {
+  const call = { session_id: id, tool_name, tool_input, tool_use_id: 'toolu_req1' };
+  return [...session(id, 'working'), { hook_event_name: 'PreToolUse', ...call }, { hook_event_name: 'PermissionRequest', ...call }];
+}
+
 // A failed turn (QA r3-05): the REAL interactive recording of a StopFailure (API unreachable), up to the StopFailure.
 function failedTurn(id, repo = 'revview') {
   return [...upTo(recording('hook-wiring/events-stop-failure-interactive'), is('StopFailure')).map((ev) => ({ ...ev, session_id: id, cwd: `/home/user/${repo}` })),
@@ -129,6 +135,9 @@ export const RECIPES = Object.freeze({
   'denied-edit-after-bash': [...editAnswered('s1', 'deny', { hook_event_name: 'Stop' }), owned('s1'), select('s1')],
   // r5-02: the same answer given while OFFLINE keeps its row
   'offline-denied': [...editAnswered('s1', 'deny'), owned('s1'), select('s1'), { hook_event_name: 'RevviewNetwork', online: false }],
+  // r5-05: a WebFetch / an MCP tool asks: the row says what is allowed
+  'permission-webfetch': [...requested('s1', 'WebFetch', { url: 'https://example.com/api/docs?page=2', prompt: 'summarize' }), owned('s1'), select('s1')],
+  'permission-mcp': [...requested('s1', 'mcp__github__create_issue', { title: 'Fix the bar' }), owned('s1'), select('s1')],
   // QA r3-05: the turn ended with an API error: WAITING FOR ME that says "Turn failed: server error" and the message
   'failed-turn': [...failedTurn('s1'), owned('s1'), select('s1')],
   'offline-failed': [...failedTurn('s1'), owned('s1'), select('s1'), { hook_event_name: 'RevviewNetwork', online: false }],

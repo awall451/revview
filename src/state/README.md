@@ -30,7 +30,7 @@ Pure logic that turns Claude Code hook events into the view state (no DOM, no I/
 | `offline`, `locked` | overlays from the synthetic events below |
 | `repo` | last path segment of `cwd`; set by `SessionStart` and `RevviewContext`, otherwise only filled from a Claude event's `cwd` while still null |
 | `branch` | only from `RevviewContext` |
-| `tool`, `file` | current tool name and its target file (relative to cwd, shortened) |
+| `tool`, `file` | current tool and its target. `tool` is the display name: `mcp__<server>__<tool>` reads `<server>: <tool>` (the event keeps the real name for matching; only `Bash` is compared by name later). `file`: `file_path`/`notebook_path` relative to cwd, shortened; WebFetch: the `url` as host + path (http(s) only, no scheme or query; anything else the raw text); WebSearch: the `query`; both cleaned of control characters and cut to 200; MCP tools: null (QA r5-05) |
 | `diff` | `{added, removed}` running total for the current turn |
 | `command`, `output`, `outputLines` | last Bash command (whitespace collapsed, at most 300 code points), last non-empty output line (ANSI-stripped, at most 80), and `outputLines`: the last 3 non-empty output lines, oldest first, cleaned like `output`, each at most 80; `[]` when none. `output` is kept as the last line for compatibility: `outputLines.at(-1) ?? null === output` always |
 

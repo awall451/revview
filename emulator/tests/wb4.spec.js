@@ -198,6 +198,18 @@ test('denied-edit-after-bash: "Denied: Edit", no old command or output (QA r5-01
   await shot(page, 'wb4-denied-edit-after-bash');
 });
 
+for (const [id, tool, file] of [['permission-webfetch', 'WebFetch', 'example.com/api/docs'], ['permission-mcp', 'github: create_issue', '']]) {
+  test(`${id}: the prompt shows "${tool}" and its target (QA r5-05)`, async ({ openView, page }, testInfo) => {
+    await openView(wb4State(id));
+    await expect(page.locator('#state-word')).toHaveText('NEEDS PERMISSION');
+    await expect(page.locator('#tool')).toHaveText(tool);
+    await expect(page.locator('#file')).toHaveText(file);
+    await expect(page.locator('#cmdbox')).toBeHidden();
+    await common(page, id, testInfo);
+    await shot(page, `wb4-${id}`);
+  });
+}
+
 test('offline-denied: OFFLINE keeps "Denied: Edit" next to Claude: ... and the no-network note (QA r5-02)', async ({ openView, page }, testInfo) => {
   await openView(wb4State('offline-denied'));
   await expect(page.locator('#state-word')).toHaveText('OFFLINE');

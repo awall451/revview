@@ -1,6 +1,6 @@
 // Pure reducer: (state, hook event) -> state. No clock, I/O, randomness or timers.
 import { countDiff } from './diff.js';
-import { lastOutputLines, relativeTo, shortenCommand, shortenPath } from './format.js';
+import { lastOutputLines, displayTool, relativeTo, shortenCommand, shortenPath, shortenQuery, shortenUrl } from './format.js';
 
 const isObj = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
 const isStr = (x) => typeof x === 'string' && x !== '';
@@ -38,6 +38,8 @@ function repoFromCwd(cwd) {
 
 function targetFile(event) {
   const input = isObj(event.tool_input) ? event.tool_input : {};
+  if (event.tool_name === 'WebFetch') return shortenUrl(input.url);
+  if (event.tool_name === 'WebSearch') return shortenQuery(input.query);
   const p = typeof input.file_path === 'string' ? input.file_path : input.notebook_path;
   return typeof p === 'string' ? shortenPath(relativeTo(p, event.cwd)) : null;
 }
@@ -58,7 +60,7 @@ const sameLines = (a, b) => Array.isArray(a) && Array.isArray(b) && a.length ===
 
 // Fields common to PreToolUse / PermissionRequest / PostToolUse(Failure).
 function toolPatch(event, activity) {
-  const patch = { activity, tool: event.tool_name, file: targetFile(event) };
+  const patch = { activity, tool: displayTool(event.tool_name), file: targetFile(event) };
   const command = bashCommand(event);
   if (command !== undefined) patch.command = command;
   return patch;

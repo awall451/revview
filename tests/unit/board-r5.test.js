@@ -37,7 +37,7 @@ for (const [tool, call, fileRe] of CALLS) {
       const check = (v, view) => {
         assert.equal(v.view, view);
         assert.equal(v.answered, decision);
-        assert.equal(v.tool, tool);
+        assert.equal(v.tool, tool === 'mcp__x__y' ? 'x: y' : tool); // r5-05: MCP reads "server: tool"
         assert.equal(v.command, null);
         assert.deepEqual(v.outputLines, []);
         assert.equal(v.output, null);

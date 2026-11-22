@@ -42,7 +42,7 @@ test('r3-01: WebFetch, an MCP tool and a subagent Edit request carry no stale co
     const input = { tool_name, tool_input: { url: 'https://x' } };
     const v = view([...bashDone, ev('PreToolUse', { ...R3, ...input, tool_use_id: 'w1' }), ev('PermissionRequest', { ...R3, ...input })]);
     assert.equal(v.view, 'permission');
-    assert.equal(v.tool, tool_name);
+    assert.equal(v.tool, tool_name === 'mcp__x__y' ? 'x: y' : tool_name); // r5-05: MCP reads "server: tool"
     assert.equal(v.command, null);
     assert.equal(v.output, null);
     assert.deepEqual(v.outputLines, []);

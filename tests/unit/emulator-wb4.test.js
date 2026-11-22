@@ -6,7 +6,7 @@ import { WB4_IDS, RECIPES, wb4State } from '../../emulator/wb4/recipes.js';
 // each recipe really produces the fields its look is meant to show.
 
 test('every look has a recipe and a state, and the state carries the new keys', () => {
-  assert.equal(WB4_IDS.length, 23);
+  assert.equal(WB4_IDS.length, 25);
   for (const id of WB4_IDS) {
     const s = wb4State(id);
     for (const k of ['voice', 'position', 'elsewhere', 'nav']) assert.ok(k in s, `${id} has ${k}`);

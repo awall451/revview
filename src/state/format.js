@@ -91,3 +91,27 @@ export function relativeTo(path, cwd) {
   }
   return path;
 }
+
+const cleanText = (s, max = LIMITS.path) => {
+  const t = s.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim();
+  return t === '' ? null : truncate(t, max);
+};
+
+// WebFetch target (QA r5-05): host + path of an http(s) URL without scheme and query; anything else: the raw text, cleaned.
+export function shortenUrl(url) {
+  if (typeof url !== 'string') return null;
+  try {
+    const u = new URL(url.trim());
+    if ((u.protocol === 'http:' || u.protocol === 'https:') && u.host !== '') return cleanText(u.host + (u.pathname === '/' ? '' : u.pathname));
+  } catch { /* not a URL: show the raw text */ }
+  return cleanText(url);
+}
+
+// WebSearch target: the query, cleaned and cut.
+export const shortenQuery = (q) => (typeof q === 'string' ? cleanText(q) : null);
+
+// `mcp__<server>__<tool>` reads "<server>: <tool>"; any other name is unchanged.
+export function displayTool(name) {
+  const m = typeof name === 'string' ? /^mcp__(.+?)__(.+)$/.exec(name) : null;
+  return m === null ? name : `${m[1]}: ${m[2]}`;
+}

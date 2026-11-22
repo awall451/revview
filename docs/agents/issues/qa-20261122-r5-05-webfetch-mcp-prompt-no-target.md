@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-22, work/qa5-fixes: WebFetch/WebSearch show the URL/query, MCP reads "server: tool")
 id: qa-20261122-r5-05
 title: NEEDS PERMISSION for WebFetch or an MCP tool shows only the tool name: the driver allows without seeing the URL or target
 severity: minor
