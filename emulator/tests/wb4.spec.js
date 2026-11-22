@@ -188,6 +188,27 @@ for (const [id, word, file] of [['denied-done', 'Denied: Bash', 'wb4-denied-done
   });
 }
 
+test('denied-edit-after-bash: "Denied: Edit", no old command or output (QA r5-01)', async ({ openView, page }, testInfo) => {
+  await openView(wb4State('denied-edit-after-bash'));
+  await expect(page.locator('#tool')).toHaveText('Denied: Edit');
+  await expect(page.locator('#file')).toHaveText(/app\.py/);
+  await expect(page.locator('#cmdbox')).toBeHidden();
+  await expect(page.locator('#out1')).toHaveText('');
+  await common(page, 'denied-edit-after-bash', testInfo);
+  await shot(page, 'wb4-denied-edit-after-bash');
+});
+
+test('offline-denied: OFFLINE keeps "Denied: Edit" next to Claude: ... and the no-network note (QA r5-02)', async ({ openView, page }, testInfo) => {
+  await openView(wb4State('offline-denied'));
+  await expect(page.locator('#state-word')).toHaveText('OFFLINE');
+  await expect(page.locator('#tool')).toHaveText('Denied: Edit');
+  await expect(page.locator('#tool')).toHaveAttribute('data-answer', 'deny');
+  await expect(page.locator('#note1')).toContainText('Claude');
+  await expect(page.locator('#note2')).toHaveText('No network: voice input will not work');
+  await common(page, 'offline-denied', testInfo);
+  await shot(page, 'wb4-offline-denied');
+});
+
 // ---- worst band ----
 for (const [id, file] of [['worst-band', 'wb4-worst-band'], ['worst-band-permission', 'wb4-worst-band-permission']]) {
   test(`${id}: hint, mic, position and NO BUTTONS tag do not overlap or leave the band`, async ({ openView, page }, testInfo) => {

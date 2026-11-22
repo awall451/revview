@@ -338,7 +338,7 @@ function reduceInner(b, event) {
       const kept = live.pending.filter((p) => !(p.since === event.since && p.agent === event.agent));
       if (kept.length === live.pending.length) return b;
       const gone = live.pending.find((p) => p.since === event.since && p.agent === event.agent);
-      const answer = { decision: event.decision, tool: gone.tool, file: gone.file, command: gone.command };
+      const answer = { decision: event.decision, tool: gone.tool, file: gone.file, command: gone.command, tuid: gone.tuid, agent: gone.agent };
       const tick = b.tick + 1;
       return { ...b, tick, sessions: withSession(b.sessions, id, { ...live, pending: kept, answer, touched: tick }) };
     }
@@ -667,12 +667,11 @@ function navView(b) {
   return { kind, row: clampRow(b.nav.row, rows.length), rows };
 }
 
-// 'allow' | 'deny' while the shown session still shows the call revview answered (nothing pending, same tool, file, command).
+// 'allow' | 'deny' while the shown session has an answer of revview's and nothing pending (the answer is tied to the
+// answered request, see boardView; it lasts until the session's next call, request, start or driver prompt).
 function answeredOf(shown) {
   const a = shown === null ? undefined : shown.answer;
-  if (a === undefined || shown.pending.length > 0) return null;
-  const s = shown.state;
-  return s.tool === a.tool && s.file === a.file && s.command === a.command ? a.decision : null;
+  return a === undefined || shown.pending.length > 0 ? null : a.decision;
 }
 
 // The keys every view state carries besides the shown session's own fields.
@@ -721,6 +720,9 @@ export function boardView(board) {
   }
   const s = shown.state;
   const ask = shown.pending.length > 0 ? shown.pending[0] : null;
+  // the call revview answered (nothing pending): the bar shows that call, not the state's last tool/command
+  const ans = ask === null && shown.answer !== undefined ? shown.answer : null;
+  const ownOutput = ans === null || (ans.tool === 'Bash' && ans.command !== null && s.command === ans.command);
   const activity = act(shown);
   const repo = s.repo ?? b.context.repo;
   // the board's branch belongs to the board's repo only
@@ -732,12 +734,12 @@ export function boardView(board) {
     locked: b.locked,
     repo,
     branch,
-    tool: ask === null ? s.tool : ask.tool,
-    file: ask === null ? s.file : ask.file,
+    tool: ask !== null ? ask.tool : ans !== null ? ans.tool : s.tool,
+    file: ask !== null ? ask.file : ans !== null ? ans.file : s.file,
     diff: { added: s.diff.added, removed: s.diff.removed },
-    command: ask === null ? s.command : ask.command,
-    output: ask === null ? s.output : ask.output,
-    outputLines: ask === null ? s.outputLines : ask.outputLines,
+    command: ask !== null ? ask.command : ans !== null ? ans.command : s.command,
+    output: ask !== null ? ask.output : ownOutput ? s.output : null,
+    outputLines: ask !== null ? ask.outputLines : ownOutput ? s.outputLines : [],
     others: Object.keys(b.sessions).filter((k) => k !== '').length - (shownKey === '' ? 0 : 1),
     diffIncomplete: shown.dropped,
     buttons,

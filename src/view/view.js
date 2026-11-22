@@ -193,22 +193,28 @@ export function render(input) {
   let file = '';
   let outRows = 0;
 
+  delete el.tool.dataset.answer;
+  // revview's own answer to the shown call, in words (not by colour alone): "Denied: Bash" / "Allowed: Bash"
+  const answerWord = (tool) => (tool !== '' && (s.answered === 'deny' || s.answered === 'allow') ? `${s.answered === 'deny' ? 'Denied' : 'Allowed'}: ${tool}` : '');
   if (note) {
     if (Object.hasOwn(NOTES, view)) {
       set(el.note1, NOTES[view][0]);
       set(el.note2, voiceNote || NOTES[view][1]);
     } else {
+      // OFFLINE keeps the confirmation of a button answer (Denied/Allowed) before "Claude: ..." on row A
+      const word = view === 'offline' ? answerWord(str(s.tool)) : '';
+      if (word !== '') {
+        set(el.tool, word);
+        el.tool.dataset.answer = s.answered;
+      }
       set(el.note1, activity);
       set(el.note2, 'No network: voice input will not work');
       if (voiceNote) set(el['voice-note'], voiceNote);
     }
   } else {
     set(el.tool, str(s.tool));
-    delete el.tool.dataset.answer;
-    // revview's own answer to the shown call, in words (not by colour alone): "Denied: Bash" / "Allowed: Bash"
-    if (str(s.tool) !== '' && (s.answered === 'deny' || s.answered === 'allow')) {
-      const full = `${s.answered === 'deny' ? 'Denied' : 'Allowed'}: ${str(s.tool)}`;
-      set(el.tool, full);
+    if (answerWord(str(s.tool)) !== '') {
+      set(el.tool, answerWord(str(s.tool)));
       el.tool.dataset.answer = s.answered;
     }
     file = str(s.file);

@@ -24,7 +24,7 @@ test('a deny stays through Stop: done shows the same command, answered deny', ()
   assert.equal(v.view, 'working');
   assert.equal(v.answered, 'deny');
   assert.equal(v.command, 'npm test');
-  assert.deepEqual(b.sessions.A.answer, { decision: 'deny', tool: 'Bash', file: null, command: 'npm test' });
+  assert.deepEqual(b.sessions.A.answer, { decision: 'deny', tool: 'Bash', file: null, command: 'npm test', tuid: 't1', agent: '' });
   v = boardView(reduceBoard(b, ev('Stop', A)));
   assert.equal(v.view, 'done');
   assert.equal(v.answered, 'deny');

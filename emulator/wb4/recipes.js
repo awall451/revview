@@ -48,6 +48,15 @@ function answered(id, decision, ...after) {
   return [...asking, { hook_event_name: 'RevviewAnswered', session_id: id, agent: p.agent, since: p.since, decision }, ...after.map((e) => ({ ...e, session_id: id }))];
 }
 
+// A denied Edit after a Bash call of the same turn (QA r5-01): the working session's events, then the Edit's request and answer.
+function editAnswered(id, decision, ...after) {
+  const call = { session_id: id, tool_name: 'Edit', tool_input: { file_path: '/home/user/revview/src/app.py', old_string: 'a', new_string: 'b' }, tool_use_id: 'toolu_edit1' };
+  const asking = [...session(id, 'working'), { hook_event_name: 'PreToolUse', ...call }, { hook_event_name: 'PermissionRequest', ...call }];
+  const board = asking.reduce((b, ev) => reduceBoard(b, ev), initialBoard());
+  const p = pendingPrompts(board).find((x) => x.session === id);
+  return [...asking, { hook_event_name: 'RevviewAnswered', session_id: id, agent: p.agent, since: p.since, decision }, ...after.map((e) => ({ ...e, session_id: id }))];
+}
+
 const owned = (...ids) => ({ hook_event_name: 'RevviewOwned', ids });
 const select = (id) => ({ hook_event_name: 'RevviewSelect', session_id: id });
 const nav = (...buttons) => buttons.map((button) => ({ hook_event_name: 'RevviewNav', button, gesture: 'tap' }));
@@ -110,6 +119,10 @@ export const RECIPES = Object.freeze({
   settings: [...three, owned('s1', 's2', 's3'), select('s2'), projects(PROJECTS), ...nav('menu', 'down', 'down', 'press')],
   // revview denied the prompt and the turn stopped: DONE must say the command was denied
   'denied-done': [...answered('s1', 'deny', { hook_event_name: 'Stop' }), owned('s1'), select('s1')],
+  // r5-01: an Edit denied after a Bash call of the turn: "Denied: Edit", the old command and output do not come back
+  'denied-edit-after-bash': [...editAnswered('s1', 'deny', { hook_event_name: 'Stop' }), owned('s1'), select('s1')],
+  // r5-02: the same answer given while OFFLINE keeps its row
+  'offline-denied': [...editAnswered('s1', 'deny'), owned('s1'), select('s1'), { hook_event_name: 'RevviewNetwork', online: false }],
   // revview allowed the prompt; the command is running
   allowed: [...answered('s1', 'allow'), owned('s1'), select('s1')],
   // an owned session after a restart: no event yet, selected, UNKNOWN with its note
