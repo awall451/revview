@@ -3,7 +3,10 @@
 import { initialState, reduce } from './reducer.js';
 
 export const MAX_SESSIONS = 8; // the band hint "+N" has room for one digit
-const MAX_ENDED = 16;
+// Ids of ended sessions are remembered so that a late hook cannot resurrect one. The list is bounded; an id
+// that fell off it (more than MAX_ENDED later SessionEnds) can be resurrected by a late event: see "not solved"
+// in docs/DECISIONS.md. 256 ids of 36 bytes are a few KB.
+const MAX_ENDED = 256;
 
 const isObj = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
 const isStr = (x) => typeof x === 'string' && x !== '';
@@ -34,6 +37,14 @@ function isValidBoard(b) {
 }
 
 const keyOf = (event) => (isStr(event.session_id) ? event.session_id : '');
+
+// An event without a usable session_id belongs to the one live session when there is exactly one (hand-posted
+// or old-style hooks must not make a second session and a false "+1"); otherwise to the anonymous '' session.
+function targetOf(event, sessions) {
+  if (isStr(event.session_id)) return event.session_id;
+  const real = Object.keys(sessions).filter((k) => k !== '');
+  return real.length === 1 ? real[0] : '';
+}
 
 // Session maps use own properties only, so ids like `__proto__` are plain keys.
 function withSession(sessions, id, value) {
@@ -66,15 +77,24 @@ function pushEnded(ended, id) {
 
 const sameList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
+const PRIORITY = { permission: 4, waiting: 3, working: 2, done: 1 };
+const need = (s) => PRIORITY[s.state.activity] ?? 0;
+
+// Over the cap, drop the session that needs the driver least (unknown/starting, done, working, waiting), the
+// least recently touched among equals. A session at `permission` is never dropped: a pending prompt must not
+// vanish. If every other session needs permission the newcomer is still admitted and the cap is exceeded
+// (the hint "+N" may then have two digits); showing every prompt beats a tidy count.
 function capSessions(sessions, keepId) {
   let out = sessions;
   while (Object.keys(out).length > MAX_SESSIONS) {
-    let oldest = null;
+    let victim = null;
     for (const k of Object.keys(out)) {
-      if (k !== keepId && (oldest === null || out[k].touched < out[oldest].touched)) oldest = k;
+      if (k === keepId || out[k].state.activity === 'permission') continue;
+      if (victim === null || need(out[k]) < need(out[victim])
+        || (need(out[k]) === need(out[victim]) && out[k].touched < out[victim].touched)) victim = k;
     }
-    if (oldest === null) break;
-    out = withoutSession(out, oldest);
+    if (victim === null) break;
+    out = withoutSession(out, victim);
   }
   return out;
 }
@@ -90,6 +110,8 @@ export function reduceBoard(board, event) {
   const name = event.hook_event_name;
   const id = keyOf(event);
   const live = has(b.sessions, id) ? b.sessions[id] : null;
+  const tid = targetOf(event, b.sessions); // session an id-less event is routed to (SessionEnd and hooks)
+  const tlive = has(b.sessions, tid) ? b.sessions[tid] : null;
 
   switch (name) {
     case 'RevviewNetwork':
@@ -118,23 +140,24 @@ export function reduceBoard(board, event) {
       return sessions === b.sessions ? b : { ...b, sessions };
     }
     case 'SessionEnd': {
-      if (live === null && b.ended.includes(id)) return b;
-      const sessions = withoutSession(b.sessions, id);
+      if (tlive === null && b.ended.includes(tid)) return b;
+      const sessions = withoutSession(b.sessions, tid);
       // the anonymous session ('') is never remembered as ended, so later id-less events still count
-      const ended = id === '' ? b.ended : pushEnded(b.ended, id);
+      const ended = tid === '' ? b.ended : pushEnded(b.ended, tid);
       if (Object.keys(sessions).length > 0) return { ...b, sessions, ended };
-      const repo = live !== null && live.state.repo !== null ? live.state.repo : b.context.repo;
-      const branch = live !== null && live.state.branch !== null ? live.state.branch : b.context.branch;
+      const repo = tlive !== null && tlive.state.repo !== null ? tlive.state.repo : b.context.repo;
+      const branch = tlive !== null && tlive.state.branch !== null ? tlive.state.branch : b.context.branch;
       return { ...b, sessions, ended, phase: 'ended', context: { repo, branch } };
     }
     default:
       break;
   }
 
-  if (name !== 'SessionStart' && b.ended.includes(id)) return b;
-  return applyToSession(b, live, id, event);
+  if (name !== 'SessionStart' && b.ended.includes(tid)) return b;
+  return applyToSession(b, tlive, tid, event);
 }
 
+const DIFF_TOOLS = new Set(['Edit', 'Write', 'MultiEdit']);
 const POST = new Set(['PostToolUse', 'PostToolUseFailure']);
 const PERMISSION_TYPES = new Set(['permission_prompt', 'worker_permission_prompt']);
 
@@ -157,7 +180,13 @@ function applyToSession(b, live, id, event) {
   if (finished && (name === 'PermissionRequest'
     || (name === 'Notification' && PERMISSION_TYPES.has(event.notification_type)))) return b;
   if (finished && (POST.has(name) || name === 'PermissionDenied')) {
-    if (!POST.has(name) || toolUseId === null || !prevOpen.includes(toolUseId)) return b;
+    if (!POST.has(name) || toolUseId === null || !prevOpen.includes(toolUseId)) {
+      // a late diff-tool result we cannot place: its lines are lost, so the diff is only a lower bound
+      if (name === 'PostToolUse' && DIFF_TOOLS.has(event.tool_name) && !live.dropped) {
+        return { ...b, sessions: withSession(b.sessions, id, { ...live, dropped: true }) };
+      }
+      return b;
+    }
     state = state === prev ? prev : { ...state, activity: prev.activity, view: prev.view };
   }
 
@@ -179,8 +208,6 @@ function applyToSession(b, live, id, event) {
   return { ...b, sessions, ended, tick };
 }
 
-const PRIORITY = { permission: 4, waiting: 3, working: 2, done: 1 };
-
 function pickShown(board) {
   let best = null;
   for (const k of Object.keys(board.sessions)) {
@@ -196,6 +223,7 @@ function pickShown(board) {
 export function boardView(board) {
   const b = isValidBoard(board) ? board : initialBoard();
   const shown = pickShown(b);
+  const shownKey = shown === null ? null : Object.keys(b.sessions).find((k) => b.sessions[k] === shown);
   const overlay = (activity) => (b.locked ? 'insert-key' : b.offline ? 'offline' : activity);
   if (shown === null) {
     return {
@@ -227,7 +255,7 @@ export function boardView(board) {
     diff: { added: s.diff.added, removed: s.diff.removed },
     command: s.command,
     output: s.output,
-    others: Object.keys(b.sessions).length - 1,
+    others: Object.keys(b.sessions).filter((k) => k !== '').length - (shownKey === '' ? 0 : 1),
     diffIncomplete: shown.dropped,
   };
 }

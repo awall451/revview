@@ -139,13 +139,85 @@ test('overlays', () => {
 
 test('MAX_SESSIONS drops the least recently touched', () => {
   const events = [];
-  for (let i = 0; i < MAX_SESSIONS; i += 1) events.push(ev('SessionStart', { session_id: `s${i}` }));
-  events.push(ev('UserPromptSubmit', { session_id: 's0' }));
-  events.push(ev('SessionStart', { session_id: 'new' }));
+  for (let i = 0; i < MAX_SESSIONS; i += 1) events.push(ev('UserPromptSubmit', { session_id: `s${i}` })); // all working
+  events.push(ev('PreToolUse', { session_id: 's0', ...BASH, tool_use_id: 't0' })); // touches s0 (still working)
+  events.push(ev('UserPromptSubmit', { session_id: 'new' }));
   const b = run(events);
   assert.equal(Object.keys(b.sessions).length, MAX_SESSIONS);
   assert.ok(!('s1' in b.sessions));
   assert.ok('s0' in b.sessions && 'new' in b.sessions);
+});
+
+test('the cap never drops a session at NEEDS PERMISSION, even the oldest', () => {
+  const events = [
+    ev('SessionStart', { session_id: 'P' }), ev('UserPromptSubmit', { session_id: 'P' }),
+    ev('PermissionRequest', { session_id: 'P', tool_name: 'Bash', tool_input: { command: 'rm x' } }),
+  ];
+  for (let i = 0; i < MAX_SESSIONS; i += 1) events.push(ev('UserPromptSubmit', { session_id: `s${i}` }));
+  const b = run(events);
+  assert.ok('P' in b.sessions, 'permission session kept');
+  assert.equal(Object.keys(b.sessions).length, MAX_SESSIONS);
+  assert.ok(!('s0' in b.sessions), 'the oldest non-permission one went instead');
+  assert.equal(boardView(b).view, 'permission');
+});
+
+test('the cap drops the session that needs the driver least first', () => {
+  const events = [ev('SessionStart', { session_id: 'W' })]; // waiting, oldest
+  events.push(ev('SessionStart', { session_id: 'D' }), ev('UserPromptSubmit', { session_id: 'D' }), ev('Stop', { session_id: 'D' }));
+  for (let i = 0; i < MAX_SESSIONS - 2; i += 1) events.push(ev('UserPromptSubmit', { session_id: `s${i}` }));
+  events.push(ev('UserPromptSubmit', { session_id: 'new' }));
+  const b = run(events);
+  assert.ok(!('D' in b.sessions), 'done goes before older waiting/working');
+  assert.ok('W' in b.sessions && 'new' in b.sessions && 's0' in b.sessions);
+});
+
+test('when every other session needs permission the newcomer is admitted and the cap is exceeded', () => {
+  const events = [];
+  for (let i = 0; i < MAX_SESSIONS; i += 1) {
+    const session_id = `p${i}`;
+    events.push(ev('UserPromptSubmit', { session_id }), ev('PermissionRequest', { session_id, tool_name: 'Bash' }));
+  }
+  events.push(ev('UserPromptSubmit', { session_id: 'new' }));
+  const b = run(events);
+  assert.equal(Object.keys(b.sessions).length, MAX_SESSIONS + 1);
+  assert.ok('new' in b.sessions);
+  assert.equal(boardView(b).view, 'permission');
+});
+
+test('an event without session_id goes to the only live session; the anonymous bucket is never counted', () => {
+  const b = run([ev('SessionStart', A), ev('UserPromptSubmit'), ev('PreToolUse', { ...BASH, tool_use_id: 't' })]);
+  assert.deepEqual(Object.keys(b.sessions), ['A']);
+  assert.equal(boardView(b).view, 'working');
+  assert.equal(boardView(b).others, 0);
+  // two live sessions: an id-less event cannot be placed, it goes to '' and is not an "other"
+  const two = run([ev('SessionStart', A), ev('SessionStart', B), ev('Stop')]);
+  assert.equal(boardView(two).others, 1);
+  assert.equal(boardView(run([ev('SessionStart', A), ev('SessionStart', B), ev('UserPromptSubmit')])).others, 1);
+  // id-less SessionEnd ends the only live session
+  assert.equal(boardView(run([ev('SessionStart', A), ev('SessionEnd')])).view, 'ended');
+});
+
+test('a late PostToolUse of a diff tool that cannot be placed marks the diff as a lower bound', () => {
+  const base = [ev('SessionStart', A), ev('UserPromptSubmit', A), ev('Stop', A)];
+  const edit = { ...A, tool_name: 'Edit', tool_input: { old_string: 'a', new_string: 'b' } };
+  const late = run([...base, ev('PostToolUse', edit)]);
+  assert.equal(boardView(late).diffIncomplete, true);
+  assert.equal(boardView(late).view, 'done');
+  assert.deepEqual(boardView(late).diff, { added: 0, removed: 0 });
+  assert.equal(boardView(run([...base, ev('PostToolUse', { ...edit, tool_use_id: 'zz' })])).diffIncomplete, true);
+  // a tool that never counts a diff changes nothing; the next prompt resets the mark
+  const bash = run([...base, ev('PostToolUse', { ...A, ...BASH })]);
+  assert.equal(boardView(bash).diffIncomplete, false);
+  assert.equal(boardView(run([...base, ev('PostToolUse', edit), ev('UserPromptSubmit', A)])).diffIncomplete, false);
+});
+
+test('ended ids are remembered for 256 sessions; beyond that a late event resurrects (documented limit)', () => {
+  const events = [];
+  for (let i = 0; i < 257; i += 1) events.push(ev('SessionStart', { session_id: `e${i}` }), ev('SessionEnd', { session_id: `e${i}` }));
+  const b = run(events);
+  assert.equal(b.ended.length, 256);
+  assert.equal(Object.keys(run([ev('UserPromptSubmit', { session_id: 'e256' })], b).sessions).length, 0);
+  assert.equal(Object.keys(run([ev('UserPromptSubmit', { session_id: 'e0' })], b).sessions).length, 1);
 });
 
 test('__proto__ and constructor session ids are safe', () => {

@@ -307,6 +307,36 @@ test('oversize event that cannot carry a diff (Bash output, Read, PreToolUse): 4
   });
 });
 
+test('oversize Read whose tool_input holds a decoy "tool_name":"Edit": nothing marked (first match is the real field)', async () => {
+  await withServer(async (srv) => {
+    const seq = await working(srv);
+    const head = `{"session_id":"${SA}","hook_event_name":"PostToolUse","tool_name":"Read","tool_input":{"note":{"hook_event_name":"Stop","tool_name":"Edit"}},"tool_response":{"file":{"content":"`;
+    assert.equal(await rawPost(srv, Buffer.from(head + 'x'.repeat(MAX_BODY_BYTES + 5000) + '"}}')), 413);
+    const s = await getState(srv);
+    assert.equal(s.seq, seq);
+    assert.equal(s.state.diffIncomplete, false);
+  });
+});
+
+test('recorded sessions keep the field order noteDropped relies on (session_id, hook_event_name, tool_name before tool_input/tool_response)', () => {
+  let checked = 0;
+  for (const f of fs.readdirSync(FIX).filter((x) => x.endsWith('.jsonl'))) {
+    const lines = fs.readFileSync(new URL(f, FIX), 'utf8').split('\n').filter(Boolean);
+    for (const line of lines) {
+      const keys = Object.keys(JSON.parse(line));
+      const at = (k) => keys.indexOf(k);
+      assert.ok(at('session_id') >= 0 && at('hook_event_name') >= 0, `${f}: ids present`);
+      for (const big of ['tool_input', 'tool_response']) {
+        if (at(big) < 0) continue;
+        assert.ok(at('session_id') < at(big) && at('hook_event_name') < at(big), `${f}: ids before ${big}`);
+        if (at('tool_name') >= 0) assert.ok(at('tool_name') < at(big), `${f}: tool_name before ${big}`);
+        checked += 1;
+      }
+    }
+  }
+  assert.ok(checked > 0);
+});
+
 test('oversize diff event of a session the board does not know: 413, seq and view unchanged', async () => {
   await withServer(async (srv) => {
     const seq = await working(srv);

@@ -61,7 +61,7 @@ offline/locked overlays and shows again when they clear.
 
 ## Board (`board.js`)
 
-`reduceBoard` keeps many sessions (key = `session_id`, or `''` for events without one; subagent events carry
+`reduceBoard` keeps many sessions (key = `session_id`; an event without a usable one goes to the only live session if there is exactly one, else to the anonymous `''` session, which `others` never counts; subagent events carry
 the parent's `session_id`, so they never make a second session). Pure, never throws, returns the SAME reference
 when nothing changes. Board: `{phase, offline, locked, context: {repo, branch}, sessions, ended, tick}`;
 `sessions[id] = {state, open, touched, dropped}` (`state` from `reduce`, `open` = tool_use_ids with a
@@ -71,9 +71,9 @@ PreToolUse and no Post yet, `touched` = board tick of the last applied event).
   list, phase `starting`. `RevviewContext`: applied to its live session if it has a `session_id` of one,
   otherwise to `board.context`.
 - `RevviewDropped` (internal, sent by the server when an event body was too large to read): marks that live
-  session `dropped` (the diff may be incomplete), or every live session without a usable id; an id the board
+  session `dropped` (the diff may be incomplete). A late `PostToolUse` of Edit/Write/MultiEdit after `Stop` that cannot be placed (no `tool_use_id`, or one not open) also marks it, since its lines are lost, or every live session without a usable id; an id the board
   does not know marks nothing. Reset by `UserPromptSubmit`.
-- `SessionEnd`: removes the session and remembers its id in `ended` (last 16; the anonymous `''` session is
+- `SessionEnd`: removes the session and remembers its id in `ended` (last `MAX_ENDED = 256`; an older id can be resurrected by a late event, see DECISIONS "not solved"; the anonymous `''` session is
   never remembered). With no session left, phase is `ended` and `board.context` keeps its repo/branch. Later
   events of an ended id are ignored, except `SessionStart`, which recreates the session.
 - Ignored events (the reducer returns the same state) never create a session.
@@ -84,8 +84,8 @@ PreToolUse and no Post yet, `touched` = board tick of the last applied event).
   permission Notifications are ignored too (a permission needs a running turn). `PreToolUse` after `Stop` is
   accepted (Claude can start work on its own).
 - A board that this module did not build (any session not of the shape above) is replaced by `initialBoard()`.
-- At most `MAX_SESSIONS = 8` live sessions (the band hint `+N` has room for one digit); on overflow the least recently touched is dropped (a crashed
-  Claude never sends `SessionEnd`).
+- At most `MAX_SESSIONS = 8` live sessions (the band hint `+N` has room for one digit); on overflow the session that needs the driver least is dropped (unknown/starting, then done, working, waiting; the least recently touched among equals; a crashed
+  Claude never sends `SessionEnd`). A session at `permission` is never dropped: if all others need permission, the newcomer is still admitted and the cap is exceeded (`+N` may have two digits).
 - Shown session: priority `permission` > `waiting` > `working` > `done` > anything else; tie -> highest `touched`.
 
 `boardView(board)` is the flat state the page renders, always with exactly these keys: `view, activity,

@@ -289,8 +289,11 @@ inverted on purpose: a display fault must not look like any coloured Claude stat
   driver: permission > waiting > working > done, ties to the most recent event. **Hint**: `+N` in the band
   when N other sessions are live (their states are not shown; by the rule above none of them needs the driver
   more). At most 8 live sessions (`MAX_SESSIONS`, so N has one digit); on overflow the least recently active
-  is dropped (a crashed Claude never sends SessionEnd). Events without a `session_id` share one anonymous
-  session, so hand-posted events still work.
+  is dropped: chosen by least need first (done, then working, then waiting), then least recently active, and
+  **never a session at NEEDS PERMISSION** (if all others need permission the newcomer is still admitted and
+  the cap is exceeded; a pending prompt must not vanish). A crashed Claude never sends SessionEnd. An event
+  without a `session_id` goes to the one live session when there is exactly one (no false `+1` from
+  hand-posted or old-style hooks); otherwise it goes to a shared anonymous session that `+N` never counts.
 - **04, SessionEnd removes its session**; with none left the bar shows CLAUDE EXITED (repo kept). Late events
   of an ended session are ignored, except a SessionStart with that id, which recreates it (`/clear`).
 - **10, late tool events**: once a turn has ended (`done`, or `waiting` with no tool open), a
@@ -302,7 +305,14 @@ inverted on purpose: a display fault must not look like any coloured Claude stat
   64 KiB; if it is a PostToolUse of Edit/Write/MultiEdit (or the tool name is not in the prefix), it feeds
   `RevviewDropped {session_id}` to the board and the diff is shown as a lower bound: `≥ +N −N` (reset at the
   next prompt). A lost Read/Bash/PreToolUse event counts no diff, so it marks nothing. Claude Code writes
-  `session_id` first and `tool_name` before `tool_input`, so they are inside the prefix.
+  `session_id` first and `tool_name` before `tool_input`, so they are inside the prefix and the first match
+  is the real field (tests: a decoy `"tool_name":"Edit"` inside `tool_input` after a real Read marks nothing;
+  `tests/unit/server.test.js` asserts the key order in `fixtures/sessions/*.jsonl`, so a changed order shows up
+  when sessions are re-recorded). A late Edit/Write PostToolUse after Stop that cannot be placed (no
+  `tool_use_id`) is dropped for the activity but marks the diff `≥` as well.
+- **Page before its first message** (QA round 1b): the live page shows NO LINK, not STARTING, until the first
+  SSE message arrives; STARTING only follows `RevviewStarting`. The boot page and the live page both start at
+  NO LINK, so the hand-over shows no flash.
 - **05, Chromium before the server: `src/view/boot.html`.** A self-contained page (inline CSS and script,
   no imports, works from `file://`) showing the NO LINK look ("Waiting for the revview server"). Every second
   it probes `http://127.0.0.1:<port>/state` with a `no-cors` fetch (a no-cors GET sends no `Origin` header,
@@ -318,6 +328,9 @@ inverted on purpose: a display fault must not look like any coloured Claude stat
 
 - A Claude that dies without SessionEnd (crash, power cut) stays on the bar with its last state until a new
   session pushes it out or `RevviewStarting` clears the board: the state core has no clock by design.
+- Ended sessions are remembered by id (last 256, `MAX_ENDED`) so that late hooks cannot resurrect them. A
+  late event of a session that ended more than 256 SessionEnds ago re-creates it (and its repo name) on the
+  bar until the next `SessionEnd`/`RevviewStarting`. Bounded memory without a clock cannot do better.
 - With two sessions, voice goes to whichever terminal has focus; the bar shows the neediest session and the
   `+N` hint, but cannot say where push-to-talk will land.
 
