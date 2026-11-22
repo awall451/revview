@@ -801,3 +801,23 @@ Code: `src/state/board.js`, `src/sessions/actions.js`, `src/server/index.js`, `s
 - **A key send failing with 'selected session gone'** refreshes `owned` at once (not after up to 5 s).
 - **Still open:** r4-05 (band numbers ambiguous), r4-07 (refused press is silent), r4-10 (band and row cuts), and
   home may still land on a session the buttons cannot drive (r4-06, part).
+
+## 2026-11-22: wheel buttons 6, dongle and pod set-up (written, nothing run on hardware)
+
+- **`pi/` holds the Pi files** for the dongle: `70-revview-dongle.rules`, `revview.service`, `install.sh`, README.
+  Charter stage 4 (the whole image) is not built; `pi/` takes only what this job needs and the image can grow
+  there. `docs/zmk/` holds the reference ZMK keymap, options and notes.
+- **Config alone is enough to find the dongle.** `src/input` already matches by `device.vendor`, `device.product`
+  and `device.name` (and the key bits) from `/proc/bus/input/devices`, or by a fixed `device.path`. So the udev
+  rule only gives group `input` and mode 0660 and an optional symlink (a fallback for `device.path`). No product
+  code was changed. The USB ids are a placeholder (ZMK default 1d50:615e, from memory) until bench W1 and D5.
+- **The unit has no ordering on the kiosk, network or dongle** and passes `--input --sessions`, never
+  `--dev-bridge`. User `revview` with `SupplementaryGroups=input`. A missing dongle is handled by the reader's
+  retry with backoff. `KillMode=process` is a guess to keep the tmux sessions over a restart (bench D3).
+- **The key map is `config/buttons.json` as it is** (F13-F24, no combos). A unit test checks it against the
+  BUTTONS.md table, that the udev ids equal the config ids, that the reference ZMK keymap has the same keys in the
+  same order and no hold-tap or layers, and that the unit has the right flags and no ordering lines.
+- **ZMK details are from memory.** One fetch of `https://zmk.dev/docs` was refused by the proxy, so no ZMK option,
+  node or default is checked. Every such file says so.
+- **Open questions** (boards, 5-way part, `zmk.dev` domain, USB ids, hold on the Pi) are in BUTTONS.md section 9
+  with suggested defaults. Bench items D1-D12.

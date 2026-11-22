@@ -1,0 +1,20 @@
+# udev rule for the wheel-button dongle (untested: no dongle, no Pi at the time of writing).
+#
+# PLACEHOLDER: idVendor and idProduct below are ZMK's default USB ids (1d50:615e), written from memory and
+# NOT read from a real dongle. Fill in the real ones from `lsusb` once the dongle exists, and keep them equal
+# to `device.vendor` and `device.product` in config/buttons.json (bench items W1 and D5).
+#
+# What it does:
+# - gives the event nodes of this USB device to group "input", mode 0660, so the server's user (in group
+#   "input", see revview.service) can read and grab them without root. On a stock Raspberry Pi OS the
+#   default rules already do this for all event nodes; this makes it explicit for this device.
+# - adds an optional stable symlink /dev/input/revview-dongle on the keyboard node. The server does not
+#   need it: it finds the dongle by vendor/product in /proc/bus/input/devices (src/input/devices.js). Use it
+#   only as a fallback with "device": {"path": "/dev/input/revview-dongle"} in the config. A dongle can show
+#   several event nodes (keyboard, consumer control, mouse); the symlink is meant for the one flagged as
+#   keyboard and may be wrong if that flag is not set. Check with `ls -l /dev/input/` (bench D5).
+#
+# The file name starts with 70 so it runs after 60-input-id.rules, which sets ID_INPUT_KEYBOARD.
+
+SUBSYSTEM=="input", KERNEL=="event[0-9]*", ATTRS{idVendor}=="1d50", ATTRS{idProduct}=="615e", GROUP="input", MODE="0660"
+SUBSYSTEM=="input", KERNEL=="event[0-9]*", ATTRS{idVendor}=="1d50", ATTRS{idProduct}=="615e", ENV{ID_INPUT_KEYBOARD}=="1", SYMLINK+="input/revview-dongle"

@@ -19,7 +19,7 @@ hardware.
 | **[untested hardware]** | Needs the Pi, the pods or the car. Nothing is claimed to work. A bench item exists. |
 | **[proposal]** | A design choice of the team. The owner can change it. |
 
-Bench items are in `docs/BENCH-TEST.md`, numbers 27 to 39.
+Bench items are in `docs/BENCH-TEST.md`, numbers 27 to 39 (and `D1`... for the dongle and pods, section 9).
 
 ## 1. Input layer
 
@@ -303,7 +303,7 @@ Sizes: S small, M medium, L large. Aligned with the owner's items Wheel buttons 
 | WB3 | Sessions the Pi owns, and the actions: tmux-owned sessions, Space/Esc/Ctrl+C by send-keys, waiting PermissionRequest hook, new session from a project list. | M-L |
 | WB4 | State core and bar: selected rule, position, list, menu, home. **Built 2026-11-22 (emulator only; bench V1-V9 untested).** | M |
 | WB5 | Read aloud (new dependency). | M |
-| WB6 | Dongle and pod set-up: docs and the ZMK keymap reference (section 1). Hardware by the owner. | S for the team |
+| WB6 | Dongle and pod set-up: docs and the ZMK keymap reference (section 1). Hardware by the owner. **Written 2026-11-22 (section 9, `pi/`, `docs/zmk/`; all untested).** | S for the team |
 
 **Order.** The order stays. The smallest slice that meets charter stage 3 is WB2 plus the push-to-talk part of
 WB3 for ONE session, and it can go first. Allow and deny by hook is cheap and well evidenced. Multi-session work
@@ -333,6 +333,32 @@ WB3 for ONE session, and it can go first. Allow and deny by hook is cheap and we
 | 7 | Where the projects list comes from | A config file of repo paths on the data partition |
 | 8 | List and menu while moving | Allowed, auto-return after 10 s |
 | 9 | Which F-key per button | The table in section 1 |
+
+## 9. Pods and dongle: choices and what to check before buying
+
+WB6 (2026-11-22). Files: `pi/` (udev rule, systemd unit, install script) and `docs/zmk/` (reference ZMK keymap
+and options). Written without hardware; the ZMK parts are from memory, not checked against the ZMK docs (not
+reachable from the build VM). Bench items D1 to D12 in `docs/BENCH-TEST.md`. **[proposal]** for everything below;
+the defaults are suggestions, the owner decides.
+
+| # | Question | Default (suggestion) |
+|---|---|---|
+| 10 | Which nRF52840 boards for the dongle and the pods | Dongle: any nRF52840 board with USB that ZMK already supports (a ready board, no soldering). Pods: a small nRF52840 board with a coin-cell holder or a battery pad and a sleep-friendly regulator, also ZMK-supported. Fewer custom parts means fewer surprises. Check each is in ZMK's list of boards before buying |
+| 11 | Which 5-way switch part | A through-hole or side-mount tactile 5-way (up, down, left, right, press) that fits a pod case and can be pressed with a glove-free thumb without looking. Take two samples of two parts and try them on the wheel before ordering more. The press must be easy to tell from a nudge |
+| 12 | Ask for a domain for the ZMK docs (`zmk.dev`) | Yes: request `zmk.dev`. Without the docs a builder writes ZMK options from memory, which is what WB6 had to do |
+| 13 | Does the dongle keep ZMK's default USB ids (1d50:615e, from memory) | Keep them at first. Bench W1 and D5 read the real ids. Change them only if another device with the same ids is on the Pi |
+| 14 | Hold detection: firmware or Pi | Pi (as built). The firmware sends only plain keys |
+
+**What to check before buying.**
+- The boards are on ZMK's supported list, with USB (dongle) and the nRF52840 radio (both).
+- The dongle board has a stable USB port position near the Pi and the BLE radio is not blocked by a metal case.
+- The pods can wake from deep sleep on a key press (the key pins can be wake-up sources) and the board's idle
+  current on a coin cell is low. Datasheet values only: it is not proven (bench D8, D12).
+- A CR2032 can supply a Bluetooth radio's peak current: a coin cell with a low internal resistance, or a small
+  capacitor next to it. Check the cell datasheet. Bench 39 and D12 measure the result.
+- The 5-way switch's contacts have a low bounce time (the Pi also debounces, 30 ms) and a life of many presses.
+- Two pods on one dongle is supported by the ZMK version you build (from memory: recent versions; check).
+- One spare of each part: a dead pod in the car is a real cost.
 
 ## Not recorded / not proven
 

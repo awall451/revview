@@ -1,0 +1,41 @@
+/*
+ * Reference keymap for the wheel buttons. FROM MEMORY, NOT CHECKED AGAINST THE ZMK DOCS, UNTESTED.
+ * Plain keys only: no hold-tap, no layers, no macros. Hold and long hold are detected on the Pi.
+ * Keys are F13-F24, the table in docs/BUTTONS.md section 1 and config/buttons.json.
+ * Not a complete board or shield: the matrix transform, kscan and pin definitions are the owner's board work.
+ */
+
+#include <behaviors.dtsi>
+#include <dt-bindings/zmk/keys.h>
+
+/ {
+    keymap {
+        compatible = "zmk,keymap";
+
+        wheel_layer {
+            /* Positions 0-3: voice pod. Positions 4-11: navigation pod. */
+            bindings = <
+                /* voice pod */
+                &kp F13   /* push-to-talk */
+                &kp F14   /* read aloud */
+                &kp F15   /* cancel */
+                &kp F16   /* deny */
+                /* navigation pod */
+                &kp F17   /* up */
+                &kp F18   /* down */
+                &kp F19   /* left */
+                &kp F20   /* right */
+                &kp F21   /* press */
+                &kp F22   /* back */
+                &kp F23   /* menu */
+                &kp F24   /* spare */
+            >;
+        };
+    };
+
+    /*
+     * Optional, off by default: a combo of two keys on different pods sending one more key.
+     * The key map in config/buttons.json also accepts "Shift+F24" style names, but the shipped map has no combos.
+     * Left out on purpose: every combo adds a timeout before the first key is sent.
+     */
+};

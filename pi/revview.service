@@ -1,0 +1,33 @@
+# systemd unit for the revview server on the Pi. UNTESTED: written without a Pi.
+# install.sh copies it to /etc/systemd/system/revview.service with @REVVIEW_DIR@ replaced.
+#
+# Flags: --input (the wheel-button reader runs inside the server) and --sessions (revview's own tmux
+# sessions). NEVER add --dev-bridge: it opens POST /dev/key and is for the emulator only.
+#
+# Ordering: there is deliberately no Requires=, Wants= or After= on the kiosk, the network or the dongle.
+# The kiosk (labwc autostart, DESIGN.md) starts from the user's session and is not a unit; it shows NO LINK
+# until the server answers (bench 22). The reader looks for the dongle every second and backs off when it
+# is absent (src/input/reader.js), so a missing dongle at boot fails and delays nothing.
+[Unit]
+Description=revview server (view, wheel-button reader, sessions)
+
+[Service]
+Type=simple
+User=revview
+# Read /dev/input/event* without root. Needs python3 for src/input/grab.py.
+SupplementaryGroups=input
+WorkingDirectory=@REVVIEW_DIR@
+Environment=REVVIEW_PORT=8138
+# Optional: REVVIEW_PROJECTS=/path/to/projects.json (see config/projects.example.json)
+EnvironmentFile=-/etc/revview/server.env
+ExecStart=/usr/bin/node @REVVIEW_DIR@/src/server/index.js --input @REVVIEW_DIR@/config/buttons.json --sessions
+Restart=always
+RestartSec=2
+# Do not kill the private tmux server (revview's sessions) when the service restarts: only the node
+# process is stopped. grab.py exits by itself when its parent is gone (bench W5). Untested (bench D3).
+KillMode=process
+# Not set on purpose: PrivateDevices (it hides /dev/input).
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target
