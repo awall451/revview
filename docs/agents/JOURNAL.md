@@ -163,3 +163,22 @@ Found (all times UTC; the schedule's zone is America/New_York = UTC-5):
 Forecast given to the owner: with cap 15 and 12 counted after this cycle, today's 13:30, 15:00 and 16:00 slots can run, 17:00 and 18:00 would hit the cap again, and the count resets at 19:00 local. This cycle had to end before 18:30Z or the 13:30 slot would be skipped ("a one-shot job is in progress").
 
 Process note: when an owner message names something the product does not have, look at the kit's readable state (`/var/lib/agent-kit/schedule.log`, the ledger) before asking; do not read `/etc/agent-kit/auth.env`.
+
+## 2026-11-22: cycle 13 (normal cycle: QA round 5, stage 2 hook wiring, core hardening)
+
+The first normal cycle since 06:45Z. Closed the stale owner replies first (WB3 message and the "all of it" answer: `done`; owner issue 845780 done). `owner-issues update` waits on stdin: call it with `</dev/null`. The publish refusal (old follow-up g) is gone: a publish went through at 16:54Z.
+
+Dispatched in parallel: qa (round 5 on main, 6 minutes), area-lead-core (Sonnet, core hardening + real espeak-ng, 5 minutes, 876 tests), area-lead-platform (Opus, stage 2 hook wiring, 19 minutes, 908 tests, its own Opus review inside). QA: three of round 4's majors held with real tmux; r4-04 did not hold for non-Bash requests (new major r5-01), plus 4 minor, 2 cosmetic.
+
+Then: the lead stacked the two branches (`work/stage2-stack`; one append conflict in DECISIONS.md, both sections kept) and gave the QA findings to area-lead-core (Opus, 23 minutes, four Sonnet builders, 964 tests): r5-01..05, r3-05 (StopFailure, from the new real recording), dead owned sessions. In parallel a Sonnet reviewer approved core hardening. Then in parallel: reviewer (Opus) on the fix diff and QA round 5b on the branch. QA: all held, no major, 3 small findings. Reviewer: one blocking finding, a single transient empty tmux listing ended every owned session for good and dropped their later hooks; 12 of 16 mutations caught. Fix round (area-lead-core, Sonnet, 7 minutes, 974 tests): a session ends only when missing from two consecutive listings and is not remembered as ended; missing tests added; speech text for URLs; bidi stripping. Sonnet reviewer on the fix round: approve, three non-blocking notes (in STATE Next 3).
+
+Submitted as one topic `stage2-qa5` (0277757, 80 files, +3155 -92). Decision: one topic, not three, because the fixes sit on top of both other branches.
+
+Decisions made by the agents, written in DECISIONS.md: hooks run synchronously (order); the installer touches only entries marked `# revview-hook`; no timer for dead sessions (a silent long build must not vanish), tmux window presence instead; no new state word for a failed turn.
+
+Not proven: anything on the Pi; any sound (espeak-ng wrote wav files only); PermissionDenied and worker_permission_prompt payloads were never seen.
+
+Process notes:
+- Agents spawned by the lead are put in a harness worktree under `.claude/worktrees/agent-*` and cannot use the /tmp worktree named in the brief: brief them to "commit on branch X in the worktree you are given", and remove the leftover worktree and its `worktree-agent-*` branch after each one.
+- QA on main + a second QA on the fix branch, 6-7 minutes each, was cheap and found the round's only major; the Opus reviewer found what QA could not (the transient listing).
+- Cycle cost about $14 of $40.
