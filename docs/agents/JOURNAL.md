@@ -66,3 +66,20 @@ Scope: the menu, session switching, starting sessions, projects, settings, cance
 Not proven: `/voice` in any mode (no microphone), hold-to-talk, voice inside tmux, Remote Control (source only), the default hook timeout, `agents --json` still saying "working" after an interrupt, anything on hardware.
 
 Process note: one area lead for research + recordings + writing worked well for a docs job; the scout hit its turn limit on the minified package and needed one nudge.
+
+## 2026-11-22: cycle 9 (wheel buttons 2, QA round 3 and its fixes)
+
+Owner message 20261122T064434Z-o-942fed (priority, answer to the scope question): build all of the wheel buttons as phased in BUTTONS.md section 8. All backlog items WB2-6 show approved. Replied `planned`.
+
+Dispatched in parallel: area-lead-core (Opus, four Sonnet builders, about 51 minutes) for WB2 on `work/wb2-input`, and QA round 3 (Opus, about 44 minutes) on 72a2d13. Both took far longer than earlier runs.
+
+QA round 3: 1 major (a non-Bash permission request showed the previous Bash command and output as if it were the request; the gate's own `worst-big-diff-permission` shot had it), 5 minor, 4 cosmetic; all round 2 fixes held; the dense layout reads at a glance. Fixes by a second area-lead-core (Opus, two Sonnet builders, 12 minutes) on `work/qa-round-3`, based on the WB2 branch to avoid the conflict of cycle 6: 01, 03, 04, 06, 09, 10 closed; 02, 05, 07, 08 left open (unrecorded Claude Code behaviour, or WB3).
+
+Reviewer (Sonnet, fresh context, 2 minutes) on WB2: changes needed. Blocking: `POST /event` with `RevviewButton` was accepted as a gesture in the kiosk configuration, so any local process (a Bash command run by Claude itself) could later have answered its own permission prompt once WB3 acts on gestures. Also: faked presence, no retry backoff, the grab helper could outlive the server, half a debounce. A third run (Sonnet lead, 6 minutes) fixed all seven on `work/wb2-qa3` on top of the QA fixes; spot-checked by the lead (403 without `--dev-bridge`, test present). Submitted as one topic `wb2-qa3`: merged 07:58 as 2406ab9, 552 tests (was 423).
+
+Not proven: nothing on hardware; a successful EVIOCGRAB was never seen; the event layout is assumed for 64-bit Pi OS; device ids and key codes are unverified; all input traces are constructed; the grab helper's parent-death exit has no automated test (bench W5); the tests for the 403 gating were not run against the old code to see them fail.
+
+Process notes:
+- The reviewer earned its cost: the area lead and its builders did not see the injection path. Keep an independent review for every phase that touches the gesture or permission path.
+- Basing the second branch on the first (instead of main) and submitting the stack as one topic avoided a merge run. The untracked QA issue files in the main checkout were read there by the fixing lead and committed on its branch; the lead deleted the untracked copies before `reset --hard`.
+- Leftover `worktree-agent-*` branches and three agent worktrees were removed at the end.
