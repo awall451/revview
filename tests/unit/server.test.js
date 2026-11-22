@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import http from 'node:http';
 import { startLiveServer, DEFAULT_PORT, DEFAULT_HOST, MAX_BODY_BYTES } from '../../src/server/index.js';
-import { initialState } from '../../src/state/index.js';
+import { initialBoard, boardView } from '../../src/state/index.js';
+
+const INITIAL = boardView(initialBoard());
 
 const FIX = new URL('../../fixtures/sessions/', import.meta.url);
 
@@ -58,8 +60,9 @@ test('initial state', async () => {
   await withServer(async (srv) => {
     const s = await getState(srv);
     assert.equal(s.seq, 0);
-    assert.deepEqual(s.state, initialState());
-    assert.deepEqual(srv.state(), initialState());
+    assert.deepEqual(s.state, INITIAL);
+    assert.equal(s.state.view, 'unknown');
+    assert.deepEqual(srv.state(), INITIAL);
   });
 });
 
@@ -128,7 +131,7 @@ test('bad bodies give 400 and leave state alone', async () => {
     }
     const s = await getState(srv);
     assert.equal(s.seq, 0);
-    assert.deepEqual(s.state, initialState());
+    assert.deepEqual(s.state, INITIAL);
   });
 });
 
@@ -222,4 +225,114 @@ test('close() resolves promptly with an SSE client connected', async () => {
   await srv.close();
   assert.ok(Date.now() - t0 < 2000);
   c.close();
+});
+
+const SA = 'aaaaaaaa-0000-4000-8000-00000000000a';
+const SB = 'bbbbbbbb-0000-4000-8000-00000000000b';
+const ev = (id, name, extra = {}) => ({ session_id: id, hook_event_name: name, ...extra });
+const bash = (id, command, tid) => ev(id, 'PreToolUse', { tool_name: 'Bash', tool_use_id: tid, tool_input: { command } });
+
+test('two sessions: a permission stays shown after another session goes idle', async () => {
+  await withServer(async (srv) => {
+    for (const e of [
+      ev(SA, 'UserPromptSubmit', { prompt: 'go' }),
+      bash(SA, 'rm -rf build', 'ta'),
+      ev(SA, 'PermissionRequest', { tool_name: 'Bash', tool_input: { command: 'rm -rf build' } }),
+      ev(SB, 'UserPromptSubmit', { prompt: 'go' }),
+      ev(SB, 'Notification', { notification_type: 'idle_prompt' }),
+    ]) assert.equal((await post(srv, e)).status, 204);
+    const v = (await getState(srv)).state;
+    assert.equal(v.view, 'permission');
+    assert.equal(v.command, 'rm -rf build');
+    assert.equal(v.others, 1);
+  });
+});
+
+test('SessionEnd shows ended; events after Stop keep done', async () => {
+  await withServer(async (srv) => {
+    for (const e of [ev(SA, 'UserPromptSubmit', { prompt: 'go' }), bash(SA, 'ls', 't1'), ev(SA, 'Stop')]) await post(srv, e);
+    assert.equal((await getState(srv)).state.view, 'done');
+    await post(srv, { ...bash(SA, 'ls', 't1'), hook_event_name: 'PostToolUse' });
+    assert.equal((await getState(srv)).state.view, 'done');
+    await post(srv, ev(SA, 'SessionEnd', { reason: 'other' }));
+    assert.equal((await getState(srv)).state.view, 'ended');
+  });
+});
+
+const rawPost = (srv, body, headers = {}, { end = true } = {}) =>
+  new Promise((resolve) => {
+    const req = http.request(`${srv.url}/event`, { method: 'POST', headers }, (res) => {
+      res.resume();
+      resolve(res.statusCode);
+    });
+    req.on('error', () => resolve('reset'));
+    if (end) req.end(body);
+    else req.write(body); // keeps the request open: only the declared length is over the limit
+  });
+
+const hookPrefix = `{"session_id":"${SA}","hook_event_name":"PostToolUse","tool_name":"Edit","tool_response":{"originalFile":"`;
+const bigHook = () => Buffer.from(hookPrefix + 'x'.repeat(MAX_BODY_BYTES + 5000) + '"}}');
+
+async function working(srv) {
+  await post(srv, ev(SA, 'UserPromptSubmit', { prompt: 'go' }));
+  await post(srv, bash(SA, 'ls', 't1'));
+  assert.equal((await getState(srv)).state.diffIncomplete, false);
+  return (await getState(srv)).seq;
+}
+
+test('oversize hook event: 413, then the view says the diff is incomplete', async () => {
+  await withServer(async (srv) => {
+    const seq = await working(srv);
+    assert.equal(await rawPost(srv, bigHook()), 413);
+    const s = await getState(srv);
+    assert.equal(s.seq, seq + 1);
+    assert.equal(s.state.diffIncomplete, true);
+  });
+});
+
+test('oversize event that cannot carry a diff (Bash output, Read, PreToolUse): 413, nothing marked', async () => {
+  await withServer(async (srv) => {
+    const seq = await working(srv);
+    const heads = [
+      `{"session_id":"${SA}","hook_event_name":"PostToolUse","tool_name":"Bash","tool_response":{"stdout":"`,
+      `{"session_id":"${SA}","hook_event_name":"PostToolUse","tool_name":"Read","tool_response":{"file":{"content":"`,
+      `{"session_id":"${SA}","hook_event_name":"PreToolUse","tool_name":"Write","tool_input":{"content":"`,
+    ];
+    for (const head of heads) {
+      assert.equal(await rawPost(srv, Buffer.from(head + 'x'.repeat(MAX_BODY_BYTES + 5000) + '"}}')), 413);
+    }
+    const s = await getState(srv);
+    assert.equal(s.seq, seq);
+    assert.equal(s.state.diffIncomplete, false);
+  });
+});
+
+test('oversize body that is not a hook event: 413, seq unchanged', async () => {
+  await withServer(async (srv) => {
+    const seq = await working(srv);
+    assert.equal(await rawPost(srv, Buffer.alloc(MAX_BODY_BYTES + 1000, 0x61)), 413);
+    const s = await getState(srv);
+    assert.equal(s.seq, seq);
+    assert.equal(s.state.diffIncomplete, false);
+  });
+});
+
+test('declared Content-Length over the limit with a hook prefix: 413 and diffIncomplete', async () => {
+  await withServer(async (srv) => {
+    const seq = await working(srv);
+    const status = await rawPost(srv, hookPrefix, { 'content-length': String(MAX_BODY_BYTES + 1) }, { end: false });
+    assert.equal(status, 413);
+    const s = await getState(srv);
+    assert.equal(s.seq, seq + 1);
+    assert.equal(s.state.diffIncomplete, true);
+  });
+});
+
+test('declared Content-Length over the limit with no body at all still gets 413 quickly', async () => {
+  await withServer(async (srv) => {
+    const t0 = Date.now();
+    assert.equal(await rawPost(srv, '', { 'content-length': String(MAX_BODY_BYTES + 1) }, { end: false }), 413);
+    assert.ok(Date.now() - t0 < 4000);
+    assert.equal((await getState(srv)).seq, 0);
+  });
 });

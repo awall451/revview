@@ -169,7 +169,9 @@ test.describe('live', () => {
       server = await restartOn(port);
       await expect(html(page)).toHaveAttribute('data-link', 'up', { timeout: 15000 });
       await expectSeq(page, 0, 15000);
-      await expect(page.locator('body')).toHaveAttribute('data-view', 'starting');
+      // changed on purpose: a restarted server knows nothing, so it shows "unknown", not "starting" (QA issue 01)
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'unknown');
+      await expect(page.locator('#state-word')).toHaveText('UNKNOWN');
 
       await postOk(server, s.lines[k]);
       await expectSeq(page, 1);
@@ -223,6 +225,92 @@ test.describe('live', () => {
       await expectSeq(page, 1);
       await expectShows(page, s.expected[0].state);
       await expect(html(page)).toHaveAttribute('data-link', 'up');
+    });
+  });
+
+  test('QA 01: after a restart the page does not claim a state it cannot know', async ({ page }) => {
+    test.setTimeout(90000);
+    const s = sessions.find((x) => x.id === 'idle-prompt') || sessions[0];
+    let server = await startLiveServer({ port: 0 });
+    const port = server.port;
+    try {
+      await page.goto(`${server.url}/`);
+      let k = 0;
+      do {
+        await postOk(server, s.lines[k]);
+        k++;
+      } while (s.expected[k - 1].state.view !== 'waiting');
+      await expectSeq(page, k);
+      await expect(page.locator('#state-word')).toHaveText('WAITING FOR ME');
+
+      await server.close();
+      await expect(page.locator('#state-word')).toHaveText('NO LINK', { timeout: 10000 });
+      server = await restartOn(port);
+      await expect(html(page)).toHaveAttribute('data-link', 'up', { timeout: 15000 });
+      await expectSeq(page, 0, 15000);
+      await expect(page.locator('#state-word')).toHaveText('UNKNOWN');
+      await expect(page.locator('#state-word')).not.toHaveText('STARTING');
+
+      const next = s.lines.findIndex((l, i) => i > 0 && JSON.parse(l).hook_event_name === 'UserPromptSubmit');
+      await postOk(server, s.lines[next]);
+      await expectSeq(page, 1);
+      await expect(page.locator('#state-word')).toHaveText('WORKING');
+    } finally {
+      await server.close();
+    }
+  });
+
+  test('QA 03: a permission stays shown when another session goes idle; +1 in the band', async ({ page }) => {
+    const A = 'aaaaaaaa-0000-4000-8000-00000000000a';
+    const B = 'bbbbbbbb-0000-4000-8000-00000000000b';
+    const ev = (id, name, extra = {}) => JSON.stringify({ session_id: id, hook_event_name: name, ...extra });
+    await withServer(async (server) => {
+      await page.goto(`${server.url}/`);
+      await expectSeq(page, 0);
+      await postOk(server, ev(A, 'UserPromptSubmit', { prompt: 'go' }));
+      await postOk(server, ev(A, 'PermissionRequest', { tool_name: 'Bash', tool_input: { command: 'rm -rf build' } }));
+      await expectSeq(page, 2);
+      await expect(page.locator('#state-word')).toHaveText('NEEDS PERMISSION');
+      await expect(page.locator('#others')).toHaveText('');
+      await postOk(server, ev(B, 'UserPromptSubmit', { prompt: 'go' }));
+      await postOk(server, ev(B, 'Notification', { notification_type: 'idle_prompt' }));
+      await expectSeq(page, 4);
+      await expect(page.locator('#state-word')).toHaveText('NEEDS PERMISSION');
+      await expect(page.locator('#command')).toHaveText('rm -rf build');
+      await expect(page.locator('#others')).toHaveText('+1');
+    });
+  });
+
+  test('QA 04: a recording that reaches SessionEnd shows CLAUDE EXITED', async ({ page }) => {
+    const s = sessions.find((x) => x.id === 'working-turn') || sessions[0];
+    const last = s.lines.length - 1;
+    expect(JSON.parse(s.lines[last]).hook_event_name).toBe('SessionEnd');
+    await withServer(async (server) => {
+      await page.goto(`${server.url}/`);
+      for (const l of s.lines) await postOk(server, l);
+      await expectSeq(page, s.lines.length);
+      await expect(page.locator('#state-word')).toHaveText('CLAUDE EXITED');
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'ended');
+    });
+  });
+
+  test('QA 11: an oversize event marks the diff as incomplete (the page shows the lower bound)', async ({ page }) => {
+    const s = sessions.find((x) => x.id === 'working-turn') || sessions[0];
+    await withServer(async (server) => {
+      await page.goto(`${server.url}/`);
+      let k = 0;
+      while (s.expected[k].state.view !== 'working') {
+        await postOk(server, s.lines[k]);
+        k++;
+      }
+      await postOk(server, s.lines[k]);
+      await expectSeq(page, k + 1);
+      await expect(page.locator('#diff-approx')).toHaveText('');
+      const id = JSON.parse(s.lines[0]).session_id;
+      const big = `{"session_id":"${id}","hook_event_name":"PostToolUse","tool_name":"Edit","tool_response":{"x":"${'a'.repeat(1100000)}"}}`;
+      expect((await post(server, big)).status).toBe(413);
+      await expectSeq(page, k + 2);
+      await expect(page.locator('#diff-approx')).toHaveText('≥');
     });
   });
 });

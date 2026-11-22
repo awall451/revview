@@ -6,11 +6,17 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { initialState, reduce } from '../state/index.js';
+import { initialBoard, reduceBoard, boardView } from '../state/index.js';
 
 export const DEFAULT_PORT = 8138;
 export const DEFAULT_HOST = '127.0.0.1'; // the only address it binds; there is no option for another
 export const MAX_BODY_BYTES = 1024 * 1024;
+const PREFIX_BYTES = 64 * 1024; // of an oversize body, kept to tell whether it was a hook event
+const PREFIX_WAIT_MS = 2000; // how long to wait for a prefix when only Content-Length was over the limit
+const SESSION_ID_RE = /"session_id"\s*:\s*"([^"\\]{1,200})"/;
+const EVENT_NAME_RE = /"hook_event_name"\s*:\s*"([A-Za-z]{1,64})"/;
+const TOOL_NAME_RE = /"tool_name"\s*:\s*"([^"\\]{1,200})"/;
+const DIFF_TOOLS = ['Edit', 'Write', 'MultiEdit']; // the only tools whose PostToolUse counts diff (src/state/diff.js)
 const PING_MS = 15000;
 export const MAX_SSE_CLIENTS = 8;
 export const MAX_CLIENT_BACKLOG_BYTES = 256 * 1024; // unread bytes after which a stalled SSE client is dropped
@@ -52,14 +58,14 @@ function serveStatic(req, res, root) {
   });
 }
 
-export async function startLiveServer({ port = 0, viewDir = DEFAULT_VIEW_DIR, reduce: reduceEvent = reduce } = {}) {
+export async function startLiveServer({ port = 0, viewDir = DEFAULT_VIEW_DIR, reduce: reduceEvent = reduceBoard } = {}) {
   const root = path.resolve(viewDir);
-  let state = initialState();
+  let board = initialBoard();
   let seq = 0;
   const clients = new Set();
   let ownPort = 0;
 
-  const message = () => `data: ${JSON.stringify({ seq, state })}\n\n`;
+  const message = () => `data: ${JSON.stringify({ seq, state: boardView(board) })}\n\n`;
   const broadcast = () => {
     const m = message();
     for (const c of clients) {
@@ -73,22 +79,74 @@ export async function startLiveServer({ port = 0, viewDir = DEFAULT_VIEW_DIR, re
     }
   };
 
+  // An event the core can take: seq += 1, new board, broadcast. A throwing core leaves everything alone.
+  function apply(event) {
+    let next;
+    try {
+      next = reduceEvent(board, event);
+    } catch (e) {
+      console.error('reduce failed:', e);
+      return false;
+    }
+    seq += 1;
+    board = next;
+    broadcast();
+    return true;
+  }
+
+  // A body over the limit that still looks like a hook event means an event was lost (QA issue 11).
+  function noteDropped(prefix) {
+    // Only a lost PostToolUse of a diff tool makes +N -N wrong; any other lost event (a huge Read or Bash
+    // output, a PreToolUse) changes no count, so it is not marked. Claude Code writes session_id first and
+    // tool_name before tool_input, so they are in the prefix (and the first match is the real field).
+    const head = prefix.toString('utf8');
+    const name = EVENT_NAME_RE.exec(head);
+    if (!name || name[1] !== 'PostToolUse') return;
+    const tool = TOOL_NAME_RE.exec(head);
+    if (tool && !DIFF_TOOLS.includes(tool[1])) return;
+    const m = SESSION_ID_RE.exec(head);
+    apply(m ? { hook_event_name: 'RevviewDropped', session_id: m[1] } : { hook_event_name: 'RevviewDropped' });
+  }
+
   function readBody(req, res, done) {
     const declared = Number(req.headers['content-length']);
     let size = 0;
+    let kept = 0;
     const chunks = [];
+    const prefix = []; // first PREFIX_BYTES of the body, for an oversize one
     let finished = false;
+    let timer = null;
+    const keep = (c) => {
+      if (kept >= PREFIX_BYTES) return;
+      const part = c.subarray(0, PREFIX_BYTES - kept);
+      prefix.push(part);
+      kept += part.length;
+    };
     const tooBig = () => {
       if (finished) return;
       finished = true;
-      chunks.length = 0;
+      clearTimeout(timer);
       req.removeAllListeners('data');
+      req.removeAllListeners('end');
+      chunks.length = 0;
       res.on('finish', () => req.socket.destroy());
       text(res, 413, 'body too large (max 1 MiB)', { connection: 'close' });
+      noteDropped(Buffer.concat(prefix));
     };
-    if (declared > MAX_BODY_BYTES) return tooBig();
+    if (declared > MAX_BODY_BYTES) {
+      // nothing counted yet: wait briefly for up to 64 KiB so the prefix can be looked at
+      timer = setTimeout(tooBig, PREFIX_WAIT_MS);
+      req.on('data', (c) => {
+        if (finished) return;
+        keep(c);
+        if (kept >= PREFIX_BYTES) tooBig();
+      });
+      req.on('end', tooBig);
+      return;
+    }
     req.on('data', (c) => {
       if (finished) return;
+      keep(c);
       size += c.length;
       if (size > MAX_BODY_BYTES) return tooBig();
       chunks.push(c);
@@ -111,16 +169,7 @@ export async function startLiveServer({ port = 0, viewDir = DEFAULT_VIEW_DIR, re
       if (event === null || typeof event !== 'object' || Array.isArray(event)) {
         return text(res, 400, 'body must be a JSON object');
       }
-      let next;
-      try {
-        next = reduceEvent(state, event);
-      } catch (e) {
-        console.error('reduce failed:', e);
-        return text(res, 500, 'state core failed; event ignored');
-      }
-      seq += 1;
-      state = next;
-      broadcast();
+      if (!apply(event)) return text(res, 500, 'state core failed; event ignored');
       res.writeHead(204).end();
     });
   }
@@ -150,7 +199,7 @@ export async function startLiveServer({ port = 0, viewDir = DEFAULT_VIEW_DIR, re
   const ROUTES = {
     '/event': { POST: postEvent },
     '/events': { GET: events },
-    '/state': { GET: (req, res) => res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify({ seq, state })) },
+    '/state': { GET: (req, res) => res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify({ seq, state: boardView(board) })) },
   };
 
   const server = http.createServer((req, res) => {
@@ -196,7 +245,7 @@ export async function startLiveServer({ port = 0, viewDir = DEFAULT_VIEW_DIR, re
   return {
     url: `http://${DEFAULT_HOST}:${ownPort}`,
     port: ownPort,
-    state: () => state,
+    state: () => boardView(board),
     close: () =>
       new Promise((resolve) => {
         clearInterval(timer);
