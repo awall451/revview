@@ -382,7 +382,7 @@ function reduceInner(b, event) {
       // The id is not put in `ended`: a dead Claude sends no hooks, a live one comes back with its next poll or hook.
       // No timer: a listed window stays however silent. b.owned === null (first list) ends nothing.
       let gone = b;
-      let missing = [];
+      const missing = [];
       if (b.owned !== null) {
         const before = b.missing ?? [];
         for (const id of new Set([...b.owned, ...before])) {
