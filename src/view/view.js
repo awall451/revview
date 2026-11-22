@@ -1,8 +1,8 @@
 /* global navigator */
-// The glance view: renders a reducer state (see src/state/README.md) as a state band and two lines.
+// The glance view: renders a reducer state (see src/state/README.md) as a state band, a row for tool and file, a command area and an output area.
 import { mmToPx } from './panel.js';
 import { TYPE_MM } from './type.js';
-import { middleEllipsis, fitWhere, formatCount } from './fit.js';
+import { middleEllipsis, fitWhere, fitPrefix, formatCount } from './fit.js';
 
 const LABELS = {
   working: 'WORKING',
@@ -58,7 +58,7 @@ function offlineNote(activity) {
 const $ = (id) => document.getElementById(id);
 const str = (v) => (typeof v === 'string' ? v : '');
 const ids = ['band', 'shape', 'state-word', 'others', 'where', 'tool', 'file', 'note1', 'note2', 'diff', 'diff-approx', 'diff-added',
-  'diff-removed', 'session', 'cmdbox', 'sep', 'command', 'output', 'line2', 'line3'];
+  'diff-removed', 'session', 'cmdbox', 'command', 'out1', 'out2', 'out3'];
 const el = Object.fromEntries(ids.map((id) => [id, $(id)]));
 
 // ---- type sizes: cap height in mm -> font-size px, using the real font's cap-height ratio ----
@@ -74,7 +74,7 @@ function applyTypeSizes() {
   const px = (mm, node) => `${(mmToPx(mm) / capRatio(node)).toFixed(3)}px`;
   const s = document.documentElement.style;
   s.setProperty('--state-font', px(TYPE_MM.state, el['state-word']));
-  s.setProperty('--detail-font', px(TYPE_MM.detail, el.output));
+  s.setProperty('--detail-font', px(TYPE_MM.detail, el.out3));
   s.setProperty('--mono-font', px(TYPE_MM.detail, el.command));
   s.setProperty('--diff-font', px(TYPE_MM.detail, el['diff-added']));
 }
@@ -96,6 +96,29 @@ function fitFile(full) {
   });
 }
 
+// The command wraps over at most MAX_ROWS minus the output rows shown (3 to 6 rows of 40 px; the rows below the
+// band are 7 in all); longer text is cut at its end with an ellipsis. Needs layout: call with the command box shown.
+const MAX_ROWS = 6;
+const ROW_PX = 40;
+function fitCommand(full, outRows) {
+  const c = el.command;
+  c.dataset.full = full;
+  const fits = (t) => {
+    c.textContent = t;
+    return c.offsetHeight <= (MAX_ROWS - outRows) * ROW_PX;
+  };
+  c.textContent = fitPrefix(full, fits);
+}
+
+// Up to the last 3 output lines, oldest first. outputLines is used only when it agrees with `output`
+// (an array of strings whose last element is `output`); otherwise `output` alone.
+function outputLines(s) {
+  const o = str(s.output);
+  const a = s.outputLines;
+  const ok = Array.isArray(a) && a.every((x) => typeof x === 'string') && a.at(-1) === o;
+  return (ok ? a : [o]).filter((x) => x !== '').slice(-3);
+}
+
 function cleanState(s) {
   if (!s || typeof s !== 'object' || typeof s.view !== 'string' || !Object.hasOwn(LABELS, s.view) || s.view === 'none') {
     return { view: 'none' };
@@ -106,7 +129,6 @@ function cleanState(s) {
 export function render(input) {
   const s = cleanState(input);
   const view = s.view;
-  const bash = s.tool === 'Bash';
   const note = Object.hasOwn(NOTES, view) || view === 'offline';
 
   el.shape.innerHTML = SHAPES[view];
@@ -115,9 +137,8 @@ export function render(input) {
   document.body.dataset.view = view;
 
   // everything below starts empty; only what applies is filled in
-  for (const k of ['tool', 'file', 'note1', 'note2', 'command', 'output']) set(el[k], '');
+  for (const k of ['tool', 'file', 'note1', 'note2', 'command', 'out1', 'out2', 'out3']) set(el[k], '');
   el.cmdbox.hidden = true;
-  el.sep.hidden = true;
   el.diff.hidden = true;
 
   const where = view === 'no-link' ? '' : [str(s.repo), str(s.branch)].filter(Boolean).join(' · ');
@@ -128,30 +149,18 @@ export function render(input) {
   const approx = s.diffIncomplete === true;
   const showDiff = (added > 0 || removed > 0 || approx) && !NO_DIFF.has(view);
   let file = '';
+  let outRows = 0;
 
   if (note) {
     if (Object.hasOwn(NOTES, view)) {
       set(el.note1, NOTES[view][0]);
       set(el.note2, NOTES[view][1]);
     } else { set(el.note1, activity); set(el.note2, 'No network: voice input will not work'); }
-  } else if (bash) {
-    el.line2.insertBefore(el.cmdbox, el.diff);
-    el.cmdbox.classList.add('wide');
-    el.cmdbox.classList.remove('capped');
-    set(el.command, str(s.command));
-    el.cmdbox.hidden = !s.command;
-    set(el.output, str(s.output));
   } else {
     set(el.tool, str(s.tool));
     file = str(s.file);
-    el.line3.prepend(el.cmdbox);
-    el.cmdbox.classList.remove('wide');
-    set(el.command, str(s.command));
-    el.cmdbox.hidden = !s.command;
-    set(el.output, str(s.output));
-    // the 40% cap only matters when an output line shares the row (QA 09)
-    el.cmdbox.classList.toggle('capped', !!s.output);
-    el.sep.hidden = !(s.command && s.output);
+    el.cmdbox.hidden = !str(s.command);
+    outRows = outputLines(s).reverse().map((line, i) => set(el[`out${3 - i}`], line)).length;
   }
   if (showDiff) {
     // a lower bound of zero says nothing ("at least nothing"): show it as unknown, never as +0 −0 (QA 11)
@@ -175,6 +184,7 @@ export function render(input) {
   if (others && el.others.getBoundingClientRect().right > el.band.clientWidth - 24) el.band.classList.add('tight');
 
   // fitting needs layout, so it comes after the fields are in place
+  if (!el.cmdbox.hidden) fitCommand(str(s.command), outRows);
   fitFile(file);
   set(el.where, where);
   el.where.hidden = false;
@@ -200,7 +210,7 @@ export function render(input) {
     el.where.hidden = true;
   }
   // QA 03: with other sessions open, the repo must still say which one needs the driver. When the band has
-  // no room for it (long state word + hint), it goes to the right end of line 3.
+  // no room for it (long state word + hint), it goes to the right end of row A.
   el.session.hidden = true;
   set(el.session, '');
   if (others && el.where.hidden && str(s.repo) && !note) {

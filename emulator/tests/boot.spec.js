@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { test, expect } from './harness.js';
 import { startLiveServer } from '../../src/server/index.js';
 import { textSizeMm } from '../mm.js';
-import { MIN_MM } from '../../src/view/type.js';
+import { RANGE_MM } from '../../src/view/type.js';
 import { expectFits, checkContrastAndFloor } from './checks.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -47,7 +47,8 @@ test.describe('boot page', () => {
     await expectFits(page);
     const mm = (await textSizeMm(page.locator('#state-word'))).capHeightMm;
     console.log(`boot state word cap=${mm.toFixed(2)}mm`);
-    expect(mm).toBeGreaterThanOrEqual(MIN_MM.state);
+    expect(mm).toBeGreaterThanOrEqual(RANGE_MM.state[0]);
+    expect(mm).toBeLessThanOrEqual(RANGE_MM.state[1]);
     await checkContrastAndFloor(page, 'boot', testInfo);
   });
 

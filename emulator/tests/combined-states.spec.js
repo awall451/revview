@@ -7,7 +7,7 @@ const branch = 'feature/very-long-branch-name-for-refund-flow-fix-with-many-more
 const file = 'src/some/very/deeply/nested/directory/structure/with/a-rather-long-file-name-here.component.test.tsx';
 const rect = (page, sel) => page.locator(sel).evaluate((e) => {
   const r = e.getBoundingClientRect();
-  return { left: r.left, right: r.right };
+  return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
 });
 const busy = {
   ...loadFixture('working'), tool: 'Edit', file, repo: 'revview', branch, others: 3,
@@ -49,7 +49,10 @@ for (const view of ['working', 'waiting', 'permission', 'done']) {
     expect(d.right).toBeLessThanOrEqual(1280);
     const f = await rect(page, '#file');
     expect(f.right).toBeLessThanOrEqual(d.left + 0.5);
-    await expect(page.locator('#sep')).toBeVisible();
+    // command and output sit on separate rows of their own and do not overlap (was: the → separator)
+    const cmd = await rect(page, '#command');
+    const out = await rect(page, '#out3');
+    expect(cmd.bottom).toBeLessThanOrEqual(out.top);
     await expectFits(page);
     await checkContrastAndFloor(page, `combined/${view}`, testInfo);
   });
@@ -60,13 +63,14 @@ for (const view of ['unknown', 'ended', 'no-link']) {
     await openView({ ...busy, view });
     await expect(page.locator('#diff')).toBeHidden();
     if (view !== 'ended') await expect(page.locator('#others')).toBeHidden();
-    await expect(page.locator('#sep')).toBeHidden();
+    await expect(page.locator('#cmdbox')).toBeHidden();
+    await expect(page.locator('#out3')).toHaveText('');
     if (view === 'no-link') await expect(page.locator('#where')).toBeHidden();
     else {
       expect(await page.locator('#where').evaluate((e) => e.scrollWidth - e.clientWidth)).toBeLessThanOrEqual(0);
       if (view === 'ended') {
-        // CLAUDE EXITED + hint leave room for the repo only: no branch piece fits, so the repo alone (QA 13)
-        expect(await page.locator('#where').textContent()).toBe('revview');
+        // with the smaller type the branch is cut in its middle and keeps its end (the repo-alone rule is QA 13 in polish2)
+        expect(await page.locator('#where').textContent()).toMatch(/^revview · .*….*2026$/);
         expect(await page.locator('#where').getAttribute('data-full')).toMatch(/^revview · .*2026$/);
       } else expect(await page.locator('#where').textContent()).toMatch(/2026$/);
     }

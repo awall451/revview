@@ -7,29 +7,36 @@ const box = (page, sel) => page.locator(sel).evaluate((e) => {
   return { left: r.left, right: r.right, width: r.width };
 });
 
-test.describe('line 3 separator (06)', () => {
+test.describe('command and output rows (06, was the line 3 separator)', () => {
   const edit = {
     ...loadFixture('working'), tool: 'Edit', file: 'a.py', command: 'make build',
-    output: 'make: *** No rule to make target build. Stop.',
+    output: 'make: *** No rule to make target build. Stop.', outputLines: ['make: *** No rule to make target build. Stop.'],
   };
-
-  test('sits between command and output on a non-Bash line', async ({ openView, page }) => {
-    await openView(edit);
-    await expect(page.locator('#sep')).toBeVisible();
-    const c = await box(page, '#cmdbox');
-    const s = await box(page, '#sep');
-    const o = await box(page, '#output');
-    expect(s.left).toBeGreaterThanOrEqual(c.right);
-    expect(s.right).toBeLessThanOrEqual(o.left);
+  const vbox = (page, sel) => page.locator(sel).evaluate((e) => {
+    const r = e.getBoundingClientRect();
+    return { top: r.top, bottom: r.bottom };
   });
 
-  test('hidden for Bash and without a command or output', async ({ openView, page }) => {
+  test('command and output are on separate rows and do not overlap', async ({ openView, page }) => {
+    await openView(edit);
+    await expect(page.locator('#sep')).toHaveCount(0);
+    const c = await vbox(page, '#cmdbox');
+    const o = await vbox(page, '#out3');
+    expect(c.bottom).toBeLessThanOrEqual(o.top);
+  });
+
+  test('same rows for Bash; the rows flow: a missing command leaves no hole', async ({ openView, page }) => {
+    await openView(edit);
+    const before = (await vbox(page, '#out3')).top;
     await openView({ ...edit, tool: 'Bash' });
-    await expect(page.locator('#sep')).toBeHidden();
+    await expect(page.locator('#cmdbox')).toBeVisible();
+    expect((await vbox(page, '#out3')).top).toBe(before);
     await openView({ ...edit, command: '' });
-    await expect(page.locator('#sep')).toBeHidden();
-    await openView({ ...edit, output: '' });
-    await expect(page.locator('#sep')).toBeHidden();
+    await expect(page.locator('#cmdbox')).toBeHidden();
+    expect((await vbox(page, '#out3')).top).toBe(before - 40);
+    await openView({ ...edit, output: '', outputLines: [] });
+    await expect(page.locator('#out3')).toHaveText('');
+    await expect(page.locator('#cmdbox')).toBeVisible();
   });
 });
 

@@ -9,8 +9,8 @@
 <title>Revview</title>
 <style>
 :root {
-  --state-font: 98px;
-  --detail-font: 56px;
+  --state-font: 55px;
+  --detail-font: 32px;
   --sans: "DejaVu Sans", "WenQuanYi Zen Hei", "IPAGothic", sans-serif;
 }
 html, body { margin: 0; width: 1280px; height: 400px; overflow: hidden; background: #000; }
@@ -25,7 +25,7 @@ body {
 #band {
   flex: none;
   box-sizing: border-box;
-  height: 140px;
+  height: 84px;
   padding: 0 24px;
   display: flex;
   align-items: center;
@@ -44,15 +44,10 @@ body {
   white-space: nowrap;
   text-transform: uppercase;
 }
-.row {
-  flex: 1 1 0;
-  min-height: 0;
-  box-sizing: border-box;
-  padding: 0 24px;
-  display: flex;
-  align-items: center;
-}
-.row > * { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* the same flow as the live view: 84 band, then 8 padding and 40 px rows (row A, then note2) */
+#lower { box-sizing: border-box; padding: 8px 24px 8px; line-height: 40px; }
+.row { height: 40px; }
+.row > * { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>
 </head>
 <body>
@@ -60,13 +55,15 @@ body {
   <svg id="shape" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 5.5H8a6.5 6.5 0 0 0 0 13h2.5" fill="none" stroke="currentColor" stroke-width="3"/><path d="M13.5 5.5H16a6.5 6.5 0 0 1 0 13h-2.5" fill="none" stroke="currentColor" stroke-width="3"/></svg>
   <span id="state-word">NO LINK</span>
 </div>
-<div class="row"><span id="note1">Waiting for the revview server</span></div>
-<div class="row"><span id="note2">Retrying every second</span></div>
+<div id="lower">
+  <div class="row" id="line2"><span id="note1">Waiting for the revview server</span></div>
+  <div class="row" id="line3"><span id="note2">Retrying every second</span></div>
+</div>
 <script>
 (function () {
   var PX_PER_MM = 1280 / 190; // the panel's scale, as src/view/panel.js
-  var STATE_MM = 10.6;        // cap heights, as src/view/type.js
-  var DETAIL_MM = 6.1;
+  var STATE_MM = 6.05;       // cap heights, as src/view/type.js
+  var DETAIL_MM = 3.55;
 
   function capRatio(node) {
     try {

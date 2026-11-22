@@ -1,5 +1,9 @@
 // Type sizes of the glance view as CAP HEIGHTS (ink height of a capital H) in panel millimetres.
 // TYPE_MM is what the design sets; view.js turns it into font sizes from the real font's cap ratio.
-// MIN_MM is what the tests assert as the lowest acceptable size (state word, and any text at all).
-export const TYPE_MM = Object.freeze({ state: 10.6, detail: 6.1 });
-export const MIN_MM = Object.freeze({ state: 10.5, floor: 6.0 });
+// The owner's targets are 6.0 mm (state word) and 3.5 mm (all other text). The design values sit a little above
+// them (6.05, 3.55) because the emulator's canvas measurement reports the hinted cap height in whole pixels,
+// rounded down (the true cap height at 6.05 mm is about 6.04 mm and measures 40 px = 5.94 mm; at 3.55 mm it is
+// about 3.54 mm and measures 23 px = 3.41 mm). With the exact targets the measurement can fall to 5.9 and 3.3.
+// RANGE_MM is what the tests assert, two-sided: the state word, and every other text.
+export const TYPE_MM = Object.freeze({ state: 6.05, detail: 3.55 });
+export const RANGE_MM = Object.freeze({ state: Object.freeze([5.8, 6.3]), text: Object.freeze([3.3, 3.7]) });

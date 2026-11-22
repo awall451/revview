@@ -8,5 +8,10 @@
   "diff": {
     "added": 999999999,
     "removed": 999999999
-  }
+  },
+  "outputLines": [
+    "building with warnings compiled with warnings compiled with warnings compiled with warnings compiled with warnings compiled with warnings compiled with warnings compiled with warnings compiled with wa",
+    "linking with warnings compiled with warnings compiled with warnings compiled with warnings compiled with warnings compiled with warnings compiled with warnings compiled with warnings compiled with wa",
+    "compiled with warnings compiled with warnings compiled with warnings compiled with warnings compiled with warnings compiled with warnings compiled with warnings compiled with warnings compiled with wa"
+  ]
 }

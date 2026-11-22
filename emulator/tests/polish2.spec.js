@@ -55,13 +55,18 @@ test.describe('03 the repo names the session that needs the driver', () => {
       });
     }
   }
-  test('with a command and output the repo still shows and nothing overlaps', async ({ openView, page }) => {
+  test('with a command and output the repo still shows and nothing overlaps (command and output on their own rows)', async ({ openView, page }) => {
     await openView({
       ...loadFixture('working'), view: 'permission', activity: 'permission', repo: 'revview', others: 2, tool: 'Bash',
       command: 'git push --force origin main', output: 'remote: error: something long that fills the output line completely',
+      outputLines: ['remote: error: something long that fills the output line completely'],
     });
-    await expect(page.locator('#session')).toHaveText('revview');
-    await expect(page.locator('#session')).toHaveAttribute('data-full', 'revview');
+    // at the 6 mm state word the band has room for the repo, so #where names it and #session stays hidden
+    // (#session is the fallback for a band without room: see view.js)
+    const shown = page.locator('#where:visible, #session:visible');
+    await expect(shown).toHaveCount(1);
+    expect((await shown.first().textContent()).startsWith('revview')).toBe(true);
+    await expect(page.locator('#others')).toHaveText('+2');
     await expectFits(page);
   });
   test('not shown without other sessions, nor when the band shows the repo', async ({ openView, page }) => {
@@ -73,15 +78,20 @@ test.describe('03 the repo names the session that needs the driver', () => {
   });
 });
 
-test('09 a short command is not cut when there is no output', async ({ openView, page }) => {
+test('09 a short command is not cut; a long one wraps (no 40% cut any more), with or without output', async ({ openView, page }) => {
   const base = { ...loadFixture('working'), tool: 'Read', file: 'a.py', command: 'psql -f migrate.sql' };
-  await openView({ ...base, output: null });
+  await openView({ ...base, output: null, outputLines: [] });
   await expect(page.locator('#command')).toHaveText('psql -f migrate.sql');
   expect(await page.locator('#command').evaluate((e) => e.scrollWidth - e.clientWidth)).toBeLessThanOrEqual(0);
   const long = 'psql -f migrate.sql --host db.internal.example.com --port 5432 --user admin --dbname customers';
-  await openView({ ...base, command: long, output: 'ERROR: relation does not exist' });
-  expect((await rect(page, '#cmdbox')).width).toBeLessThanOrEqual(0.4 * 1280 + 1);
-  await openView({ ...base, command: long, output: null });
+  const out = 'ERROR: relation does not exist';
+  await openView({ ...base, command: long, output: out, outputLines: [out] });
+  // the output has its own row: the command may use the full width, and is not cut (it fits in 3 rows)
+  await expect(page.locator('#command')).toHaveText(long);
+  expect((await rect(page, '#cmdbox')).right).toBeLessThanOrEqual(1280);
+  await expect(page.locator('#out3')).toHaveText(out);
+  await openView({ ...base, command: long, output: null, outputLines: [] });
+  await expect(page.locator('#command')).toHaveText(long);
   expect((await rect(page, '#cmdbox')).right).toBeLessThanOrEqual(1280);
   await expectFits(page);
 });

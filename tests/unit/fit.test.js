@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { middleEllipsis, formatCount } from '../../src/view/fit.js';
+import { middleEllipsis, fitPrefix, formatCount } from '../../src/view/fit.js';
 
 const maxLen = (n) => (s) => Array.from(s).length <= n;
 const lone = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
@@ -110,4 +110,35 @@ test('fitWhere: null when even a minimal cut does not fit; never splits grapheme
   assert.equal(fitWhere('a-very-long-repository', 'abcdefghij', maxLen(10)), null);
   const out = fitWhere('r', 'éééééééé', maxLen(9));
   assert.ok(!/^́|…́/u.test(out), out);
+});
+
+test('fitPrefix: fitting text is unchanged, empty stays empty', () => {
+  assert.equal(fitPrefix('make build', maxLen(20)), 'make build');
+  assert.equal(fitPrefix('', maxLen(0)), '');
+  assert.equal(fitPrefix(undefined, maxLen(5)), '');
+});
+
+test('fitPrefix: the largest prefix plus an ellipsis that fits', () => {
+  const out = fitPrefix('abcdefghijklmnop', maxLen(8));
+  assert.equal(out, 'abcdefg…');
+  assert.equal(fitPrefix('abcdefghijklmnop', maxLen(2)), 'a…');
+});
+
+test('fitPrefix: nothing fits gives just the ellipsis; no trailing space before it', () => {
+  assert.equal(fitPrefix('abcdef', maxLen(0)), '…');
+  assert.equal(fitPrefix('ab cd ef gh', maxLen(6)), 'ab cd…');
+});
+
+test('fitPrefix: never splits a grapheme (emoji ZWJ sequence, flag, combining mark)', () => {
+  const family = '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}';
+  const text = `a${family}${family}${family}`;
+  for (let n = 1; n <= 9; n++) {
+    const out = fitPrefix(text, (s) => Array.from(s).length <= n);
+    assert.ok(!lone.test(out), `lone surrogate at n=${n}`);
+    const kept = out.slice(0, -1);
+    assert.ok(kept === '' || kept === 'a' || kept === `a${family}` || kept === `a${family}${family}`, `split cluster: ${JSON.stringify(out)}`);
+  }
+  const accent = 'e\u0301e\u0301e\u0301e\u0301';
+  const out = fitPrefix(accent, (s) => Array.from(s).length <= 4);
+  assert.equal(out, 'e\u0301…');
 });

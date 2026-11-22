@@ -44,6 +44,18 @@ export function middleEllipsis(text, fits) {
   return cutMiddle(cps, Math.max(n, 4));
 }
 
+// Longest prefix (whole graphemes) of text followed by an ellipsis for which fits(candidate) holds, so the
+// reader sees the text was cut at the end. Text that fits is returned unchanged; when not even one grapheme
+// fits the result is just the ellipsis. Trailing whitespace before the ellipsis is dropped.
+export function fitPrefix(text, fits) {
+  if (typeof text !== 'string' || text === '') return '';
+  if (fits(text)) return text;
+  const g = graphemes(text);
+  const form = (k) => `${g.slice(0, k).join('').trimEnd()}${ELLIPSIS}`;
+  const k = largest(0, g.length - 1, (m) => fits(form(m)));
+  return form(Math.max(k, 0));
+}
+
 // "repo · branch" for the band: the repo stays whole, the branch is cut in its middle (about 1/3 from the
 // front, the rest from the end, so the end of the branch survives). Returns the full text when it fits, and
 // null when even a minimal cut (4 graphemes of branch) does not fit: the caller then clips at the end.

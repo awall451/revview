@@ -1,10 +1,44 @@
-// Shared layout checks: the panel fit, and contrast and size floors of every visible text.
+// Shared layout checks: the panel fit, and contrast and size ranges of every visible text.
 import { expect } from './harness.js';
 import { textSizeMm } from '../mm.js';
 import { PANEL } from '../panel.js';
-import { MIN_MM } from '../../src/view/type.js';
+import { RANGE_MM } from '../../src/view/type.js';
+
+// Visible text boxes (elements with their own text): inside the panel, not clipped by an ancestor with
+// overflow other than visible, and no two of them overlapping. Returns a list of problems.
+function textBoxProblems({ w, h }) {
+  const boxes = [];
+  const problems = [];
+  const name = (e) => `${e.tagName}#${e.id}`;
+  for (const el of document.querySelectorAll('body *')) {
+    const direct = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim() !== '');
+    if (!direct || el.getClientRects().length === 0) continue;
+    const r = el.getBoundingClientRect();
+    boxes.push({ el, r });
+    if (r.left < -0.5 || r.top < -0.5 || r.right > w + 0.5 || r.bottom > h + 0.5) problems.push(`${name(el)} outside the panel`);
+    for (let a = el.parentElement; a; a = a.parentElement) {
+      const cs = getComputedStyle(a);
+      if (cs.overflowX === 'visible' && cs.overflowY === 'visible') continue;
+      const ar = a.getBoundingClientRect();
+      if (r.left < ar.left - 0.5 || r.top < ar.top - 0.5 || r.right > ar.right + 0.5 || r.bottom > ar.bottom + 0.5) {
+        problems.push(`${name(el)} clipped by ${name(a)}`);
+      }
+    }
+  }
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      const a = boxes[i].r;
+      const b = boxes[j].r;
+      if (Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5) {
+        problems.push(`${name(boxes[i].el)} overlaps ${name(boxes[j].el)}`);
+      }
+    }
+  }
+  return problems;
+}
 
 export async function expectFits(page) {
+  expect(await page.evaluate(textBoxProblems, { w: PANEL.widthPx, h: PANEL.heightPx })).toEqual([]);
   const m = await page.evaluate(({ w, h }) => {
     const de = document.documentElement;
     const outside = [];
@@ -73,8 +107,10 @@ export async function checkContrastAndFloor(page, label, testInfo) {
   let smallest = Infinity;
   for (const e of els) {
     const mm = (await textSizeMm(page.locator(`#${e.id}`))).capHeightMm;
-    smallest = Math.min(smallest, mm);
-    expect(mm, `${label} #${e.id} cap height mm`).toBeGreaterThanOrEqual(MIN_MM.floor);
+    const [lo, hi] = e.id === 'state-word' ? RANGE_MM.state : RANGE_MM.text;
+    if (e.id !== 'state-word') smallest = Math.min(smallest, mm);
+    expect(mm, `${label} #${e.id} cap height mm`).toBeGreaterThanOrEqual(lo);
+    expect(mm, `${label} #${e.id} cap height mm`).toBeLessThanOrEqual(hi);
   }
   return smallest;
 }

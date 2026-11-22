@@ -1,10 +1,10 @@
 /* The glance view, 1280x400. Text sizes come from the CSS variables set by view.js (cap height in mm);
    the fallbacks below are only used before JS runs (DejaVu: cap height about 0.73 em). */
 :root {
-  --state-font: 98px;
-  --detail-font: 56px;
-  --mono-font: 56px;
-  --diff-font: 56px;
+  --state-font: 55px;
+  --detail-font: 32px;
+  --mono-font: 32px;
+  --diff-font: 32px;
   --sans: "DejaVu Sans", "WenQuanYi Zen Hei", "IPAGothic", sans-serif;
   --mono: "DejaVu Sans Mono", "WenQuanYi Zen Hei Mono", "IPAGothic", monospace;
   --grey: #b8b8b8;
@@ -40,7 +40,7 @@ body[data-view="no-link"] #band {
 #band {
   flex: none;
   box-sizing: border-box;
-  height: 140px;
+  height: 84px;
   padding: 0 24px;
   display: flex;
   align-items: center;
@@ -78,16 +78,25 @@ body[data-view="no-link"] #band {
   font-size: var(--detail-font);
 }
 
-.row {
-  flex: 1 1 0;
-  min-height: 0;
+/* Below the band: a flow of 40 px rows without gaps: row A (tool, file, diff), then the notes or the command
+   (wrapped), then the output lines. At most 7 rows: 84 + 8 + 7 x 40 + 8 = 380 of 400 px. */
+#lower {
+  flex: none;
   box-sizing: border-box;
-  padding: 0 24px;
+  height: 316px;
+  padding: 8px 24px 8px;
+  display: flex;
+  flex-direction: column;
+  line-height: 40px;
+}
+#line2 {
+  flex: none;
+  height: 40px;
   display: flex;
   align-items: center;
   gap: 0.4em;
 }
-.row > *, #cmdbox > * {
+#line2 > * {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -100,10 +109,8 @@ span:empty { display: none; }
 #tool { flex: 0 1 auto; max-width: none; color: var(--grey); }
 #tool:has(+ #file:not(:empty)) { max-width: 28%; }
 #file { flex: 1 1 0; }
-#note1, #note2 { flex: 1 1 0; }
-#output { flex: 1 1 0; }
-#sep { flex: none; color: var(--grey); }
-/* the repo at the right end of line 3, when the band had no room for it (QA 03) */
+#note1 { flex: 1 1 0; }
+/* the repo at the right end of row A, when the band had no room for it (QA 03) */
 #session { flex: 0 1 auto; max-width: 30%; margin-left: auto; font-weight: 700; }
 #diff {
   flex: none;
@@ -116,17 +123,31 @@ span:empty { display: none; }
 #diff-added { color: #5fe08a; }
 #diff-removed { color: #ff7a7a; margin-left: 0.4em; }
 
+/* note2 (note views) or the command: rows of 40 px; view.js cuts the command with an ellipsis at the end of its
+   last allowed row (6 minus the output rows shown). No fixed heights: an empty part takes no room. */
+#note2 { flex: none; height: 40px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #cmdbox {
-  flex: 0 1 auto;
-  max-width: none;
-  min-width: 0;
+  flex: none;
   display: flex;
+  align-items: flex-start;
   gap: 0.4em;
   font-family: var(--mono);
   font-size: var(--mono-font);
-  overflow: hidden;
 }
-#cmdbox.capped { max-width: 40%; } /* only with an output line next to it */
-#cmdbox.wide { flex: 1 1 0; max-width: none; }
-#cmdbox #prompt { flex: none; color: var(--grey); }
-#command { flex: 0 1 auto; min-width: 0; }
+#prompt { flex: none; color: var(--grey); }
+#command {
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* output lines, oldest first, newest last; each one row, cut with an ellipsis */
+#outarea { flex: none; display: flex; flex-direction: column; }
+#outarea > span {
+  flex: none;
+  height: 40px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

@@ -12,14 +12,16 @@ Files: `index.html`, `boot.html` (kiosk start page, see Boot page), `view.css`, 
   is hidden when both are null, or when it would be squeezed to a stub (under about 8 characters). When no
   piece of the branch fits, the repo alone is shown (never a bare `repo ·…`; the CSS end cut still applies to a
   repo that is too long). With other sessions (`+N`) and no room in the band (long state words), the repo moves
-  to `#session`, bold at the right end of line 3 (at most 30% wide, `data-full` = repo), so the driver can tell
+  to `#session`, bold at the right end of row A (at most 30% wide, `data-full` = repo), so the driver can tell
   which session needs them; not for the note views (offline, ended, ...).
-- **Line 2**: the tool and the file (the file is shortened in the middle when it does not fit), and the diff
+- **Row A**: the tool and the file (the file is shortened in the middle when it does not fit), and the diff
   as `+N −N` (U+2212) at the right, shown only when added or removed is above 0. Very large counts are
   abbreviated.
-- **Line 3**: the last command (after a `$`) and the last line of output. The command is cut at 40% of the
-  line only when an output line shares the row (class `capped` on `#cmdbox`); alone it may use the whole line.
-- **Bash**: the tool name and file are left out; the command takes line 2 and the output stays on line 3.
+- **Below row A**, a flow of 40 px rows without gaps (at most 7 rows below the band in all): the command after
+  a `$` (monospace, wrapped; at most 6 minus the number of output lines shown, so 3 to 6 rows; cut with an
+  ellipsis at its end only when it does not fit, `data-full` holds the full text), then the last up to 3 output
+  lines (`#out1`..`#out3`, oldest first, one row each, cut with an ellipsis). In the note views `#note2` takes
+  the command's place. An empty part takes no room.
 - **starting**, **offline**, **insert-key** show short notes instead of tool, file and command:
   starting "Not ready for voice yet"; offline "Claude: <activity>" (`Claude exited` when the last activity was ended, `Claude: not known` when unknown) and "No network: voice input will not
   work"; insert-key "Data locked" and "Insert the key stick to unlock". Starting and insert-key show no diff.
@@ -55,8 +57,11 @@ Colour is never the only cue; each state has its own shape:
 
 ## Type sizes
 
-Sizes are cap heights (ink height of a capital H) in panel mm, set in `type.js`. Design: state word
-10.6 mm, all other text 6.1 mm. The tests assert minimums of 10.5 mm (state word) and 6.0 mm (any text).
+Sizes are cap heights (ink height of a capital H) in panel mm, set in `type.js`. Design (`TYPE_MM`): state word
+6.05 mm, all other text 3.55 mm (the owner's targets are 6 and 3.5 mm; the design sits a little above because the emulator's canvas
+measurement reports the hinted cap height in whole pixels, rounded down). The tests assert a two-sided range (`RANGE_MM`): state word
+5.8-6.3 mm, every other text 3.3-3.7 mm. The emulator measured 5.94 mm (40 px) and 3.41 mm (23 px) in all looks; nothing is measured on
+the real panel.
 At runtime `view.js` measures the real font's cap-height ratio and sets the font sizes from it, so the cap
 height holds whatever font the browser picks. Mm are converted at the panel's 1280/190 = 6.737 px/mm.
 

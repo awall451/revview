@@ -59,11 +59,19 @@ async function expectShows(page, state) {
   await expect(page.locator('#state-word')).toHaveText(LABELS[state.view]);
   if (!['working', 'waiting', 'permission', 'done'].includes(state.view)) return;
 
-  const bash = state.tool === 'Bash';
-  await expect(page.locator('#tool')).toHaveText(bash ? '' : state.tool || '');
-  await expect(page.locator('#file')).toHaveText(bash ? '' : state.file || '');
-  await expect(page.locator('#command')).toHaveText(state.command || '');
-  await expect(page.locator('#output')).toHaveText(state.output || '');
+  // the tool is shown for every tool (Bash too); the command wraps over 3 rows and is cut with an ellipsis
+  // beyond that, so the whole command is in data-full and the shown text is a prefix of it
+  await expect(page.locator('#tool')).toHaveText(state.tool || '');
+  await expect(page.locator('#file')).toHaveText(state.file || '');
+  const command = state.command || '';
+  await expect(page.locator('#command')).toHaveAttribute('data-full', command);
+  const shownCmd = (await page.locator('#command').textContent()).replace(/…$/, '');
+  expect(command.startsWith(shownCmd.trimEnd())).toBe(true);
+  // output: up to 3 lines, newest in #out3 (outputLines when it agrees with output, else output alone)
+  const o = state.output || '';
+  const ol = Array.isArray(state.outputLines) && state.outputLines.at(-1) === o ? state.outputLines : o ? [o] : [];
+  const rows = ['', '', '', ...ol.slice(-3)].slice(-3);
+  for (const [i, line] of rows.entries()) await expect(page.locator(`#out${i + 1}`)).toHaveText(line);
 
   const where = [state.repo, state.branch].filter(Boolean).join(' · ');
   if (where) await expect(page.locator('#where')).toHaveText(where);
@@ -285,7 +293,7 @@ test.describe('live', () => {
     const A = 'aaaaaaaa-0000-4000-8000-00000000000a';
     const B = 'bbbbbbbb-0000-4000-8000-00000000000b';
     const ev = (id, cwd, name, extra = {}) => JSON.stringify({ session_id: id, cwd, hook_event_name: name, ...extra });
-    // the repo is visible either in the band (#where) or at the right end of line 3 (#session)
+    // the repo is visible either in the band (#where) or at the right end of row A (#session)
     const repoShown = async () => (await page.locator('#where:visible, #session:visible').allTextContents()).join(' ');
     await withServer(async (server) => {
       await page.goto(`${server.url}/`);

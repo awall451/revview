@@ -3,7 +3,7 @@ import { FIXTURE_IDS, loadFixture } from '../fixtures.js';
 import { WORST_CASE_IDS, loadWorstCase } from '../worst-case.js';
 import { LIMITS } from '../../src/state/format.js';
 import { textSizeMm } from '../mm.js';
-import { MIN_MM } from '../../src/view/type.js';
+import { RANGE_MM } from '../../src/view/type.js';
 import { expectFits, checkContrastAndFloor } from './checks.js';
 import { PANEL } from '../panel.js';
 
@@ -24,12 +24,13 @@ for (const id of FIXTURE_IDS) {
     expect(cut[0]).toBeLessThanOrEqual(cut[1]);
     const mm = (await textSizeMm(word)).capHeightMm;
     console.log(`state word ${id} cap=${mm.toFixed(2)}mm`);
-    expect(mm).toBeGreaterThanOrEqual(MIN_MM.state);
+    expect(mm).toBeGreaterThanOrEqual(RANGE_MM.state[0]);
+    expect(mm).toBeLessThanOrEqual(RANGE_MM.state[1]);
     await expect(page.locator('body')).toHaveAttribute('data-view', id);
     await expect(page.locator('#shape')).toHaveAttribute('data-shape', /\S/);
   });
 
-  test(`fixture ${id} contrast and smallest text`, async ({ openView, page }, testInfo) => {
+  test(`fixture ${id} contrast and text sizes`, async ({ openView, page }, testInfo) => {
     await openView(id);
     const smallest = await checkContrastAndFloor(page, id, testInfo);
     console.log(`smallest text ${id} cap=${smallest.toFixed(2)}mm`);
@@ -244,8 +245,8 @@ test('new looks: notes, repo and diff', async ({ openView, page }) => {
   await openView({ view: 'ended', repo: 'myrepo', branch: 'main', diff: { added: 1, removed: 1 } });
   await expect(page.locator('#note1')).toHaveText('No Claude Code session running');
   await expect(page.locator('#note2')).toHaveText('Voice input goes nowhere');
-  // CLAUDE EXITED leaves room for the repo only: "myrepo ·…" would be a stub, so the repo alone (QA 13)
-  await expect(page.locator('#where')).toHaveText('myrepo');
+  // at the smaller size repo and branch both fit next to CLAUDE EXITED
+  await expect(page.locator('#where')).toHaveText('myrepo · main');
   await expect(page.locator('#where')).toHaveAttribute('data-full', 'myrepo · main');
   await expect(page.locator('#diff')).toBeHidden();
 });
