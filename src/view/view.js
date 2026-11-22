@@ -11,6 +11,9 @@ const LABELS = {
   starting: 'STARTING',
   offline: 'OFFLINE',
   'insert-key': 'INSERT KEY',
+  unknown: 'UNKNOWN',
+  ended: 'CLAUDE EXITED',
+  'no-link': 'NO LINK',
   none: 'NO STATE',
 };
 
@@ -23,12 +26,29 @@ const SHAPES = {
   starting: '<circle cx="12" cy="12" r="8.75" fill="none" stroke="currentColor" stroke-width="3.5"/>',
   offline: '<path d="M3.5 3.5 20.5 20.5M20.5 3.5 3.5 20.5" fill="none" stroke="currentColor" stroke-width="4.5"/>',
   'insert-key': '<circle cx="7" cy="12" r="5" fill="none" stroke="currentColor" stroke-width="3"/><path d="M12 12H23M18.5 12v5M23 12v4" fill="none" stroke="currentColor" stroke-width="3"/>',
+  // question mark: stroked hook and a dot
+  unknown: '<path d="M6.5 8.5C6.5 5 9 3 12 3s5.5 2 5.5 5c0 2.5-1.8 3.7-3.4 4.8-1.3.9-2.1 1.8-2.1 3.7" fill="none" stroke="currentColor" stroke-width="3.5"/><circle cx="12" cy="21" r="2.4" fill="currentColor"/>',
+  // power-off symbol: open arc and a vertical bar
+  ended: '<path d="M6.54 6.49A8.5 8.5 0 1 0 17.46 6.49" fill="none" stroke="currentColor" stroke-width="3.5"/><path d="M12 1.5V12.5" fill="none" stroke="currentColor" stroke-width="3.5"/>',
+  // broken chain link: two half links with a gap
+  'no-link': '<path d="M10.5 5.5H8a6.5 6.5 0 0 0 0 13h2.5" fill="none" stroke="currentColor" stroke-width="3"/><path d="M13.5 5.5H16a6.5 6.5 0 0 1 0 13h-2.5" fill="none" stroke="currentColor" stroke-width="3"/>',
   none: '<rect x="2.5" y="2.5" width="19" height="19" fill="currentColor"/>',
 };
 
+// Views that show fixed notes instead of tool, file and command.
+const NOTES = {
+  starting: ['Not ready for voice yet', ''],
+  'insert-key': ['Data locked', 'Insert the key stick to unlock'],
+  unknown: ["Not known until Claude's next step", 'Push-to-talk may still work'],
+  ended: ['No Claude Code session running', 'Voice input goes nowhere'],
+  'no-link': ['Display lost the revview server', 'Claude may still be running'],
+};
+const NO_DIFF = new Set(['starting', 'insert-key', 'unknown', 'ended', 'no-link']);
+const NO_OTHERS = new Set(['starting', 'insert-key', 'unknown', 'no-link']);
+
 const $ = (id) => document.getElementById(id);
 const str = (v) => (typeof v === 'string' ? v : '');
-const ids = ['band', 'shape', 'state-word', 'where', 'tool', 'file', 'note1', 'note2', 'diff', 'diff-added',
+const ids = ['band', 'shape', 'state-word', 'others', 'where', 'tool', 'file', 'note1', 'note2', 'diff', 'diff-approx', 'diff-added',
   'diff-removed', 'cmdbox', 'command', 'output', 'line2', 'line3'];
 const el = Object.fromEntries(ids.map((id) => [id, $(id)]));
 
@@ -78,7 +98,7 @@ export function render(input) {
   const s = cleanState(input);
   const view = s.view;
   const bash = s.tool === 'Bash';
-  const note = view === 'starting' || view === 'offline' || view === 'insert-key';
+  const note = Object.hasOwn(NOTES, view) || view === 'offline';
 
   el.shape.innerHTML = SHAPES[view];
   el.shape.dataset.shape = view;
@@ -90,15 +110,20 @@ export function render(input) {
   el.cmdbox.hidden = true;
   el.diff.hidden = true;
 
-  const where = [str(s.repo), str(s.branch)].filter(Boolean).join(' · ');
+  const where = view === 'no-link' ? '' : [str(s.repo), str(s.branch)].filter(Boolean).join(' · ');
+  const others = Number.isInteger(s.others) && s.others > 0 && !NO_OTHERS.has(view) ? s.others : 0;
   const activity = (Object.hasOwn(LABELS, str(s.activity)) ? LABELS[s.activity] : str(s.activity)).toLowerCase();
-  const showDiff = s.diff && (s.diff.added > 0 || s.diff.removed > 0) && view !== 'starting' && view !== 'insert-key';
+  const added = s.diff && typeof s.diff === 'object' ? s.diff.added : 0;
+  const removed = s.diff && typeof s.diff === 'object' ? s.diff.removed : 0;
+  const approx = s.diffIncomplete === true;
+  const showDiff = (added > 0 || removed > 0 || approx) && !NO_DIFF.has(view);
   let file = '';
 
   if (note) {
-    if (view === 'starting') set(el.note1, 'Not ready for voice yet');
-    else if (view === 'insert-key') { set(el.note1, 'Data locked'); set(el.note2, 'Insert the key stick to unlock'); }
-    else { set(el.note1, `Claude: ${activity}`); set(el.note2, 'No network: voice input will not work'); }
+    if (Object.hasOwn(NOTES, view)) {
+      set(el.note1, NOTES[view][0]);
+      set(el.note2, NOTES[view][1]);
+    } else { set(el.note1, `Claude: ${activity}`); set(el.note2, 'No network: voice input will not work'); }
   } else if (bash) {
     el.line2.insertBefore(el.cmdbox, el.diff);
     el.cmdbox.classList.add('wide');
@@ -115,15 +140,22 @@ export function render(input) {
     set(el.output, str(s.output));
   }
   if (showDiff) {
-    const a = formatCount(s.diff.added);
-    const r = formatCount(s.diff.removed);
-    el['diff-added'].textContent = `+${a}`;
-    el['diff-removed'].textContent = `−${r}`;
-    el.diff.dataset.full = `+${s.diff.added} −${s.diff.removed}`;
+    el['diff-approx'].textContent = approx ? '≥' : '';
+    el['diff-added'].textContent = `+${formatCount(added)}`;
+    el['diff-removed'].textContent = `−${formatCount(removed)}`;
+    const full = `+${Number.isFinite(added) ? added : 0} −${Number.isFinite(removed) ? removed : 0}`;
+    el.diff.dataset.full = approx ? `at least ${full}` : full;
     el.diff.hidden = false;
   } else {
     el.diff.dataset.full = '';
   }
+
+  // the "more sessions" hint never shrinks; it is placed before #where, which gives way first
+  set(el.others, others ? `+${others}` : '');
+  el.others.dataset.full = others ? `${others} more Claude session${others === 1 ? '' : 's'}` : '';
+  // with the longest word (NEEDS PERMISSION) the hint does not fit inside the band's padding: tighten it
+  el.band.classList.remove('tight');
+  if (others && el.others.getBoundingClientRect().right > el.band.clientWidth - 24) el.band.classList.add('tight');
 
   // fitting needs layout, so it comes after the fields are in place
   fitFile(file);
@@ -156,12 +188,12 @@ async function loadStatic(q) {
 
 const root = document.documentElement;
 
-// Live: the server pushes {seq, state} on /events. A dead link shows "starting", never a stale state.
+// Live: the server pushes {seq, state} on /events. A dead link shows "no link", never a stale state.
 function live() {
   const down = () => {
     root.dataset.link = 'down';
     delete root.dataset.seq;
-    render({ view: 'starting' });
+    render({ view: 'no-link' });
   };
   const connect = () => {
     const es = new EventSource('/events');

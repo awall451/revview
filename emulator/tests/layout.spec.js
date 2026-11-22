@@ -3,88 +3,15 @@ import { FIXTURE_IDS, loadFixture } from '../fixtures.js';
 import { WORST_CASE_IDS, loadWorstCase } from '../worst-case.js';
 import { LIMITS } from '../../src/state/format.js';
 import { textSizeMm } from '../mm.js';
-import { PANEL } from '../panel.js';
 import { MIN_MM } from '../../src/view/type.js';
+import { expectFits, checkContrastAndFloor } from './checks.js';
+import { PANEL } from '../panel.js';
 
 const LABELS = {
   working: 'WORKING', waiting: 'WAITING FOR ME', permission: 'NEEDS PERMISSION', done: 'DONE',
   starting: 'STARTING', offline: 'OFFLINE', 'insert-key': 'INSERT KEY',
+  unknown: 'UNKNOWN', ended: 'CLAUDE EXITED', 'no-link': 'NO LINK',
 };
-
-async function expectFits(page) {
-  const m = await page.evaluate(({ w, h }) => {
-    const de = document.documentElement;
-    const outside = [];
-    for (const el of document.querySelectorAll('body, body *')) {
-      const r = el.getBoundingClientRect();
-      if (r.left < 0 || r.top < 0 || r.right > w || r.bottom > h) {
-        outside.push(`${el.tagName}#${el.id} ${[r.left, r.top, r.right, r.bottom].join(',')}`);
-      }
-    }
-    return {
-      sw: de.scrollWidth, sh: de.scrollHeight, iw: window.innerWidth, ih: window.innerHeight,
-      cw: de.clientWidth, ch: de.clientHeight, outside,
-    };
-  }, { w: PANEL.widthPx, h: PANEL.heightPx });
-  expect(m.sw).toBeLessThanOrEqual(PANEL.widthPx);
-  expect(m.sh).toBeLessThanOrEqual(PANEL.heightPx);
-  expect([m.iw, m.ih, m.cw, m.ch]).toEqual([PANEL.widthPx, PANEL.heightPx, PANEL.widthPx, PANEL.heightPx]);
-  expect(m.outside).toEqual([]);
-}
-
-// Visible elements that have a direct non-whitespace text node, with their real colours.
-function textElements() {
-  const parse = (c) => {
-    const m = /^rgba?\(([^)]+)\)$/.exec(c);
-    if (!m) return null;
-    const p = m[1].split(/[ ,/]+/).filter(Boolean).map(Number);
-    return { rgb: p.slice(0, 3), a: p.length > 3 ? p[3] : 1 };
-  };
-  const lum = ([r, g, b]) => {
-    const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
-    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
-  };
-  const out = [];
-  for (const el of document.querySelectorAll('body *')) {
-    const direct = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim() !== '');
-    if (!direct || el.getClientRects().length === 0) continue;
-    const fg = parse(getComputedStyle(el).color);
-    let bg = null;
-    let problem = fg && fg.a === 1 ? '' : 'text colour not opaque';
-    for (let n = el; n && !bg; n = n.parentElement) {
-      const c = parse(getComputedStyle(n).backgroundColor);
-      if (!c) { problem = problem || 'unparsable background'; break; }
-      if (c.a === 1) bg = c;
-      else if (c.a > 0) { problem = problem || `semi-transparent background on ${n.tagName}#${n.id}`; break; }
-    }
-    let ratio = 0;
-    if (!problem && bg) {
-      const [a, b] = [lum(fg.rgb), lum(bg.rgb)].sort((x, y) => y - x);
-      ratio = (a + 0.05) / (b + 0.05);
-    } else if (!bg) problem = problem || 'no opaque background';
-    out.push({ id: el.id, text: el.textContent.slice(0, 30), ratio, problem });
-  }
-  return out;
-}
-
-async function checkContrastAndFloor(page, label, testInfo) {
-  const els = await page.evaluate(textElements);
-  expect(els.length).toBeGreaterThan(0);
-  expect(els.filter((e) => e.problem)).toEqual([]);
-  for (const e of els) expect(e.id, `text element without id: ${e.text}`).not.toBe('');
-  const min = Math.min(...els.map((e) => e.ratio));
-  const line = `contrast ${label} min=${min.toFixed(2)} pairs=${els.length}`;
-  console.log(line);
-  testInfo.annotations.push({ type: 'contrast', description: line });
-  for (const e of els) expect(e.ratio, `${label} #${e.id} contrast`).toBeGreaterThanOrEqual(7);
-  let smallest = Infinity;
-  for (const e of els) {
-    const mm = (await textSizeMm(page.locator(`#${e.id}`))).capHeightMm;
-    smallest = Math.min(smallest, mm);
-    expect(mm, `${label} #${e.id} cap height mm`).toBeGreaterThanOrEqual(MIN_MM.floor);
-  }
-  return smallest;
-}
 
 for (const id of FIXTURE_IDS) {
   test(`fixture ${id} fits the panel`, async ({ openView, page }) => {
@@ -98,7 +25,7 @@ for (const id of FIXTURE_IDS) {
     const mm = (await textSizeMm(word)).capHeightMm;
     console.log(`state word ${id} cap=${mm.toFixed(2)}mm`);
     expect(mm).toBeGreaterThanOrEqual(MIN_MM.state);
-    await expect(page.locator('body')).toHaveAttribute('data-view', loadFixture(id).view);
+    await expect(page.locator('body')).toHaveAttribute('data-view', id);
     await expect(page.locator('#shape')).toHaveAttribute('data-shape', /\S/);
   });
 
@@ -198,3 +125,125 @@ for (const id of FIXTURE_IDS) {
     }
   }
 }
+
+// ---- band hint for more sessions, and the diff lower-bound marker ----
+const LONG = 'W'.repeat(120);
+
+for (const view of ['working', 'permission']) {
+  for (const n of [1, 9]) {
+    test(`#others shows +${n} in ${view} with a long repo and fits`, async ({ openView, page }) => {
+      await openView({ ...loadFixture(view), repo: LONG, branch: LONG, others: n });
+      const o = page.locator('#others');
+      await expect(o).toBeVisible();
+      await expect(o).toHaveText(`+${n}`);
+      await expect(o).toHaveAttribute('data-full', `${n} more Claude session${n === 1 ? '' : 's'}`);
+      const cut = await o.evaluate((e) => [e.scrollWidth, e.clientWidth]);
+      expect(cut[0]).toBeLessThanOrEqual(cut[1]);
+      await expect(page.locator('#state-word')).toBeVisible();
+      await expectFits(page);
+      // #others sits after the state word, before #where
+      const order = await page.evaluate(() => {
+        const a = document.getElementById('others').getBoundingClientRect();
+        const w = document.getElementById('state-word').getBoundingClientRect();
+        return a.left >= w.right;
+      });
+      expect(order).toBe(true);
+    });
+  }
+}
+
+test('#others is hidden when 0, missing or not a positive integer, and in unlisted views', async ({ openView, page }) => {
+  for (const others of [0, -1, 1.5, '2', null, undefined, NaN, true]) {
+    await openView({ ...loadFixture('working'), others });
+    await expect(page.locator('#others')).toBeHidden();
+  }
+  for (const view of ['no-link', 'unknown', 'starting', 'insert-key']) {
+    await openView({ ...loadFixture('working'), view, others: 3 });
+    await expect(page.locator('#others')).toBeHidden();
+  }
+  for (const view of ['waiting', 'done', 'offline', 'ended']) {
+    await openView({ ...loadFixture('working'), view, others: 3 });
+    await expect(page.locator('#others')).toHaveText('+3');
+  }
+});
+
+test('#diff-approx marks a lower bound; +A and −R stay as they are', async ({ openView, page }) => {
+  const base = { ...loadFixture('working'), diff: { added: 12, removed: 3 } };
+  await openView({ ...base, diffIncomplete: true });
+  await expect(page.locator('#diff-approx')).toBeVisible();
+  await expect(page.locator('#diff-approx')).toHaveText('≥');
+  await expect(page.locator('#diff-added')).toHaveText('+12');
+  await expect(page.locator('#diff-removed')).toHaveText('−3');
+  await expect(page.locator('#diff')).toHaveAttribute('data-full', 'at least +12 −3');
+  const style = (sel) => page.locator(sel).evaluate((e) => {
+    const cs = getComputedStyle(e);
+    return [cs.fontWeight, cs.color, cs.fontSize];
+  });
+  const approx = await style('#diff-approx');
+  expect(approx[0]).toBe('700');
+  expect(approx[1]).toBe('rgb(255, 255, 255)');
+  expect(approx[2]).toBe((await style('#diff-added'))[2]);
+  await expectFits(page);
+
+  for (const d of [false, undefined, 'true', 1]) {
+    await openView({ ...base, diffIncomplete: d });
+    await expect(page.locator('#diff-approx')).toBeHidden();
+    await expect(page.locator('#diff')).toHaveAttribute('data-full', '+12 −3');
+  }
+  await openView({ ...base, diff: { added: 0, removed: 0 }, diffIncomplete: false });
+  await expect(page.locator('#diff')).toBeHidden();
+});
+
+test('diffIncomplete with no counted lines still shows "≥ +0 −0" where a diff is shown', async ({ openView, page }) => {
+  for (const view of ['working', 'waiting', 'permission', 'done', 'offline']) {
+    await openView({ ...loadFixture('working'), view, diff: { added: 0, removed: 0 }, diffIncomplete: true });
+    await expect(page.locator('#diff-approx')).toBeVisible();
+    await expect(page.locator('#diff-added')).toHaveText('+0');
+    await expect(page.locator('#diff-removed')).toHaveText('−0');
+    await expect(page.locator('#diff')).toHaveAttribute('data-full', 'at least +0 −0');
+  }
+  for (const view of ['starting', 'insert-key', 'unknown', 'ended', 'no-link']) {
+    await openView({ ...loadFixture('working'), view, diff: { added: 0, removed: 0 }, diffIncomplete: true });
+    await expect(page.locator('#diff')).toBeHidden();
+  }
+});
+
+test('contrast and sizes with others and diffIncomplete', async ({ openView, page }, testInfo) => {
+  await openView({ ...loadFixture('working'), others: 2, diffIncomplete: true });
+  await expect(page.locator('#others')).toBeVisible();
+  await expect(page.locator('#diff-approx')).toBeVisible();
+  await checkContrastAndFloor(page, 'others+approx', testInfo);
+  await expectFits(page);
+});
+
+test('no-link is inverted: black band, white outline, nothing outside the panel', async ({ openView, page }) => {
+  await openView({ view: 'no-link', repo: 'r', branch: 'b', others: 4, diff: { added: 1, removed: 1 } });
+  const m = await page.locator('#band').evaluate((e) => {
+    const cs = getComputedStyle(e);
+    return [cs.backgroundColor, cs.color, cs.borderTopWidth, cs.borderTopColor];
+  });
+  expect(m[0]).toBe('rgb(0, 0, 0)');
+  expect(m[1]).toBe('rgb(255, 255, 255)');
+  expect(m[3]).toBe('rgb(255, 255, 255)');
+  const bw = parseFloat(m[2]) / PANEL.pxPerMm;
+  expect(bw).toBeGreaterThan(0.5);
+  expect(bw).toBeLessThan(0.7);
+  await expect(page.locator('#where')).toBeHidden();
+  await expect(page.locator('#others')).toBeHidden();
+  await expect(page.locator('#diff')).toBeHidden();
+  await expect(page.locator('#note1')).toHaveText('Display lost the revview server');
+  await expect(page.locator('#note2')).toHaveText('Claude may still be running');
+  await expectFits(page);
+});
+
+test('new looks: notes, repo and diff', async ({ openView, page }) => {
+  await openView({ view: 'unknown', repo: 'r', branch: 'b', diff: { added: 1, removed: 1 } });
+  await expect(page.locator('#note1')).toHaveText("Not known until Claude's next step");
+  await expect(page.locator('#note2')).toHaveText('Push-to-talk may still work');
+  await expect(page.locator('#diff')).toBeHidden();
+  await openView({ view: 'ended', repo: 'myrepo', branch: 'main', diff: { added: 1, removed: 1 } });
+  await expect(page.locator('#note1')).toHaveText('No Claude Code session running');
+  await expect(page.locator('#note2')).toHaveText('Voice input goes nowhere');
+  await expect(page.locator('#where')).toHaveText('myrepo · main');
+  await expect(page.locator('#diff')).toBeHidden();
+});

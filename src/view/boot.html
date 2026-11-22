@@ -1,0 +1,108 @@
+<!doctype html>
+<!-- Boot page: the kiosk opens it from file:// when Chromium may start before the revview server.
+     Self-contained on purpose (inline CSS and script, no imports: ES modules and fetch of local files do not
+     work from file://). It shows the same "no link" look as view.js and, every second, probes
+     http://127.0.0.1:<port>/state (?port=, default 8138); once the server answers it opens the live view. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Revview</title>
+<style>
+:root {
+  --state-font: 98px;
+  --detail-font: 56px;
+  --sans: "DejaVu Sans", "WenQuanYi Zen Hei", "IPAGothic", sans-serif;
+}
+html, body { margin: 0; width: 1280px; height: 400px; overflow: hidden; background: #000; }
+body {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--sans);
+  font-size: var(--detail-font);
+  line-height: 1.2;
+  color: #fff;
+}
+#band {
+  flex: none;
+  box-sizing: border-box;
+  height: 140px;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 0.25em;
+  background: #000;
+  color: #fff;
+  border: 4.04px solid #fff;
+  font-size: var(--detail-font);
+}
+#shape { flex: none; width: calc(var(--state-font) * 0.72); height: calc(var(--state-font) * 0.72); }
+#state-word {
+  flex: none;
+  font-size: var(--state-font);
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+.row {
+  flex: 1 1 0;
+  min-height: 0;
+  box-sizing: border-box;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+}
+.row > * { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+</style>
+</head>
+<body>
+<div id="band">
+  <svg id="shape" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 5.5H8a6.5 6.5 0 0 0 0 13h2.5" fill="none" stroke="currentColor" stroke-width="3"/><path d="M13.5 5.5H16a6.5 6.5 0 0 1 0 13h-2.5" fill="none" stroke="currentColor" stroke-width="3"/></svg>
+  <span id="state-word">NO LINK</span>
+</div>
+<div class="row"><span id="note1">Waiting for the revview server</span></div>
+<div class="row"><span id="note2">Retrying every second</span></div>
+<script>
+(function () {
+  var PX_PER_MM = 1280 / 190; // the panel's scale, as src/view/panel.js
+  var STATE_MM = 10.6;        // cap heights, as src/view/type.js
+  var DETAIL_MM = 6.1;
+
+  function capRatio(node) {
+    try {
+      var cs = getComputedStyle(node);
+      var ctx = document.createElement('canvas').getContext('2d');
+      ctx.font = cs.fontStyle + ' ' + cs.fontWeight + ' 200px ' + cs.fontFamily;
+      var r = ctx.measureText('H').actualBoundingBoxAscent / 200;
+      return r > 0.3 && r < 1 ? r : 0.73;
+    } catch (e) {
+      return 0.73;
+    }
+  }
+  function sizes() {
+    var px = function (mm, node) { return (mm * PX_PER_MM / capRatio(node)).toFixed(3) + 'px'; };
+    var s = document.documentElement.style;
+    s.setProperty('--state-font', px(STATE_MM, document.getElementById('state-word')));
+    s.setProperty('--detail-font', px(DETAIL_MM, document.getElementById('note1')));
+  }
+  sizes();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(sizes);
+
+  var m = /[?&]port=(\d+)(?:&|$)/.exec(location.search);
+  var port = m && +m[1] >= 1 && +m[1] <= 65535 ? +m[1] : 8138;
+  var base = 'http://127.0.0.1:' + port + '/';
+
+  // no-cors GET: no Origin header is sent, so the server's Origin check lets it through; the promise
+  // resolves (opaque response) only when the server answered
+  function probe() {
+    var ctl = typeof AbortController === 'function' ? new AbortController() : null;
+    var t = ctl ? setTimeout(function () { ctl.abort(); }, 2000) : 0;
+    fetch(base + 'state', { mode: 'no-cors', cache: 'no-store', signal: ctl ? ctl.signal : undefined })
+      .then(function () { clearTimeout(t); location.replace(base); })
+      .catch(function () { clearTimeout(t); setTimeout(probe, 1000); });
+  }
+  setTimeout(probe, 1000);
+}());
+</script>
+</body>
+</html>

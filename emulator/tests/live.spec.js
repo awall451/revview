@@ -11,6 +11,7 @@ const sessionsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 const LABELS = {
   working: 'WORKING', waiting: 'WAITING FOR ME', permission: 'NEEDS PERMISSION', done: 'DONE',
   starting: 'STARTING', offline: 'OFFLINE', 'insert-key': 'INSERT KEY',
+  unknown: 'UNKNOWN', ended: 'CLAUDE EXITED', 'no-link': 'NO LINK',
 };
 const MINUS = '−';
 
@@ -160,8 +161,9 @@ test.describe('live', () => {
 
       await server.close();
       await expect(html(page)).toHaveAttribute('data-link', 'down', { timeout: 10000 });
-      await expect(page.locator('body')).toHaveAttribute('data-view', 'starting');
-      await expect(page.locator('#state-word')).toHaveText('STARTING');
+      // changed on purpose: a dead link now shows the no-link look, not "starting" (QA issue 02)
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'no-link');
+      await expect(page.locator('#state-word')).toHaveText('NO LINK');
       await expect(html(page)).not.toHaveAttribute('data-seq', /.*/);
 
       server = await restartOn(port);
@@ -172,6 +174,36 @@ test.describe('live', () => {
       await postOk(server, s.lines[k]);
       await expectSeq(page, 1);
       await expectShows(page, s.expected[k].state);
+    } finally {
+      await server.close();
+    }
+  });
+
+  test('while the server is gone the page shows "no link" (not starting) and recovers', async ({ page }) => {
+    test.setTimeout(60000);
+    const s = sessions.find((x) => x.id === 'working-turn') || sessions[0];
+    let server = await startLiveServer({ port: 0 });
+    const port = server.port;
+    try {
+      await page.goto(`${server.url}/`);
+      await expectSeq(page, 0);
+      await server.close();
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'no-link', { timeout: 10000 });
+      await expect(page.locator('#state-word')).toHaveText('NO LINK');
+      await page.waitForTimeout(2500);
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'no-link');
+      await expect(html(page)).not.toHaveAttribute('data-seq', /.*/);
+      server = await restartOn(port);
+      await expect(html(page)).toHaveAttribute('data-link', 'up', { timeout: 15000 });
+      await expectSeq(page, 0, 15000);
+      for (let k = 0; k < s.lines.length; k++) {
+        await postOk(server, s.lines[k]);
+        await expectSeq(page, k + 1);
+        if (s.expected[k].state.view === 'working') {
+          await expectShows(page, s.expected[k].state);
+          break;
+        }
+      }
     } finally {
       await server.close();
     }

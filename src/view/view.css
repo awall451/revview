@@ -27,7 +27,15 @@ body[data-view="done"] { --band: #4fdc7a; }
 body[data-view="starting"] { --band: #e0e0e0; }
 body[data-view="offline"] { --band: #ff6b6b; }
 body[data-view="insert-key"] { --band: #ff8ad8; }
+body[data-view="unknown"] { --band: #5ce1e6; }
+body[data-view="ended"] { --band: #d8c28a; }
 body[data-view="none"] { --band: #b0b0b0; }
+/* no-link is inverted (black band, white word, shape and outline) so no coloured state can look like it */
+body[data-view="no-link"] #band {
+  --band: #000;
+  color: #fff;
+  border: 4.04px solid #fff; /* 0.6 mm at 1280/190 px/mm; inside the band (border-box) */
+}
 
 #band {
   flex: none;
@@ -50,6 +58,17 @@ body[data-view="none"] { --band: #b0b0b0; }
   white-space: nowrap;
   text-transform: uppercase;
 }
+/* "+N more Claude sessions": never squeezed; #where shrinks or hides first */
+#others {
+  flex: none;
+  margin-left: 0.5em;
+  font-weight: 700;
+  font-size: var(--detail-font);
+  white-space: nowrap;
+}
+/* NEEDS PERMISSION plus "+9" is about 20 px wider than the band's padding allows: view.js sets .tight */
+#band.tight { padding: 0 10px; gap: 6px; }
+#band.tight #others { margin-left: 4px; }
 #where {
   flex: 1 1 0;
   min-width: 0;
@@ -89,6 +108,7 @@ span:empty { display: none; }
   font-size: var(--diff-font);
   font-weight: 700;
 }
+#diff-approx { color: #fff; margin-right: 0.3em; } /* "≥": the counts are a lower bound */
 #diff-added { color: #5fe08a; }
 #diff-removed { color: #ff7a7a; margin-left: 0.4em; }
 
