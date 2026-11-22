@@ -281,6 +281,44 @@ test.describe('live', () => {
     });
   });
 
+  test('QA 03 (board): the bar names the repo of the session that needs the driver, +N with it', async ({ page }) => {
+    const A = 'aaaaaaaa-0000-4000-8000-00000000000a';
+    const B = 'bbbbbbbb-0000-4000-8000-00000000000b';
+    const ev = (id, cwd, name, extra = {}) => JSON.stringify({ session_id: id, cwd, hook_event_name: name, ...extra });
+    // the repo is visible either in the band (#where) or at the right end of line 3 (#session)
+    const repoShown = async () => (await page.locator('#where:visible, #session:visible').allTextContents()).join(' ');
+    await withServer(async (server) => {
+      await page.goto(`${server.url}/`);
+      await expectSeq(page, 0);
+      // beta works while alpha asks for permission: the bar is on alpha, the one that needs the driver
+      await postOk(server, ev(B, '/w/beta', 'UserPromptSubmit', { prompt: 'go' }));
+      await postOk(server, ev(A, '/w/alpha', 'UserPromptSubmit', { prompt: 'go' }));
+      await postOk(server, ev(A, '/w/alpha', 'PermissionRequest', { tool_name: 'Bash', tool_input: { command: 'make' } }));
+      await expectSeq(page, 3);
+      await expect(page.locator('#state-word')).toHaveText('NEEDS PERMISSION');
+      await expect(page.locator('#others')).toHaveText('+1');
+      expect(await repoShown()).toContain('alpha');
+      expect(await repoShown()).not.toContain('beta');
+      // alpha is answered and finishes; both sessions now wait for the driver: WAITING FOR ME on alpha, +1
+      await postOk(server, ev(A, '/w/alpha', 'PostToolUse', { tool_name: 'Bash', tool_input: { command: 'make' }, tool_response: { stdout: 'ok' } }));
+      await postOk(server, ev(A, '/w/alpha', 'Stop'));
+      await postOk(server, ev(B, '/w/beta', 'Stop'));
+      await postOk(server, ev(A, '/w/alpha', 'Notification', { notification_type: 'idle_prompt' }));
+      await postOk(server, ev(B, '/w/beta', 'Notification', { notification_type: 'idle_prompt' }));
+      await expectSeq(page, 8);
+      await expect(page.locator('#state-word')).toHaveText('WAITING FOR ME');
+      await expect(page.locator('#others')).toHaveText('+1');
+      expect(await repoShown()).toContain('alpha');
+      // beta then asks for permission: the bar moves to beta
+      await postOk(server, ev(B, '/w/beta', 'UserPromptSubmit', { prompt: 'again' }));
+      await postOk(server, ev(B, '/w/beta', 'PermissionRequest', { tool_name: 'Bash', tool_input: { command: 'ls' } }));
+      await expectSeq(page, 10);
+      await expect(page.locator('#state-word')).toHaveText('NEEDS PERMISSION');
+      expect(await repoShown()).toContain('beta');
+      expect(await repoShown()).not.toContain('alpha');
+    });
+  });
+
   test('QA 04: a recording that reaches SessionEnd shows CLAUDE EXITED', async ({ page }) => {
     const s = sessions.find((x) => x.id === 'working-turn') || sessions[0];
     const last = s.lines.length - 1;
