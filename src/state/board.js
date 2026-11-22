@@ -175,6 +175,12 @@ export function reduceBoard(board, event) {
   let next = reduceInner(b, event);
   // a button gesture clears the board note; so does the answer that a "Too early: press again" note asked for
   if ((event.hook_event_name === 'RevviewNav' || event.hook_event_name === 'RevviewAnswered') && typeof next.note === 'string') next = { ...next, note: null };
+  // the "Too early" note belongs to the prompt it was set for: when what the bar shows changes, it goes
+  const TOO_EARLY = 'Too early: press again';
+  if (b.note === TOO_EARLY && next.note === TOO_EARLY) {
+    const id = (x) => { const p = shownPrompt(x); return p === null ? null : `${p.session}\u0000${p.agent}\u0000${p.since}`; };
+    if (id(b) !== id(next)) next = { ...next, note: null };
+  }
   // the selected session ended and others remain: the selection falls to another one, and the bar says so
   const wasSel = selectedOf(b);
   if (wasSel !== null && next !== b && !has(next.sessions, wasSel) && Object.keys(next.sessions).length > 0

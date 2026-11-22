@@ -82,16 +82,19 @@ test('09 a short command is not cut; a long one wraps (no 40% cut any more), wit
   const base = { ...loadFixture('working'), tool: 'Read', file: 'a.py', command: 'psql -f migrate.sql' };
   await openView({ ...base, output: null, outputLines: [] });
   expect((await page.locator('#command').textContent()).replaceAll('\u2060', '').replaceAll('\u200B', '')).toBe('psql -f migrate.sql');
+  expect(await page.locator('#command').textContent()).not.toContain('\u200B');
   expect(await page.locator('#command').evaluate((e) => e.scrollWidth - e.clientWidth)).toBeLessThanOrEqual(0);
   const long = 'psql -f migrate.sql --host db.internal.example.com --port 5432 --user admin --dbname customers';
   const out = 'ERROR: relation does not exist';
   await openView({ ...base, command: long, output: out, outputLines: [out] });
   // the output has its own row: the command may use the full width, and is not cut (it fits in 3 rows)
   expect((await page.locator('#command').textContent()).replaceAll('\u2060', '').replaceAll('\u200B', '')).toBe(long); // U+2060 after each '-'
+  expect(await page.locator('#command').textContent()).not.toContain('\u200B'); // no token over 24 chars
   expect((await rect(page, '#cmdbox')).right).toBeLessThanOrEqual(1280);
   await expect(page.locator('#out3')).toHaveText(out);
   await openView({ ...base, command: long, output: null, outputLines: [] });
   expect((await page.locator('#command').textContent()).replaceAll('\u2060', '').replaceAll('\u200B', '')).toBe(long); // U+2060 after each '-'
+  expect(await page.locator('#command').textContent()).not.toContain('\u200B');
   expect((await rect(page, '#cmdbox')).right).toBeLessThanOrEqual(1280);
   await expectFits(page);
 });

@@ -63,7 +63,8 @@ export function createPermissionRegistry({
       if (typeof chosen !== 'string' || chosen === '' || shown.session !== chosen) return no('session');
       if (shown.since === null || shown.since === undefined) return no('unbound');
       const k = key(shown);
-      if (shownKey === null || k !== shownKey || clock() - shownAt < minShownMs) return no('not-shown-long-enough');
+      if (shownKey === null || k !== shownKey) return no('not-shown-long-enough');
+      if (clock() - shownAt < minShownMs) return no('too-early'); // the bar shows it, but not for long enough yet
       const hits = [];
       for (const [id, r] of reqs) if (r.bound && r.key === k) hits.push(id);
       if (hits.length === 0) return no('no-request');

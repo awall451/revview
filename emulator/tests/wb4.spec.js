@@ -191,6 +191,16 @@ test('r4-05: with the position shown the hint is the number of others that need 
   await expect(page.locator('#others')).toHaveAttribute('data-full', '4 more Claude sessions, 3 need permission');
 });
 
+test('r4-05: more than 9 other sessions needing permission read "9+" with the position shown, the real number in data-full', async ({ openView, page }) => {
+  const base = wb4State('elsewhere');
+  await openView({ ...base, others: 11, elsewhere: 10 });
+  await expect(page.locator('#others')).toHaveText('9+');
+  await expect(page.locator('#others')).toHaveAttribute('data-full', '10 other Claude sessions need permission');
+  await expect(page.locator('#position')).toBeVisible();
+  await openView({ ...base, others: 9, elsewhere: 9 });
+  await expect(page.locator('#others')).toHaveText('9');
+});
+
 // ---- the answer revview gave: said in words on the tool row (QA r4-04) ----
 for (const [id, word, file] of [['denied-done', 'Denied: Bash', 'wb4-denied-done'], ['allowed', 'Allowed: Bash', 'wb4-allowed']]) {
   test(`${id}: the tool row reads "${word}"`, async ({ openView, page }, testInfo) => {

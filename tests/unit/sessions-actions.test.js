@@ -140,19 +140,19 @@ test('an answered press/deny tells the board which exact prompt was answered; a 
     { hook_event_name: 'RevviewAnswered', session_id: SID, agent: shown.agent, since: shown.since, decision: 'deny' },
   ]);
   // a refused press changes no answer; only the too-early refusal says so on the bar (QA r4-07, next test)
-  const r = setup({ answerResult: { ok: false, reason: 'not-shown-long-enough' } });
+  const r = setup({ answerResult: { ok: false, reason: 'too-early' } });
   await r.a.handle(dev('press', 'tap'));
   assert.deepEqual(r.applied.filter((e) => e.hook_event_name !== 'RevviewNote'), []);
 });
 
 test('r4-07: a press or deny refused as too early sets the fixed note "Too early: press again"; other refusals stay silent', async () => {
   for (const button of ['press', 'deny']) {
-    const s = setup({ answerResult: { ok: false, reason: 'not-shown-long-enough' } });
+    const s = setup({ answerResult: { ok: false, reason: 'too-early' } });
     const r = await s.a.handle(dev(button, 'tap'));
-    assert.deepEqual([r.done, r.reason], [false, 'not-shown-long-enough']);
+    assert.deepEqual([r.done, r.reason], [false, 'too-early']);
     assert.deepEqual(s.applied, [{ hook_event_name: 'RevviewNote', note: 'Too early: press again' }]);
   }
-  for (const reason of ['no-prompt', 'session', 'unbound', 'no-request', 'ambiguous', 'kind']) {
+  for (const reason of ['not-shown-long-enough', 'no-prompt', 'session', 'unbound', 'no-request', 'ambiguous', 'kind']) {
     const s = setup({ answerResult: { ok: false, reason } });
     await s.a.handle(dev('press', 'tap'));
     assert.deepEqual(s.applied, [], reason);

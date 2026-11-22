@@ -160,7 +160,7 @@ test('2e. the highlighted session ends while the list is open: the list closes, 
   assert.equal(t.view().note, 'Highlighted session ended: list closed');
   assert.equal(t.sel(), A);
   const early = await t.tap('press');
-  assert.deepEqual([early.done, early.reason], [false, 'not-shown-long-enough']);
+  assert.deepEqual([early.done, early.reason], [false, 'too-early']);
   assert.equal(t.decisions.length, 0);
   t.adv(1500);
   assert.equal((await t.tap('press')).done, true);
@@ -176,7 +176,7 @@ test('3. switching onto a session with a prompt restarts the 1500 ms shown time'
   assert.equal(t.sel(), B);
   t.adv(100);
   const early = await t.tap('press');
-  assert.deepEqual([early.done, early.reason], [false, 'not-shown-long-enough']);
+  assert.deepEqual([early.done, early.reason], [false, 'too-early']);
   assert.equal(t.decisions.length, 0);
   assert.equal(t.registry.size(), 1);
   t.adv(1500); // 1600 after the switch
@@ -194,7 +194,7 @@ test('3b. B -> A -> B within 1500 ms: the press is refused', async () => {
   assert.equal(t.sel(), B);
   t.adv(1000);
   const r = await t.tap('press');
-  assert.deepEqual([r.done, r.reason], [false, 'not-shown-long-enough']);
+  assert.deepEqual([r.done, r.reason], [false, 'too-early']);
   assert.equal(t.decisions.length, 0);
   assert.equal(t.nav(), null, 'a refused allow never falls through to the list');
 });
@@ -231,7 +231,7 @@ test('5. the list closes by timeout; a press right after is refused, 1500 ms lat
   assert.equal(t.nav(), null, 'closed 10000 ms after the last input');
   assert.equal(t.timersLeft(), 1, 'only the request wait timer is left');
   const r = await t.tap('press');
-  assert.deepEqual([r.done, r.reason], [false, 'not-shown-long-enough']);
+  assert.deepEqual([r.done, r.reason], [false, 'too-early']);
   assert.equal(t.decisions.length, 0);
   t.adv(1500);
   assert.equal((await t.tap('press')).done, true);
@@ -258,7 +258,7 @@ test('6. a prompt that appeared 100 ms before a press: not allowed and the list 
   assert.notEqual(shownPrompt(t.r.board), null);
   t.adv(100);
   const r = await t.tap('press');
-  assert.deepEqual([r.done, r.reason], [false, 'not-shown-long-enough']);
+  assert.deepEqual([r.done, r.reason], [false, 'too-early']);
   assert.equal(t.nav(), null);
   assert.equal(t.decisions.length, 0);
   assert.equal(t.registry.size(), 1);

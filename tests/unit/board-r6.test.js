@@ -1,7 +1,7 @@
 // Round 6: projects whose folder is missing are marked in the New session rows (QA r5-07).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { initialBoard, reduceBoard, boardView } from '../../src/state/index.js';
+import { initialBoard, reduceBoard, boardView, MAX_SESSIONS } from '../../src/state/index.js';
 
 const ev = (name, extra = {}) => ({ hook_event_name: name, ...extra });
 const P = ['/p/one', '/p/two', '/p/three'];
@@ -46,4 +46,32 @@ test('r5-07: the Projects view does not mark rows', () => {
   const b = press(withP({ missing: ['/p/two'] }), ['menu', 'down', 'press']);
   assert.equal(b.nav.kind, 'projects');
   assert.deepEqual(boardView(b).nav.rows, P.map((label) => ({ label })));
+});
+
+const uid = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+
+test('cycle 14: a session missing from one listing survives a later RevviewOwned that pushes the board over the cap', () => {
+  const A = uid(1);
+  let b = reduceBoard(initialBoard(), ev('RevviewOwned', { ids: [A] }));
+  b = reduceBoard(b, ev('SessionStart', { session_id: 'X', cwd: '/w/x' })); // not owned; the focus (first live session)
+  b = reduceBoard(b, ev('SessionStart', { session_id: A, cwd: '/w/a' })); // a live (not quiet) owned session, not the focus
+  b = reduceBoard(b, ev('UserPromptSubmit', { session_id: 'X' })); // the focus moves to X
+  const fresh = Array.from({ length: MAX_SESSIONS - 1 }, (_, i) => uid(100 + i));
+  b = reduceBoard(b, ev('RevviewOwned', { ids: fresh })); // A is missing from this listing (once) and the placeholders push the board over the cap
+  assert.equal(Object.keys(b.sessions).length, MAX_SESSIONS);
+  assert.ok(A in b.sessions, 'the missing-once session is not evicted');
+  assert.deepEqual(b.missing, [A]);
+  assert.ok(!('X' in b.sessions));
+});
+
+test('cycle 14: the "Too early" note goes when the shown prompt changes, stays while it does not', () => {
+  const S = { session_id: 'A', cwd: '/w/a' };
+  const bash = (command) => ev('PermissionRequest', { ...S, tool_name: 'Bash', tool_input: { command } });
+  let b = [ev('UserPromptSubmit', S), bash('ls'), ev('RevviewSelect', { session_id: 'A' })].reduce((x, e) => reduceBoard(x, e), initialBoard());
+  b = reduceBoard(b, ev('RevviewNote', { note: 'Too early: press again' }));
+  assert.equal(boardView(reduceBoard(b, ev('RevviewNetwork', { online: true }))).note, 'Too early: press again');
+  const c = reduceBoard(b, bash('rm -rf x')); // a second prompt queues behind; the shown one is the same
+  assert.equal(boardView(c).note, 'Too early: press again');
+  const d = reduceBoard(b, ev('PostToolUse', { ...S, tool_name: 'Bash', tool_input: { command: 'ls' } })); // the shown one is gone
+  assert.equal(boardView(d).note, null);
 });

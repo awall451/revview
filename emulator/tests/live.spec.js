@@ -68,6 +68,8 @@ async function expectShows(page, state) {
   // the displayed command has a U+2060 after each '-' (no line break after "--"); data-full does not
   const shownCmd = (await page.locator('#command').textContent()).replaceAll('\u2060', '').replaceAll('\u200B', '').replace(/…$/, '');
   expect(command.startsWith(shownCmd.trimEnd())).toBe(true);
+  // no token over 24 characters: no break opportunity is added (ZERO WIDTH SPACE is for long tokens only)
+  if (!command.split(/\s+/).some((t) => t.length > 24)) expect(await page.locator('#command').textContent()).not.toContain('\u200B');
   // output: up to 3 lines, newest in #out3 (outputLines when it agrees with output, else output alone)
   const o = state.output || '';
   const ol = Array.isArray(state.outputLines) && state.outputLines.at(-1) === o ? state.outputLines : o ? [o] : [];
@@ -287,6 +289,7 @@ test.describe('live', () => {
       await expect(page.locator('#state-word')).toHaveText('NEEDS PERMISSION');
       await expect(page.locator('#command')).toHaveAttribute('data-full', 'rm -rf build');
       expect((await page.locator('#command').textContent()).replaceAll('\u2060', '').replaceAll('\u200B', '')).toBe('rm -rf build');
+      expect(await page.locator('#command').textContent()).not.toContain('\u200B');
       await expect(page.locator('#others')).toHaveText('+1');
     });
   });

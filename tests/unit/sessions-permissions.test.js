@@ -64,7 +64,8 @@ test('shown too briefly refused, exact threshold ok', () => {
   const { log } = add();
   reg.observe(P());
   tick(1499);
-  assert.equal(reg.answer('allow', P(), 'sess-a').ok, false);
+  assert.deepEqual(reg.answer('allow', P(), 'sess-a'), { ok: false, reason: 'too-early' });
+  assert.deepEqual(reg.answer('allow', P(), 'sess-a'), { ok: false, reason: 'too-early' }, 'a second fast press is refused too');
   assert.deepEqual(log, []);
   tick(1);
   assert.equal(reg.answer('allow', P(), 'sess-a').ok, true);
@@ -240,4 +241,13 @@ test('close responds null to all once', () => {
   assert.deepEqual(b.log, [null]);
   assert.ok(timers.every((t) => t.cleared));
   assert.equal(reg.size(), 0);
+});
+
+test('finding 2: a prompt that is not the shown one is not-shown-long-enough, never too-early', () => {
+  const { reg, add, tick } = setup();
+  add();
+  assert.deepEqual(reg.answer('allow', P(), 'sess-a'), { ok: false, reason: 'not-shown-long-enough' }); // nothing observed yet
+  reg.observe(P());
+  tick(5000);
+  assert.deepEqual(reg.answer('allow', P({ command: 'other' }), 'sess-a'), { ok: false, reason: 'not-shown-long-enough' }); // key mismatch
 });
