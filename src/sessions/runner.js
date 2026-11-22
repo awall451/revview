@@ -14,6 +14,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const WINDOW_RE = /^@\d+$/;
 const NO_SERVER_RE = /no server running|error connecting|no sessions|can't find session|No such file or directory|server exited/i;
 const SESSION = 'revview';
+const UNSAFE_TEXT_RE = /[#\u0000-\u001f\u007f-\u009f]/;
 
 const errText = (e) => `${e?.stderr ?? ''} ${e?.message ?? ''}`;
 
@@ -61,6 +62,11 @@ export function createSessionRunner({
 
   async function start({ cwd, name } = {}) {
     if (typeof cwd !== 'string' || !path.isAbsolute(cwd)) throw new Error('cwd must be an absolute path');
+    // tmux expands formats in -c and -n and `#(cmd)` runs a shell command: refuse any text that could be one
+    if (UNSAFE_TEXT_RE.test(cwd)) throw new Error('cwd must not contain "#" or control characters');
+    if (name !== undefined && name !== null && (typeof name !== 'string' || UNSAFE_TEXT_RE.test(name))) {
+      throw new Error('name must not contain "#" or control characters');
+    }
     let st;
     try { st = fs.statSync(cwd); } catch { st = null; }
     if (!st?.isDirectory()) throw new Error(`cwd is not an existing directory: ${cwd}`);

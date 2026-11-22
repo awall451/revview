@@ -144,3 +144,11 @@ test('killServer ignores no server', async () => {
   const exec = async () => { throw Object.assign(new Error('x'), { stderr: 'no server running on /tmp/x' }); };
   await createSessionRunner({ exec }).killServer();
 });
+
+test('start: cwd or name with # or control characters is refused before any tmux call', async () => {
+  const f = fake();
+  const r = createSessionRunner({ exec: f.exec, newId: () => A });
+  for (const bad of ['/tmp/#(x)', '/tmp/a#b', '/tmp/a\nb', '/tmp/a\u0001b']) await assert.rejects(r.start({ cwd: bad }), /cwd/);
+  for (const bad of ['#(x)', 'a#', 'a\nb', 'a\u007fb']) await assert.rejects(r.start({ cwd: os.tmpdir(), name: bad }), /name/);
+  assert.equal(f.calls.length, 0);
+});

@@ -90,3 +90,39 @@ test('nothing chosen or window gone: nothing is sent', async (t) => {
   assert.equal(runnerB.chosen(), null);
   assert.equal((await runnerB.send('Space')).sent, false);
 });
+
+// tmux expands formats in -c and -n, and #(cmd) runs a shell command: revview must refuse such text.
+function injectionSetup(t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rv-inj-'));
+  const sock = path.join(dir, 'sock');
+  const pwned = path.join(dir, 'pwned');
+  const runner = createSessionRunner({ socket: { path: sock }, claude: [process.execPath, fakePath, path.join(dir, 'c.log')] });
+  t.after(async () => {
+    await runner.killServer().catch(() => {});
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+  return { dir, pwned, runner };
+}
+
+test('a #(...) directory name or window name runs nothing and starts nothing', async (t) => {
+  const { dir, pwned, runner } = injectionSetup(t);
+  // the file name goes through the environment so the directory name has no '/'
+  process.env.RV_PWNED = pwned;
+  t.after(() => { delete process.env.RV_PWNED; });
+  const evil = path.join(dir, '#(touch $RV_PWNED)');
+  fs.mkdirSync(evil);
+  await assert.rejects(runner.start({ cwd: evil }), /cwd/);
+  await assert.rejects(runner.start({ cwd: dir, name: '#(touch $RV_PWNED)' }), /name/);
+  await assert.rejects(runner.start({ cwd: dir, name: 'a\nb' }), /name/);
+  await settle();
+  await settle();
+  assert.equal(fs.existsSync(pwned), false);
+  assert.deepEqual(await runner.list(), []);
+});
+
+test('a normal directory and name still start', async (t) => {
+  const { dir, pwned, runner } = injectionSetup(t);
+  const s = await runner.start({ cwd: dir, name: 'plain-name_1' });
+  assert.deepEqual((await runner.list()).map((x) => x.id), [s.id]);
+  assert.equal(fs.existsSync(pwned), false);
+});
