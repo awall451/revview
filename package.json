@@ -9,6 +9,7 @@
   },
   "scripts": {
     "start": "node src/server/index.js",
+    "start:dev": "node src/server/index.js --dev-bridge",
     "test:unit": "node --test \"tests/unit/**/*.test.js\"",
     "test:emulator": "playwright test -c emulator/playwright.config.js",
     "lint": "eslint ."

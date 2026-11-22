@@ -293,4 +293,6 @@ if (query.has('fixture') || query.has('state')) {
   render(await loadStatic(query));
 } else {
   live();
+  // dev only: without ?devkeys=1 the page attaches no key listener at all
+  if (query.get('devkeys') === '1') import('./devkeys.js').then((m) => m.startDevKeys());
 }

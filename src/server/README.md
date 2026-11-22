@@ -7,7 +7,9 @@ session, see `src/state/README.md`), reduces every event with `reduceBoard` and 
 No persistence: a fresh or restarted server shows `unknown` (a restored state could not be trusted, and hooks
 posted while the server was down are lost).
 
-Run: `npm start` or `node src/server/index.js [port]` (default **8138**, or env `REVVIEW_PORT`).
+Run: `npm start` or `node src/server/index.js [port] [--input [path]] [--dev-bridge]` (port default **8138**, or env `REVVIEW_PORT`).
+`--input` reads the wheel buttons in this process (config `config/buttons.json`, or the path given); a bad config or
+unknown flag prints the message to stderr and exits with code 2 before listening. `--dev-bridge` (or `npm run start:dev`) turns on `POST /dev/key`.
 It binds to **127.0.0.1 only**; there is deliberately no way to change the host from the CLI.
 Open `http://127.0.0.1:8138/`.
 
@@ -58,6 +60,24 @@ server started.
   404 if missing, path traversal refused (403/404).
 - Any other method on a known path: 405. Unknown API paths: 404.
 
+## Wheel buttons (gestures)
+
+With `--input` the device reader (`src/input`) runs inside the server. Its presence becomes the internal event
+`{hook_event_name:'RevviewInput', present}` (only counted when it changed; the page shows the quiet NO BUTTONS tag).
+Gestures (`tap`, `hold`, `long-hold`) are kept in an in-memory log of the last 32, **not** in the board: `seq` and the
+state do not change for them. Each entry is `{button, gesture, source: 'device'|'bridge'|'post', at, dropped}`;
+`dropped` is true when the view was `starting` (presses then are dropped, not queued). `onGesture(entry)` is called
+for each (a throwing callback is caught and logged).
+
+- `GET /buttons`: `{"buttons": "unknown"|"present"|"missing", "gestures": [oldest first]}`, `no-store`.
+- `POST /event` with `{hook_event_name:'RevviewButton', button, gesture}` takes the normal path (204, `seq += 1`, the board
+  ignores it) and, when `button` matches `/^[a-z][a-z0-9-]{0,31}$/` and `gesture` is one of the three, is also logged with source `post`.
+- `POST /dev/key` (**dev only**): body `{code, type: 'down'|'up'|'lost', repeat?}` (`code` is a `KeyboardEvent.code`; `lost` = the
+  page lost focus, like a vanished device). It feeds the same detector as the device (the one from `--input` when given,
+  else one built from `config/buttons.json`). 204; unmapped code: 204 and ignored; bad body 400; over 1 KiB 413.
+  Gating: the route is only registered with `--dev-bridge` / `devBridge: true`; otherwise it is an unknown path.
+  It is still loopback only and subject to the Origin/Host checks. The page sends keys only when loaded with `?devkeys=1`.
+
 ## Security notes
 
 - Loopback only, so nothing on the network can reach it.
@@ -68,5 +88,6 @@ server started.
 - At most **8** SSE clients (`MAX_SSE_CLIENTS`); the ninth `GET /events` gets 503. A client whose unread backlog
   passes 256 KiB (it never reads) is dropped.
 
-Programmatic use (tests): `startLiveServer({ port: 0, viewDir, reduce })` (`reduce` is a test seam for a failing state core; there is no host option) resolves to
+Programmatic use (tests): `startLiveServer({ port: 0, viewDir, reduce, input, devBridge, inputDeps, inputRetryMs, onGesture })`
+(`input` is a parsed config, `inputDeps`/`inputRetryMs` go to the device reader; `gestures()` returns a copy of the log) (`reduce` is a test seam for a failing state core; there is no host option) resolves to
 `{ url, port, close(), state() }` (`reduce` is `(board, event) => board`, default `reduceBoard`; `state()` returns `boardView(board)`).

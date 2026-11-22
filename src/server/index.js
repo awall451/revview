@@ -1,12 +1,15 @@
 // Live server: hook scripts POST raw Claude Code hook JSON to /event, the state core
 // (src/state) reduces it, and the new state is pushed to the page over Server-Sent Events.
 // It also serves the view. Binds to 127.0.0.1 only; see src/server/README.md.
-//   node src/server/index.js [port]      (default 8138, or REVVIEW_PORT)
+//   node src/server/index.js [port] [--input [path]] [--dev-bridge]   (port default 8138, or REVVIEW_PORT)
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { initialBoard, reduceBoard, boardView } from '../state/index.js';
+import { startInput, createInputPipeline } from '../input/index.js';
+import { loadConfig, ConfigError, DEFAULT_CONFIG_PATH } from '../input/keymap.js';
+import { BROWSER_CODES } from '../input/keys.js';
 
 export const DEFAULT_PORT = 8138;
 export const DEFAULT_HOST = '127.0.0.1'; // the only address it binds; there is no option for another
@@ -18,6 +21,10 @@ const EVENT_NAME_RE = /"hook_event_name"\s*:\s*"([A-Za-z]{1,64})"/;
 const TOOL_NAME_RE = /"tool_name"\s*:\s*"([^"\\]{1,200})"/;
 const DIFF_TOOLS = ['Edit', 'Write', 'MultiEdit']; // the only tools whose PostToolUse counts diff (src/state/diff.js)
 const PING_MS = 15000;
+const MAX_DEV_BODY_BYTES = 1024;
+const GESTURE_LOG_MAX = 32;
+const BUTTON_RE = /^[a-z][a-z0-9-]{0,31}$/;
+const GESTURES = ['tap', 'hold', 'long-hold'];
 export const MAX_SSE_CLIENTS = 8;
 export const MAX_CLIENT_BACKLOG_BYTES = 256 * 1024; // unread bytes after which a stalled SSE client is dropped
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -58,7 +65,10 @@ function serveStatic(req, res, root) {
   });
 }
 
-export async function startLiveServer({ port = 0, viewDir = DEFAULT_VIEW_DIR, reduce: reduceEvent = reduceBoard } = {}) {
+export async function startLiveServer({
+  port = 0, viewDir = DEFAULT_VIEW_DIR, reduce: reduceEvent = reduceBoard,
+  input = null, devBridge = false, inputDeps, inputRetryMs, onGesture,
+} = {}) {
   const root = path.resolve(viewDir);
   let board = initialBoard();
   let seq = 0;
@@ -94,6 +104,39 @@ export async function startLiveServer({ port = 0, viewDir = DEFAULT_VIEW_DIR, re
     board = next;
     broadcast();
     return true;
+  }
+
+  // Gestures: an in-memory log, never part of the board. Presses during 'starting' are dropped, not queued.
+  const gestureLog = [];
+  function acceptGesture({ button, gesture, source }) {
+    const entry = { button, gesture, source, at: Date.now(), dropped: boardView(board).view === 'starting' };
+    gestureLog.push(entry);
+    if (gestureLog.length > GESTURE_LOG_MAX) gestureLog.shift();
+    try {
+      onGesture?.({ ...entry });
+    } catch (e) {
+      console.error('onGesture failed:', e);
+    }
+  }
+
+  // Source of the key event that is feeding the one detector (hold timers inherit the last one).
+  let lastSource = 'device';
+  const gestureFromDetector = (g) => acceptGesture({ button: g.button, gesture: g.gesture, source: lastSource });
+  let inputHandle = null;
+  if (input) {
+    inputHandle = startInput({
+      config: input,
+      onGesture: gestureFromDetector,
+      onPresence: (present) => apply({ hook_event_name: 'RevviewInput', present }, true),
+      onKey: () => { lastSource = 'device'; },
+      log: (m) => console.error(m),
+      deps: inputDeps,
+      retryMs: inputRetryMs,
+    });
+  }
+  let bridge = null;
+  if (devBridge) {
+    bridge = inputHandle ?? createInputPipeline({ config: loadConfig(DEFAULT_CONFIG_PATH), onGesture: gestureFromDetector });
   }
 
   // A body over the limit that still looks like a hook event means an event was lost (QA issue 11).
@@ -172,6 +215,58 @@ export async function startLiveServer({ port = 0, viewDir = DEFAULT_VIEW_DIR, re
         return text(res, 400, 'body must be a JSON object');
       }
       if (!apply(event)) return text(res, 500, 'state core failed; event ignored');
+      if (event.hook_event_name === 'RevviewButton' && typeof event.button === 'string'
+        && BUTTON_RE.test(event.button) && GESTURES.includes(event.gesture)) {
+        acceptGesture({ button: event.button, gesture: event.gesture, source: 'post' });
+      }
+      res.writeHead(204).end();
+    });
+  }
+
+  // Dev only (registered only with devBridge): the page forwards key presses to the same detector.
+  function devKey(req, res) {
+    const declared = Number(req.headers['content-length']);
+    if (declared > MAX_DEV_BODY_BYTES) {
+      res.on('finish', () => req.socket.destroy());
+      return text(res, 413, 'body too large (max 1 KiB)', { connection: 'close' });
+    }
+    let size = 0;
+    const chunks = [];
+    let over = false;
+    req.on('data', (c) => {
+      if (over) return;
+      size += c.length;
+      if (size > MAX_DEV_BODY_BYTES) {
+        over = true;
+        chunks.length = 0;
+        res.on('finish', () => req.socket.destroy());
+        text(res, 413, 'body too large (max 1 KiB)', { connection: 'close' });
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on('end', () => {
+      if (over) return;
+      let b;
+      try {
+        b = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      } catch {
+        return text(res, 400, 'malformed JSON');
+      }
+      if (b === null || typeof b !== 'object' || Array.isArray(b)) return text(res, 400, 'body must be a JSON object');
+      if (b.type === 'lost') {
+        bridge.reset();
+        return res.writeHead(204).end();
+      }
+      if ((b.type !== 'down' && b.type !== 'up') || typeof b.code !== 'string' || b.code.length > 32
+        || (b.repeat !== undefined && typeof b.repeat !== 'boolean')) {
+        return text(res, 400, 'expected {code, type: down|up|lost, repeat?}');
+      }
+      const code = Object.hasOwn(BROWSER_CODES, b.code) ? BROWSER_CODES[b.code] : undefined;
+      if (code !== undefined) {
+        lastSource = 'bridge';
+        bridge.feed(code, b.type === 'up' ? 0 : b.repeat ? 2 : 1);
+      }
       res.writeHead(204).end();
     });
   }
@@ -201,8 +296,11 @@ export async function startLiveServer({ port = 0, viewDir = DEFAULT_VIEW_DIR, re
   const ROUTES = {
     '/event': { POST: postEvent },
     '/events': { GET: events },
+    '/buttons': { GET: (req, res) => res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify({ buttons: boardView(board).buttons, gestures: gestureLog })) },
     '/state': { GET: (req, res) => res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify({ seq, state: boardView(board) })) },
   };
+
+  if (devBridge) ROUTES['/dev/key'] = { POST: devKey };
 
   const server = http.createServer((req, res) => {
     req.on('error', () => {});
@@ -248,8 +346,10 @@ export async function startLiveServer({ port = 0, viewDir = DEFAULT_VIEW_DIR, re
     url: `http://${DEFAULT_HOST}:${ownPort}`,
     port: ownPort,
     state: () => boardView(board),
+    gestures: () => gestureLog.map((g) => ({ ...g })),
     close: () =>
       new Promise((resolve) => {
+        inputHandle?.stop();
         clearInterval(timer);
         server.close(() => resolve());
         for (const c of clients) c.end();
@@ -259,10 +359,36 @@ export async function startLiveServer({ port = 0, viewDir = DEFAULT_VIEW_DIR, re
   };
 }
 
+export function parseArgs(argv) {
+  const out = { port: null, inputPath: null, devBridge: false };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--dev-bridge') out.devBridge = true;
+    else if (a === '--input') {
+      const next = argv[i + 1];
+      if (next !== undefined && !next.startsWith('--')) { out.inputPath = next; i++; } else out.inputPath = DEFAULT_CONFIG_PATH;
+    } else if (a.startsWith('--')) throw new Error(`unknown option ${a}`);
+    else if (out.port === null && /^\d+$/.test(a)) out.port = Number(a);
+    else throw new Error(`unexpected argument ${a}`);
+  }
+  if (out.port === null) out.port = Number(process.env.REVVIEW_PORT || DEFAULT_PORT);
+  return out;
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const port = Number(process.argv[2] || process.env.REVVIEW_PORT || DEFAULT_PORT);
-  const { url } = await startLiveServer({ port });
+  let args;
+  let input = null;
+  try {
+    args = parseArgs(process.argv.slice(2));
+    if (args.inputPath) input = loadConfig(args.inputPath);
+  } catch (e) {
+    console.error(e instanceof ConfigError || e instanceof Error ? e.message : String(e));
+    process.exit(2);
+  }
+  const { url } = await startLiveServer({ port: args.port, input, devBridge: args.devBridge });
   console.log(`revview live server (127.0.0.1 only)`);
   console.log(`view:  ${url}/`);
   console.log(`post:  curl -s -X POST --data-binary @- ${url}/event < <(head -1 fixtures/sessions/working-turn.jsonl)`);
+  if (input) console.log('input: reading wheel buttons (GET /buttons)');
+  if (args.devBridge) console.log('dev bridge ON (POST /dev/key): never use this on the car');
 }
