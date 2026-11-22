@@ -1126,3 +1126,15 @@ Owner steps: `pi/README.md`. Bench items P1-P14 in `docs/BENCH-TEST.md`, all unt
   - Read-only root: the kiosk profile is already in tmpfs; the linger file, units, udev rules, `server.env` and the
     `/boot/firmware` edits are written once by the installer (run it with the overlay off). tmux sockets are in `/tmp`.
   - Piper install, `docs/REVOKE.md`, power-cut behaviour: part B.
+
+- **Review fixes (stage 4A).** Paths written into the autostart, unit and udev rules must match `^/[A-Za-z0-9._/-]+$`
+  (setup.mjs exits 2, install.sh refuses the same). A `cmdline.txt` with no `root=` token is skipped byte-identical,
+  with a warning and exit 1 (other files are still done). The rotation edit also drops `fbcon=rotate:N` and any
+  `video=` token carrying `rotate=` (ours from an earlier `--output`); a `video=` without `rotate=` is the user's and
+  stays. Edited files are written by temp file, fsync and rename (on the FAT boot partition that is still the best
+  available); a symlink target is refused (skipped, exit 1); `--root` is resolved with `pwd -P` and never `/` unless
+  given as `/`. Every lightdm `[Seat:*]` section is edited; `apt-get update` precedes install. netmon: one probe at a
+  time (a pending lookup counts), lookups through `dns.promises.Resolver({timeout, tries: 1})` with cancel, connect to
+  the IP, `stop()` cancels a running probe, default timeout `DEFAULT_CONNECT_TIMEOUT_MS` (3000) tested. The flaky
+  `close() kills a running stand-in` test asserted the stand-in's `sleep` child was dead the instant `close()`
+  returned; close() only waits for the stand-in itself, so the test now polls (reproduced 1 in 20 idle, 8 in 20 under load).

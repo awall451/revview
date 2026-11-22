@@ -4,7 +4,8 @@
 #
 # - URL: file://<repo>/src/view/boot.html?port=$REVVIEW_PORT (default 8138). The boot page waits for the server,
 #   then goes to http://127.0.0.1:<port>/ (it shows NO LINK meanwhile).
-# - Pause (for development): while either marker file exists no browser runs; checked every 5 s.
+# - Pause (for development): while either marker file exists NO NEW browser is started (checked every 5 s). A
+#   Chromium that is already running is not stopped: close it, and it is not restarted while a marker exists.
 #     ${XDG_CONFIG_HOME:-$HOME/.config}/revview/kiosk-paused
 #     /boot/firmware/revview-kiosk-paused   (can be created from another computer on the SD card)
 # - Profile: ${XDG_RUNTIME_DIR:-/tmp}/revview-kiosk (tmpfs: fresh at each boot, no restore prompt after a

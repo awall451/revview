@@ -53,7 +53,11 @@ and `audio`. The older set-up's `revview` system user is no longer used.
    - packages (only the missing ones): `chromium tmux python3 espeak-ng wlr-randr` *(names from memory)*;
    - groups `input` and `audio` for the user;
    - quiet boot: `/boot/firmware/config.txt` gets `disable_splash=1`; `/boot/firmware/cmdline.txt` loses `splash` and
-     gets `quiet loglevel=0 logo.nologo vt.global_cursor_default=0` (kept on ONE line);
+     gets `quiet loglevel=0 logo.nologo vt.global_cursor_default=0` (kept on ONE line, CRLF becomes LF). It also
+     drops `fbcon=rotate:N` and any earlier `video=<connector>:...` token that has `rotate=` (what an earlier run
+     with another `--output` wrote); a `video=` without `rotate=` of yours is kept. **If no token starts with
+     `root=`** (empty or damaged file) the file is left byte-identical, a warning is printed and the installer exits
+     1 after doing the rest: repair the file and run it again;
    - rotation, all three parts (they must agree): the console on the kernel command line
      (`video=HDMI-A-1:400x1280M@60,rotate=90`), the picture in the labwc autostart (`wlr-randr --output HDMI-A-1
      --transform 90`), the touch in `/etc/udev/rules.d/71-revview-touch.rules`;
@@ -66,7 +70,13 @@ and `audio`. The older set-up's `revview` system user is no longer used.
    - the Claude Code hooks for the user (`hooks/install.mjs`, into `~/.claude/settings.json`);
    - an old `/etc/systemd/system/revview.service` from the earlier set-up is disabled and removed.
 
-   Every file it changes that existed before is copied once to `<file>.revview-backup`.
+   Every file it changes that existed before is copied once to `<file>.revview-backup`. Files are written through a
+   temporary file in the same directory and a rename (on the FAT boot partition that is still the best available).
+   It never writes through a symlink: a target that is a symlink (also `~/.config/labwc/autostart`) is skipped, a
+   warning is printed and the exit code is 1. `REVVIEW_DIR` must match `^/[A-Za-z0-9._/-]+$`; a `--root` that only
+   resolves to `/` is refused (pass `/`). `/etc/lightdm/lightdm.conf` gets the autologin in every `[Seat:*]` section.
+   When packages are missing it runs `apt-get update` first. Exit codes: 0 done, 2 bad arguments (nothing written),
+   1 a file was refused (the rest is done).
 8. **Settings** (optional), in `/etc/revview/server.env` (one `KEY=value` per line, no quotes):
    - `REVVIEW_START=/home/NAME/my-repo`: at key-on a Claude session starts there by itself. Without it, start one from
      the bar's menu (New session) once you are parked;
@@ -83,7 +93,8 @@ and `audio`. The older set-up's `revview` system user is no longer used.
   Restart it: `systemctl --user restart revview` (the Claude sessions in tmux survive, bench D3).
 - See the Claude sessions: `tmux -L revview attach` (detach with Ctrl+B then D).
 - **Pause the kiosk** (to use the desktop): `mkdir -p ~/.config/revview && touch ~/.config/revview/kiosk-paused`,
-  then close Chromium; remove the file to bring it back (within about 5 s). If you cannot get to a terminal: put the
+  then close the running Chromium yourself (the marker only stops a new one from starting; it does not stop one
+  that is running); remove the file to bring it back (within about 5 s). If you cannot get to a terminal: put the
   SD card in another computer and create an empty file `revview-kiosk-paused` in its boot partition.
 - Change rotation or user: run the installer again with the new options; it rewrites only what differs.
 - Undo: the `.revview-backup` copies are the files as they were before the first install.

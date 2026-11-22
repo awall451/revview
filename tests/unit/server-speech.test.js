@@ -114,8 +114,10 @@ test('close() kills a running stand-in', T, async () => {
     kid = kidsOf(c.dir)[0];
     assert.ok(alive(pid));
     await c.s.close();
-    assert.equal(alive(pid), false);
-    assert.equal(alive(kid), false);
+    // The stand-in's own exit is awaited by close(); its sleep child gets the same signal
+    // but node does not wait for it, so poll (same as the hold test above).
+    await until(() => !alive(pid), 'the stand-in to be dead after close()');
+    await until(() => !alive(kid), 'its sleep child to be dead after close()');
   });
 });
 

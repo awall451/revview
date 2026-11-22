@@ -11,6 +11,8 @@ import { fileURLToPath } from 'node:url';
 
 const USER_RE = /^[a-z_][a-z0-9_-]{0,31}$/;
 const OUTPUT_RE = /^[A-Za-z0-9-]+$/;
+// Paths that end up in a shell line (autostart) and in a systemd unit: letters, digits, . _ - and /. Nothing else.
+const DIR_RE = /^\/[A-Za-z0-9._/-]+$/;
 const BLOCK_HEAD = '# revview: quiet boot (pi/install.sh)';
 const AUTOSTART_MARK = 'written by pi/install.sh';
 
@@ -20,9 +22,19 @@ function checkRotate(rotate) {
 function checkOutput(output) {
   if (typeof output !== 'string' || !OUTPUT_RE.test(output)) throw new Error(`bad output name ${JSON.stringify(output)}`);
 }
+function checkPath(what, v) {
+  if (typeof v !== 'string' || !DIR_RE.test(v)) throw new Error(`${what} must match ^/[A-Za-z0-9._/-]+$ (absolute; letters, digits, . _ - and / only): ${JSON.stringify(v)}`);
+}
 function checkUser(user) {
   if (typeof user !== 'string' || !USER_RE.test(user)) throw new Error(`bad user name ${JSON.stringify(user)}`);
 }
+
+// Quiet boot tokens and the rotated console mode on the ONE line of cmdline.txt. Refuses (throws NoRootError) when
+// no token starts with root=: an empty or truncated file must never become a line that cannot boot.
+// Dropped before ours are added: our own earlier tokens, fbcon=rotate:N (it would fight video=...,rotate=), and any
+// earlier video=<connector>:... token that carries rotate= (what this installer wrote, also for another --output
+// in an earlier run). A video= token without rotate= (a user's own mode for some connector) is kept.
+export class NoRootError extends Error {}
 
 export function editCmdline(text, { output = 'HDMI-A-1', rotate = 90 } = {}) {
   checkRotate(rotate);
@@ -30,8 +42,11 @@ export function editCmdline(text, { output = 'HDMI-A-1', rotate = 90 } = {}) {
   const lines = String(text).split(/\r?\n/).filter((l) => l.trim() !== '');
   if (lines.length > 1) throw new Error('cmdline.txt must be one line, found several');
   const drop = (t) => t === 'splash' || t === 'quiet' || t === 'logo.nologo' || t.startsWith('loglevel=')
-    || t.startsWith('vt.global_cursor_default=') || t.startsWith(`video=${output}:`);
-  const tokens = (lines[0] ?? '').split(/\s+/).filter((t) => t && !drop(t));
+    || t.startsWith('vt.global_cursor_default=') || t.startsWith('fbcon=rotate:')
+    || t.startsWith(`video=${output}:`) || (t.startsWith('video=') && /[:,]rotate=/.test(t));
+  const all = (lines[0] ?? '').split(/\s+/).filter(Boolean);
+  if (!all.some((t) => t.startsWith('root='))) throw new NoRootError('no root= token in cmdline.txt (empty or damaged?); left untouched');
+  const tokens = all.filter((t) => !drop(t));
   tokens.push('quiet', 'loglevel=0', 'logo.nologo', 'vt.global_cursor_default=0', `video=${output}:400x1280M@60,rotate=${rotate}`);
   return `${tokens.join(' ')}\n`;
 }
@@ -54,26 +69,32 @@ export function editLightdm(text, user) {
   const lines = String(text).split(/\r?\n/);
   if (lines[lines.length - 1] === '') lines.pop();
   const want = `autologin-user=${user}`;
-  const start = lines.findIndex((l) => l.trim() === '[Seat:*]');
-  if (start < 0) {
+  const starts = [];
+  lines.forEach((l, i) => { if (l.trim() === '[Seat:*]') starts.push(i); });
+  if (!starts.length) {
     if (lines.length && lines[lines.length - 1].trim() !== '') lines.push('');
     lines.push('[Seat:*]', want);
     return `${lines.join('\n')}\n`;
   }
-  let end = lines.findIndex((l, i) => i > start && /^\s*\[/.test(l));
-  if (end < 0) end = lines.length;
-  const idx = (re) => lines.findIndex((l, i) => i > start && i < end && re.test(l));
-  const active = idx(/^\s*autologin-user\s*=/);
-  const at = active >= 0 ? active : idx(/^\s*#\s*autologin-user\s*=/);
-  if (at >= 0) lines[at] = want;
-  else lines.splice(start + 1, 0, want);
+  // Every [Seat:*] section is edited (a later one would otherwise override). Last first: inserting a line does
+  // not move the earlier sections.
+  for (const start of starts.reverse()) {
+    let end = lines.findIndex((l, i) => i > start && /^\s*\[/.test(l));
+    if (end < 0) end = lines.length;
+    const all = (re) => lines.map((l, i) => (i > start && i < end && re.test(l) ? i : -1)).filter((i) => i >= 0);
+    const active = all(/^\s*autologin-user\s*=/);
+    const commented = all(/^\s*#\s*autologin-user\s*=/);
+    if (active.length) for (const i of active) lines[i] = want;
+    else if (commented.length) lines[commented[0]] = want;
+    else lines.splice(start + 1, 0, want);
+  }
   return `${lines.join('\n')}\n`;
 }
 
 export function renderAutostart({ dir, output, transform }) {
   checkOutput(output);
   if (transform !== 90 && transform !== 270) throw new Error(`transform must be 90 or 270, got ${transform}`);
-  if (typeof dir !== 'string' || /[\s'"\\$`;&|<>()*?!#~\u0000-\u001f]/.test(dir)) throw new Error(`dir has a character that is not safe in a shell line: ${JSON.stringify(dir)}`);
+  checkPath('dir', dir);
   return `#!/bin/sh
 # labwc autostart, ${AUTOSTART_MARK}. Run by labwc with sh at session start.
 # This file REPLACES the system /etc/xdg/labwc/autostart: no desktop, no panel, no icons, just the kiosk.
@@ -97,7 +118,7 @@ ATTRS{idVendor}=="0712", ATTRS{idProduct}=="000a", ENV{LIBINPUT_CALIBRATION_MATR
 
 export function renderUnit(template, { dir, node, user }) {
   for (const [k, v] of [['dir', dir], ['node', node]]) {
-    if (typeof v !== 'string' || v === '' || /[\s@|%"\\\u0000-\u001f\u007f]/.test(v)) throw new Error(`${k} has a character that is not allowed in the unit: ${JSON.stringify(v)}`);
+    checkPath(k, v);
   }
   checkUser(user);
   return String(template).replaceAll('@REVVIEW_DIR@', dir).replaceAll('@NODE@', node).replaceAll('@USER@', user);
@@ -174,35 +195,76 @@ function main(argv) {
     }
   };
 
+  // A refusal (symlink, cmdline without root=) leaves the file alone, goes on with the rest, and makes the exit
+  // code 1 at the end.
+  let failed = false;
+  const refuse = (p, why) => {
+    failed = true;
+    say(`skipped ${p}: ${why}`);
+    process.stderr.write(`revview setup: ${p}: ${why}\n`);
+  };
+  const isLink = (p) => {
+    try {
+      return fs.lstatSync(p).isSymbolicLink();
+    } catch {
+      return false;
+    }
+  };
+
+  // Temp file in the same directory, fsync, rename: a power cut leaves the old or the new file, never half of one
+  // (like hooks/install.mjs). On the FAT partition /boot/firmware rename is not guaranteed atomic by FAT itself,
+  // but it is still the best that is available there.
+  const atomicWrite = (p, content, mode, owned) => {
+    const tmp = path.join(path.dirname(p), `.${path.basename(p)}.revview-tmp-${process.pid}`);
+    fs.rmSync(tmp, { force: true });
+    const fd = fs.openSync(tmp, 'wx', mode);
+    try {
+      fs.writeSync(fd, content);
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+    try {
+      fs.chmodSync(tmp, mode);
+      chownIf(tmp, owned);
+      fs.renameSync(tmp, p);
+    } catch (e) {
+      fs.rmSync(tmp, { force: true });
+      throw e;
+    }
+  };
+
   // write(p, content, { owned, backup: 'first' | 'foreign', createOnly, mode })
   const write = (p, content, opts = {}) => {
+    if (isLink(p)) return refuse(p, 'is a symlink; not written through (replace it with a regular file or remove it)');
     const old = readOr(p);
     if (old !== null && opts.createOnly) return say(`unchanged ${p}`); // exists: never overwritten
     if (old === content) return say(`unchanged ${p}`);
     if (o.dry) return say(`would write ${p}`);
     mkdirp(path.dirname(p), opts.owned);
     const bak = `${p}.revview-backup`;
-    const wantBackup = old !== null && !fs.existsSync(bak)
+    const wantBackup = old !== null && !fs.existsSync(bak) && !isLink(bak)
       && (opts.backup === 'first' || (opts.backup === 'foreign' && !old.includes(AUTOSTART_MARK)));
+    const mode = opts.mode ?? (old !== null ? fs.statSync(p).mode & 0o777 : 0o644);
     if (wantBackup) {
-      fs.copyFileSync(p, bak);
-      chownIf(bak, opts.owned);
+      atomicWrite(bak, old, mode, opts.owned);
       say(`backup ${p} -> ${bak}`);
     }
-    fs.writeFileSync(p, content, { mode: opts.mode ?? 0o644 });
-    chownIf(p, opts.owned);
+    atomicWrite(p, content, mode, opts.owned);
     say(`wrote ${p}`);
   };
 
   const piDir = path.dirname(fileURLToPath(import.meta.url));
   const edit = (rel, fn) => {
     const p = R(rel);
+    if (isLink(p)) return refuse(p, 'is a symlink; not edited through it');
     const old = readOr(p);
     if (old === null) return say(`skipped ${p}: missing`);
     let res;
     try {
       res = fn(old);
     } catch (e) {
+      if (e instanceof NoRootError) return refuse(p, e.message);
       return say(`skipped ${p}: ${e.message}`);
     }
     for (const w of res.warnings ?? []) say(`warning ${p}: ${w}`);
@@ -212,7 +274,7 @@ function main(argv) {
   edit('/boot/firmware/cmdline.txt', (t) => editCmdline(t, { output: o.output, rotate: o.rotate }));
   edit('/boot/firmware/config.txt', editConfigTxt);
   const lightdm = R('/etc/lightdm/lightdm.conf');
-  if (fs.existsSync(lightdm)) edit('/etc/lightdm/lightdm.conf', (t) => editLightdm(t, o.user));
+  if (fs.existsSync(lightdm) || isLink(lightdm)) edit('/etc/lightdm/lightdm.conf', (t) => editLightdm(t, o.user));
   else say(`skipped ${lightdm}: no lightdm.conf; set Desktop Autologin with raspi-config`);
 
   write(R('/etc/udev/rules.d/70-revview-dongle.rules'), fs.readFileSync(path.join(piDir, '70-revview-dongle.rules'), 'utf8'));
@@ -238,6 +300,7 @@ function main(argv) {
   write(R('/etc/revview/server.env'), renderServerEnv(), { createOnly: true });
   write(path.join(homeAbs, '.config/labwc/autostart'), renderAutostart({ dir: o.dir, output: o.output, transform: o.rotate }),
     { owned: true, backup: 'foreign', mode: 0o755 });
+  if (failed) process.exitCode = 1;
 }
 
 if (process.argv[1] && fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url))) main(process.argv.slice(2));

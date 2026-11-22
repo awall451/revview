@@ -9,6 +9,10 @@
 #   --root    act on this directory tree instead of / (a fake root for tests; no root needed, no apt,
 #             no usermod, no systemctl, no udevadm)
 #   REVVIEW_DIR defaults to this repository; it should live outside the home (e.g. /opt/revview), with npm ci done.
+#             Its path must match ^/[A-Za-z0-9._/-]+$ (it goes into a shell line and a systemd unit).
+#   --root    must not merely resolve to / (a symlink): give exactly / for a real install.
+# Exit: 0 done; 2 bad arguments (nothing written); 1 a file was refused (a symlink where a file is written, or a
+#   cmdline.txt without root=): left as it was, everything else done, fix it and re-run.
 # What it changes (see pi/setup.mjs): /boot/firmware/cmdline.txt and config.txt (quiet boot, rotated console),
 #   /etc/lightdm/lightdm.conf (autologin), udev rules (dongle, touch rotation), /etc/systemd/user/revview.service
 #   and its enable symlink, /var/lib/systemd/linger/<user>, /etc/revview/server.env (only if missing),
@@ -47,13 +51,17 @@ done
 case "$rotate" in 90 | 270) ;; *) die "--rotate must be 90 or 270" ;; esac
 [[ "$output" =~ ^[A-Za-z0-9-]+$ ]] || die "bad --output: $output"
 [ -d "$root" ] || die "--root is not a directory: $root"
-root="$(cd "$root" && pwd)"
+given_root="$root"
+root="$(cd "$root" && pwd -P)"
+# A --root that only resolves to / (a symlink, "/." ...) would be a real install by accident: say / to mean it.
+if [ "$root" = "/" ] && [ "$given_root" != "/" ]; then die "--root $given_root resolves to /; pass exactly / for a real install"; fi
 dir="$(cd "${dir:-$here/..}" && pwd)"
 case "$dir" in
   /*) ;;
   *) die "REVVIEW_DIR must be absolute: $dir" ;;
 esac
-if [[ "$dir" =~ [[:space:]@\|%\"] ]]; then die "REVVIEW_DIR must not contain spaces, @, |, % or \": $dir"; fi
+# The same allow-list as pi/setup.mjs: the path goes into a shell line and a systemd unit.
+if [[ ! "$dir" =~ ^/[A-Za-z0-9._/-]+$ ]]; then die "REVVIEW_DIR must match ^/[A-Za-z0-9._/-]+\$ (letters, digits, . _ - and / only): $dir"; fi
 
 real=0
 [ "$root" = "/" ] && real=1
@@ -87,6 +95,7 @@ if [ "$real" -eq 1 ] && [ "$apt" -eq 1 ]; then
   elif [ "$dry" -eq 1 ]; then
     echo "would install packages: ${missing[*]}"
   else
+    apt-get update
     apt-get install -y --no-install-recommends "${missing[@]}"
     echo "installed packages: ${missing[*]}"
   fi
@@ -133,7 +142,12 @@ fi
 # Files.
 setup_args=(--root "$root" --user "$user" --home "$home" --dir "$dir" --rotate "$rotate" --output "$output" --node "$node_bin" --owner "$uid:$gid")
 if [ "$dry" -eq 1 ]; then setup_args+=(--dry-run); fi
-"$node_bin" "$here/setup.mjs" "${setup_args[@]}"
+# setup.mjs exits 1 when it refused a file (a symlink, a cmdline.txt without root=): the rest still runs, the
+# exit code of this script stays non-zero. Exit 2 (bad arguments) stops here.
+setup_rc=0
+"$node_bin" "$here/setup.mjs" "${setup_args[@]}" || setup_rc=$?
+if [ "$setup_rc" -ne 0 ] && [ "$setup_rc" -ne 1 ]; then exit "$setup_rc"; fi
+if [ "$setup_rc" -eq 1 ]; then echo "install.sh: some files were refused (see the skipped lines above); fix them and run it again" >&2; fi
 
 # Claude Code hooks for that user.
 if [ "$dry" -eq 1 ]; then
@@ -157,3 +171,4 @@ done. Next:
   - logs, as $user: journalctl --user -u revview
   - fill in the dongle's real USB ids in /etc/udev/rules.d/70-revview-dongle.rules and config/buttons.json.
 EOF
+exit "$setup_rc"

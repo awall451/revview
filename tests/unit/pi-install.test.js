@@ -100,3 +100,34 @@ test('shellcheck is clean on the scripts and the generated autostart', { skip: h
   const p = spawnSync('shellcheck', files, { encoding: 'utf8' });
   assert.equal(p.status, 0, p.stdout + p.stderr);
 }));
+
+test('install.sh: REVVIEW_DIR outside the allow-list is refused, usage says so', withRoot((r) => {
+  for (const name of ['a$b', 'a;b', "a'b", 'a&b', 'a(b', 'a#b', 'a`b']) {
+    const d = path.join(os.tmpdir(), `revview-dir-${process.pid}${name}`);
+    fs.mkdirSync(d, { recursive: true });
+    try {
+      const res = run(['--root', r, '--user', 'alice', '--no-apt', d]);
+      assert.equal(res.code, 2, name);
+      assert.match(res.err, /A-Za-z0-9/);
+    } finally { fs.rmSync(d, { recursive: true }); }
+  }
+  assert.equal(fs.existsSync(path.join(r, 'etc/systemd/user')), false);
+}));
+
+test('install.sh: a --root that is a symlink to / is refused', withRoot((r) => {
+  const link = `${r}-slash`;
+  fs.symlinkSync('/', link);
+  try {
+    const res = run(['--root', link, '--user', 'alice', '--no-apt', '--dry-run', ROOT]);
+    assert.equal(res.code, 2);
+    assert.match(res.err, /resolves to \//);
+  } finally { fs.rmSync(link); }
+}));
+
+test('install.sh: a failed file step (cmdline.txt without root=) still finishes the rest, then exits non-zero', withRoot((r) => {
+  fs.writeFileSync(path.join(r, 'boot/firmware/cmdline.txt'), '');
+  const res = run(base(r));
+  assert.equal(res.code, 1, res.out + res.err);
+  assert.ok(fs.existsSync(path.join(r, 'home/alice/.claude/settings.json')), 'hooks still installed');
+  assert.equal(fs.readFileSync(path.join(r, 'boot/firmware/cmdline.txt'), 'utf8'), '');
+}));

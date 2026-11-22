@@ -29,18 +29,18 @@ test('editCmdline: idempotent, rotate 270, replaces old values', () => {
   const flipped = editCmdline(once, { rotate: 270 });
   assert.match(flipped, /video=HDMI-A-1:400x1280M@60,rotate=270\n$/);
   assert.equal(flipped.match(/video=/g).length, 1);
-  const old = editCmdline('a loglevel=7 b vt.global_cursor_default=1 video=HDMI-A-1:1920x1080 video=HDMI-A-2:640x480 c logo.nologo\n');
-  assert.equal(old, 'a b video=HDMI-A-2:640x480 c quiet loglevel=0 logo.nologo vt.global_cursor_default=0 video=HDMI-A-1:400x1280M@60,rotate=90\n');
-  assert.match(editCmdline('x', { output: 'DSI-1' }), /video=DSI-1:400x1280M@60,rotate=90\n$/);
+  const old = editCmdline('root=x a loglevel=7 b vt.global_cursor_default=1 video=HDMI-A-1:1920x1080 video=HDMI-A-2:640x480 c logo.nologo\n');
+  assert.equal(old, 'root=x a b video=HDMI-A-2:640x480 c quiet loglevel=0 logo.nologo vt.global_cursor_default=0 video=HDMI-A-1:400x1280M@60,rotate=90\n');
+  assert.match(editCmdline('root=x', { output: 'DSI-1' }), /video=DSI-1:400x1280M@60,rotate=90\n$/);
 });
 
 test('editCmdline: bad input throws', () => {
-  assert.throws(() => editCmdline('a b\nc d\n'), /one line/);
-  assert.throws(() => editCmdline('a', { rotate: 180 }));
-  assert.throws(() => editCmdline('a', { rotate: '90' }));
-  assert.throws(() => editCmdline('a', { output: 'HDMI A' }));
-  assert.throws(() => editCmdline('a', { output: '' }));
-  assert.equal(editCmdline('a b\n\n'), editCmdline('a b'));
+  assert.throws(() => editCmdline('root=x b\nc d\n'), /one line/);
+  assert.throws(() => editCmdline('root=x', { rotate: 180 }));
+  assert.throws(() => editCmdline('root=x', { rotate: '90' }));
+  assert.throws(() => editCmdline('root=x', { output: 'HDMI A' }));
+  assert.throws(() => editCmdline('root=x', { output: '' }));
+  assert.equal(editCmdline('root=x b\n\n'), editCmdline('root=x b'));
 });
 
 test('editConfigTxt: disable_splash=1 in a final [all] block, idempotent, warnings', () => {
@@ -266,4 +266,113 @@ test('CLI: bad arguments exit 2', withRoot((r) => {
   assert.equal(q.status, 2);
   const w = spawnSync(process.execPath, [SETUP, '--root', r, '--user', 'a', '--home', '/h', '--dir', '/d e'], { encoding: 'utf8' });
   assert.equal(w.status, 2);
+}));
+
+// ---- hardening round ----
+
+const UNSAFE_DIRS = ['/a$b', '/a`b', '/a;b', "/a'b", '/a&b', '/a(b', '/a#b', '/a b', '/a"b', '/a|b', '/a*b', '/a\\b', 'rel/dir', '/a\nb', '/a~b', '/a<b', '/a!b'];
+
+test('dir allow-list: autostart, unit and CLI refuse shell metacharacters', withRoot((r) => {
+  const tpl = fs.readFileSync(path.join(ROOT, 'pi/revview.service'), 'utf8');
+  for (const bad of UNSAFE_DIRS) {
+    assert.throws(() => renderAutostart({ dir: bad, output: 'HDMI-A-1', transform: 90 }), /dir/, `autostart ${JSON.stringify(bad)}`);
+    assert.throws(() => renderUnit(tpl, { dir: bad, node: '/usr/bin/node', user: 'alice' }), /dir/, `unit ${JSON.stringify(bad)}`);
+    assert.throws(() => renderUnit(tpl, { dir: '/opt/revview', node: bad, user: 'alice' }), /node/, `node ${JSON.stringify(bad)}`);
+  }
+  renderAutostart({ dir: '/opt/revview-1.2_x', output: 'HDMI-A-1', transform: 90 });
+  const before = snapshot(r);
+  const res = cli(r, ['--dir', '/opt/a$b']);
+  assert.equal(res.code, 2);
+  assert.match(res.err, /revview setup:/);
+  assert.deepEqual(snapshot(r), before);
+}));
+
+const CMD_ROOT = 'console=tty1 root=PARTUUID=1-02 rootwait';
+test('editCmdline: refuses a line without root=, accepts CRLF and a missing final newline', () => {
+  for (const bad of ['', '   \n', '\n\n', '\r\n', 'console=tty1 rootwait\n', 'xroot=/dev/x']) {
+    assert.throws(() => editCmdline(bad), /root=/, JSON.stringify(bad));
+  }
+  const want = `${CMD_ROOT} quiet loglevel=0 logo.nologo vt.global_cursor_default=0 video=HDMI-A-1:400x1280M@60,rotate=90\n`;
+  assert.equal(editCmdline(`${CMD_ROOT}\r\n`), want);
+  assert.equal(editCmdline(CMD_ROOT), want);
+  assert.equal(editCmdline(`${CMD_ROOT}\n\n`), want);
+});
+
+test('CLI: a cmdline.txt without root= is left byte-identical, warns, exits 1; the rest is still done', withRoot((r) => {
+  const f = path.join(r, 'boot/firmware/cmdline.txt');
+  for (const body of ['', '  \n', 'console=tty1 quiet\n']) {
+    fs.writeFileSync(f, body);
+    const res = cli(r);
+    assert.equal(res.code, 1, JSON.stringify(body));
+    assert.equal(fs.readFileSync(f, 'utf8'), body);
+    assert.equal(fs.existsSync(`${f}.revview-backup`), false);
+    assert.ok(res.lines.some((l) => l.startsWith('skipped ') && l.includes('cmdline.txt') && l.includes('root=')), res.out);
+    assert.match(res.err, /root=/);
+    assert.ok(fs.existsSync(path.join(r, 'etc/systemd/user/revview.service')));
+  }
+}));
+
+test('editCmdline: drops fbcon=rotate and our earlier video= with another output, keeps unrelated video=', () => {
+  const first = editCmdline(`${CMD_ROOT} fbcon=rotate:1 video=HDMI-A-1:400x1280M@60,rotate=90`, { output: 'HDMI-A-1' });
+  assert.doesNotMatch(first, /fbcon/);
+  const moved = editCmdline(first, { output: 'HDMI-A-2', rotate: 270 });
+  assert.equal(moved.match(/video=/g).length, 1);
+  assert.match(moved, /video=HDMI-A-2:400x1280M@60,rotate=270\n$/);
+  const keep = editCmdline(`${CMD_ROOT} video=DSI-1:800x480 fbcon=rotate:3 fbcon=map:10`);
+  assert.match(keep, /video=DSI-1:800x480/);
+  assert.match(keep, /fbcon=map:10/);
+  assert.doesNotMatch(keep, /fbcon=rotate/);
+});
+
+test('editLightdm: every [Seat:*] section is edited', () => {
+  const out = editLightdm('[Seat:*]\nautologin-user=x\n[Other]\na=b\n[Seat:*]\n#autologin-user=\nfoo=1\n', 'alice');
+  assert.equal(out, '[Seat:*]\nautologin-user=alice\n[Other]\na=b\n[Seat:*]\nautologin-user=alice\nfoo=1\n');
+  assert.equal(editLightdm(out, 'alice'), out);
+  assert.equal(editLightdm('[Seat:*]\na=1\n[Seat:*]\nb=2\n', 'alice'), '[Seat:*]\nautologin-user=alice\na=1\n[Seat:*]\nautologin-user=alice\nb=2\n');
+});
+
+test('CLI: writes are atomic (no temp file left, mode of an existing file kept)', withRoot((r) => {
+  const f = path.join(r, 'boot/firmware/cmdline.txt');
+  fs.chmodSync(f, 0o600);
+  const res = cli(r);
+  assert.equal(res.code, 0, res.err);
+  assert.equal(fs.statSync(f).mode & 0o777, 0o600);
+  assert.deepEqual(Object.keys(snapshot(r)).filter((p) => /revview-tmp/.test(p)), []);
+}));
+
+test('CLI: refuses to write through a symlink, nothing is written through it', withRoot((r) => {
+  const outside = path.join(r, 'outside');
+  fs.writeFileSync(outside, 'keep\n');
+  for (const rel of ['boot/firmware/cmdline.txt', 'boot/firmware/config.txt', 'etc/lightdm/lightdm.conf']) {
+    const p = path.join(r, rel);
+    const body = fs.readFileSync(p, 'utf8');
+    fs.rmSync(p);
+    fs.symlinkSync(outside, p);
+    const res = cli(r);
+    assert.equal(res.code, 1, rel);
+    assert.ok(res.lines.some((l) => l.startsWith('skipped ') && l.includes(rel) && /symlink/.test(l)), res.out);
+    assert.equal(fs.readFileSync(outside, 'utf8'), 'keep\n', rel);
+    assert.ok(fs.lstatSync(p).isSymbolicLink());
+    fs.rmSync(p);
+    fs.writeFileSync(p, body);
+  }
+}));
+
+test('CLI: a symlinked ~/.config/labwc/autostart and a symlinked udev rule are refused', withRoot((r) => {
+  const outside = path.join(r, 'outside');
+  fs.writeFileSync(outside, 'keep\n');
+  const cfg = path.join(r, 'home/alice/.config/labwc');
+  fs.mkdirSync(cfg, { recursive: true });
+  fs.symlinkSync(outside, path.join(cfg, 'autostart'));
+  fs.mkdirSync(path.join(r, 'etc/udev/rules.d'), { recursive: true });
+  fs.symlinkSync(outside, path.join(r, 'etc/udev/rules.d/71-revview-touch.rules'));
+  const res = cli(r);
+  assert.equal(res.code, 1);
+  assert.equal(fs.readFileSync(outside, 'utf8'), 'keep\n');
+  assert.ok(fs.lstatSync(path.join(cfg, 'autostart')).isSymbolicLink());
+  assert.equal(res.lines.filter((l) => l.startsWith('skipped ') && /symlink/.test(l)).length, 2, res.out);
+  fs.rmSync(path.join(cfg, 'autostart'));
+  fs.symlinkSync(path.join(r, 'nowhere'), path.join(cfg, 'autostart'));
+  assert.equal(cli(r).code, 1);
+  assert.equal(fs.existsSync(path.join(r, 'nowhere')), false);
 }));

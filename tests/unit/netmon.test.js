@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import net from 'node:net';
-import { hasDefaultRoute, createDefaultProbe, createNetMonitor } from '../../src/server/netmon.js';
+import { hasDefaultRoute, createDefaultProbe, createNetMonitor, DEFAULT_CONNECT_TIMEOUT_MS } from '../../src/server/netmon.js';
 import { startLiveServer } from '../../src/server/index.js';
 
 const H4 = 'Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n';
@@ -63,15 +63,93 @@ test('probe: a connect that never completes -> false after the timeout, socket d
   const { EventEmitter } = await import('node:events');
   const sock = Object.assign(new EventEmitter(), { destroyed: false, destroy() { this.destroyed = true; } });
   const t0 = Date.now();
-  const probe = createDefaultProbe({ readFile: files(H4 + eth(), ''), connect: () => sock, timeoutMs: 40 });
+  const probe = createDefaultProbe({ readFile: files(H4 + eth(), ''), connect: () => sock, host: '192.0.2.1', timeoutMs: 40 });
   assert.equal(await probe(), false);
   assert.ok(Date.now() - t0 >= 30);
   assert.equal(sock.destroyed, true);
 });
 
 test('probe: connect that throws -> false', async () => {
-  const probe = createDefaultProbe({ readFile: files(H4 + eth(), ''), connect: () => { throw new Error('boom'); } });
+  const probe = createDefaultProbe({ readFile: files(H4 + eth(), ''), connect: () => { throw new Error('boom'); }, host: '192.0.2.1' });
   assert.equal(await probe(), false);
+});
+
+const fakeSock = async () => {
+  const { EventEmitter } = await import('node:events');
+  return Object.assign(new EventEmitter(), { destroyed: false, destroy() { this.destroyed = true; } });
+};
+const hangingResolver = () => {
+  const r = { cancelled: 0, resolved: [], cancel() { this.cancelled++; this.rej?.(new Error('cancelled')); } };
+  r.resolve4 = (h) => new Promise((res, rej) => { r.resolved.push(h); r.rej = rej; });
+  r.resolve6 = () => Promise.reject(new Error('no'));
+  return r;
+};
+
+test('probe: default connect timeout is 3000 ms', () => {
+  assert.equal(DEFAULT_CONNECT_TIMEOUT_MS, 3000);
+});
+
+test('probe: default timeout is actually used (3000 ms timer, fake setTimeout)', async (t) => {
+  const delays = [];
+  const real = globalThis.setTimeout;
+  t.mock.method(globalThis, 'setTimeout', (fn, ms, ...a) => { delays.push(ms); return real(fn, ms, ...a); });
+  const sock = await fakeSock();
+  const probe = createDefaultProbe({ readFile: files(H4 + eth(), ''), connect: () => { process.nextTick(() => sock.emit('connect')); return sock; }, host: '192.0.2.1' });
+  assert.equal(await probe(), true);
+  assert.ok(delays.includes(3000));
+});
+
+test('probe: a hostname is resolved through the resolver and the connect goes to the IP', async () => {
+  const sock = await fakeSock();
+  let dialed;
+  const resolver = { resolve4: async () => ['203.0.113.7'], resolve6: async () => [], cancel() {} };
+  const probe = createDefaultProbe({
+    readFile: files(H4 + eth(), ''), host: 'example.test', createResolver: () => resolver,
+    connect: (o) => { dialed = o; process.nextTick(() => sock.emit('connect')); return sock; },
+  });
+  assert.equal(await probe(), true);
+  assert.equal(dialed.host, '203.0.113.7');
+});
+
+test('probe: never a second probe while the previous lookup is pending', async () => {
+  const resolver = hangingResolver();
+  const probe = createDefaultProbe({
+    readFile: files(H4 + eth(), ''), host: 'example.test', createResolver: () => resolver, connect: () => { throw new Error('no'); }, timeoutMs: 60,
+  });
+  const p1 = probe();
+  const p2 = probe();
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(resolver.resolved.length, 1, 'one lookup only');
+  assert.equal(await p1, false);
+  assert.equal(await p2, false);
+  assert.equal(resolver.cancelled >= 1, true, 'timeout cancels the lookup');
+});
+
+test('probe: cancel() during lookup cancels the resolver, during connect destroys the socket and clears the timer', async () => {
+  const resolver = hangingResolver();
+  const p = createDefaultProbe({ readFile: files(H4 + eth(), ''), host: 'example.test', createResolver: () => resolver, connect: () => { throw new Error('no'); } });
+  const r = p();
+  await new Promise((x) => setTimeout(x, 5));
+  p.cancel();
+  assert.equal(await r, false);
+  assert.equal(resolver.cancelled, 1);
+
+  const sock = await fakeSock();
+  const q = createDefaultProbe({ readFile: files(H4 + eth(), ''), host: '192.0.2.1', connect: () => sock });
+  const r2 = q();
+  await new Promise((x) => setTimeout(x, 5));
+  q.cancel();
+  assert.equal(await r2, false);
+  assert.equal(sock.destroyed, true);
+});
+
+test('monitor: stop() cancels the running probe', async () => {
+  let cancelled = 0;
+  const probe = () => new Promise(() => {});
+  probe.cancel = () => { cancelled++; };
+  const m = createNetMonitor({ probe, onChange: () => {}, timers: fakeTimers() });
+  m.stop();
+  assert.equal(cancelled, 1);
 });
 
 // a fake clock: setTimeout records, run() fires the pending one
