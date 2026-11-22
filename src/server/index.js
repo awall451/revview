@@ -1,14 +1,17 @@
 // Live server: hook scripts POST raw Claude Code hook JSON to /event, the state core
 // (src/state) reduces it, and the new state is pushed to the page over Server-Sent Events.
 // It also serves the view. Binds to 127.0.0.1 only; see src/server/README.md.
-//   node src/server/index.js [port] [--input [path]] [--dev-bridge] [--sessions] [--start dir]... [--projects file] [--speech file] [--boot] [--netmon]   (port default 8138, or REVVIEW_PORT)
+//   node src/server/index.js [port] [--input [path]] [--dev-bridge] [--sessions] [--start dir]... [--projects file] [--speech file] [--boot] [--netmon] [--data-lock [dir]]   (port default 8138, or REVVIEW_PORT)
 //   --boot: key-on start: show STARTING until the first session is on the board; with no tmux windows, start one session in $REVVIEW_START (or each --start dir)
+//   --data-lock [dir]: the data is locked until the topmost mount on dir (default /srv/revview-data, or $REVVIEW_DATA_MOUNT) is ext4 from /dev/mapper/revview-data;
+//     locked shows INSERT KEY, no session starts (key-on and New session wait); a posted RevviewDataLock is only a poke to re-read the mount table
 //   --netmon: watch the network (default route + TCP connect to $REVVIEW_NETMON_HOST, default api.anthropic.com:443); offline after 2 failures, online after 1 success
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { initialBoard, reduceBoard, boardView, pendingPrompts, shownPrompt, selectedKey } from '../state/index.js';
+import { createDataLockMonitor, DEFAULT_DATA_MOUNT } from './datalock.js';
 import { createNetMonitor, createDefaultProbe } from './netmon.js';
 import { createSessionRunner, createActions, createPermissionRegistry, loadProjects } from '../sessions/index.js';
 import { startInput, createInputPipeline } from '../input/index.js';
@@ -79,7 +82,7 @@ export async function startLiveServer({
   port = 0, viewDir = DEFAULT_VIEW_DIR, reduce: reduceEvent = reduceBoard,
   input = null, devBridge = false, inputDeps, inputRetryMs, onGesture,
   sessions = null, clock, permissionWaitMs, minShownMs, projects = [], timers, navTimeoutMs, ownedPollMs = 5000, speech = null,
-  boot = false, netmon = null,
+  boot = false, netmon = null, dataLock = null,
 } = {}) {
   const root = path.resolve(viewDir);
   let board = initialBoard();
@@ -116,8 +119,17 @@ export async function startLiveServer({
     const speaker = createSpeaker({ engine: speech.engine, spawn: speech.spawn, killWaitMs: speech.killWaitMs, log });
     readAloud = createReadAloud({ speaker, memo: createClosingMemo(), speakOnStop: speech.speakOnStop === true, log });
   }
+  let dataMonitor = null;
+  // while the data is locked no Claude session may start (the key-on one waits, New session is refused)
+  const guarded = sessions && dataLock ? {
+    ...sessions,
+    start: async (...a) => {
+      if (dataMonitor?.check() ?? true) throw new Error('data is locked: insert the key stick');
+      return sessions.start(...a);
+    },
+  } : sessions;
   const actions = createActions({
-    readAloud, runner: sessions, registry, getBoard: () => board, apply, projects, clock, timers, navTimeoutMs,
+    readAloud, runner: guarded, registry, getBoard: () => board, apply, projects, clock, timers, navTimeoutMs,
     log: (m) => console.error(m), onOwnedChanged: refreshOwned,
   });
 
@@ -277,6 +289,11 @@ export async function startLiveServer({
       // internal only: it makes a screen state from a key revview sent itself, so no POST may forge it
       if (INTERNAL_EVENTS.includes(event.hook_event_name)) {
         return text(res, 403, `${event.hook_event_name} is internal and not accepted over HTTP`);
+      }
+      // with a data lock the mount table decides: a posted RevviewDataLock is only a poke to re-read it
+      if (dataLock && event.hook_event_name === 'RevviewDataLock') {
+        dataMonitor?.check();
+        return res.writeHead(204).end();
       }
       if (!apply(event)) return text(res, 500, 'state core failed; event ignored');
       try {
@@ -465,6 +482,19 @@ export async function startLiveServer({
       onChange: (online) => { if (!closed) apply({ hook_event_name: 'RevviewNetwork', online }, true); },
     });
   }
+  let unlocked = !dataLock;
+  let resolveUnlocked = () => {};
+  const whenUnlocked = unlocked ? Promise.resolve() : new Promise((r) => { resolveUnlocked = r; });
+  if (dataLock) {
+    dataMonitor = createDataLockMonitor({
+      log: (m) => console.error(m), ...dataLock,
+      onChange: (locked) => {
+        if (!locked) { unlocked = true; resolveUnlocked(); }
+        if (!closed) apply({ hook_event_name: 'RevviewDataLock', locked }, true);
+      },
+    });
+    dataMonitor.check();
+  }
   let ownedTimer = null;
   if (sessions) {
     await refreshOwned();
@@ -476,6 +506,8 @@ export async function startLiveServer({
     // internal: the boot path picks the session the buttons act on (no HTTP route reaches it)
     select: (id) => apply({ hook_event_name: 'RevviewSelect', session_id: id }, true),
     refreshOwned,
+    whenUnlocked: () => whenUnlocked,
+    dataLocked: () => (dataMonitor ? dataMonitor.locked() !== false : false),
     selected: () => selectedKey(board),
     url: `http://${DEFAULT_HOST}:${ownPort}`,
     port: ownPort,
@@ -492,6 +524,7 @@ export async function startLiveServer({
         closed = true;
         inputHandle?.stop();
         monitor?.stop();
+        dataMonitor?.stop();
         actions.close();
         if (ownedTimer !== null) clearInterval(ownedTimer);
         registry.close(); // leaves the tmux server alone: sessions outlive a server restart
@@ -513,6 +546,10 @@ export function parseArgs(argv) {
     else if (a === '--sessions') out.sessions = true;
     else if (a === '--boot') out.boot = true;
     else if (a === '--netmon') out.netmon = true;
+    else if (a === '--data-lock') {
+      const next = argv[i + 1];
+      if (next !== undefined && !next.startsWith('--')) { out.dataLock = next; i++; } else out.dataLock = DEFAULT_DATA_MOUNT;
+    }
     else if (a === '--start') {
       const next = argv[i + 1];
       if (next === undefined || next.startsWith('--')) throw new Error('--start needs a directory');
@@ -539,6 +576,8 @@ export function parseArgs(argv) {
   }
   if (out.port === null) out.port = Number(process.env.REVVIEW_PORT || DEFAULT_PORT);
   if (out.boot && out.start.length === 0 && process.env.REVVIEW_START) out.start = [process.env.REVVIEW_START];
+  if (out.dataLock === undefined && process.env.REVVIEW_DATA_MOUNT) out.dataLock = process.env.REVVIEW_DATA_MOUNT;
+  if (out.dataLock !== undefined && !/^\/[A-Za-z0-9._/-]+$/.test(out.dataLock)) throw new Error(`--data-lock needs an absolute directory (letters, digits, . _ / -), got ${out.dataLock}`);
   if (out.projects === null) out.projects = process.env.REVVIEW_PROJECTS || null;
   // the key exists only when a speech file was named (flag or REVVIEW_SPEECH)
   if (out.speech === undefined && process.env.REVVIEW_SPEECH) out.speech = process.env.REVVIEW_SPEECH;
@@ -565,6 +604,14 @@ export async function bootSessions({ runner, live, dirs = [], log = () => {} }) 
     log(`boot sessions: ${e instanceof Error ? e.message : String(e)}`);
     return null;
   }
+}
+
+// Key-on with a data lock: the boot session waits for the unlock; never blocks the caller, never throws.
+export function bootAfterUnlock({ live, runner, dirs = [], log = () => {} }) {
+  return live.whenUnlocked().then(() => {
+    log('boot: data unlocked, starting the key-on session');
+    return bootSessions({ runner, live, dirs, log });
+  });
 }
 
 // SIGTERM/SIGINT: close the server (which stops the grab helper), then exit 0.
@@ -637,8 +684,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     console.error(e.message);
     speechLine = 'speech: off (bad speech config, see the log)';
   }
-  const live = await startLiveServer({ port: args.port, input, devBridge: args.devBridge, sessions: runner, projects, speech, boot: args.boot, netmon });
-  if (args.boot && runner) selectId = await bootSessions({ runner, live, dirs: args.start, log: (m) => console.error(m) });
+  const live = await startLiveServer({ port: args.port, input, devBridge: args.devBridge, sessions: runner, projects, speech, boot: args.boot, netmon, dataLock: args.dataLock ? { mountPoint: args.dataLock } : null });
+  if (args.boot && runner && args.dataLock) {
+    const log = (m) => console.error(m);
+    bootAfterUnlock({ live, runner, dirs: args.start, log }).then(() => log('boot: key-on session step done'));
+  } else if (args.boot && runner) selectId = await bootSessions({ runner, live, dirs: args.start, log: (m) => console.error(m) });
   else if (selectId !== null) live.select(selectId);
   const selectedNow = selectId !== null && live.selected() === selectId;
   const { url } = live;
@@ -651,6 +701,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   console.log(speechLine);
   if (netmonLine) console.log(netmonLine);
   if (args.boot) console.log('boot: STARTING until the first session is on the board');
+  if (args.boot && runner && args.dataLock) console.log(`boot: the key-on session waits for the data unlock (${args.dataLock})`);
   if (args.projects) console.log(`projects: ${projects.length} from ${args.projects}`);
   if (args.devBridge) console.log('dev bridge ON (POST /dev/key): never use this on the car');
 }
