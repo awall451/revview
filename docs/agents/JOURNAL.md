@@ -123,3 +123,15 @@ Process notes:
 - A second area lead cannot use the first one's worktree: branch `work/<topic>-fixes` from the first branch in its own worktree and submit the stack as one topic.
 - The reviewer's long run (53 minutes for 3200 lines with 28 mutations) was the slowest step; for a fix round a Sonnet reviewer on the fix diff alone took 4 minutes.
 - QA's untracked issue files in the main checkout were committed by the fixing lead on its branch; the lead deleted the untracked copies before resetting main.
+
+## 2026-11-22: one-shot cycle (wheel buttons 6: dongle and pods)
+
+Owner message 20261122T061846Z-o-85d04a (backlog 5e49f0, owner issue 20261122T061835Z-i-4fe5d5). One topic, `wb6-dongle`, merged first try as 5e444c5 (798 tests, was 794). `tools/check` untouched, no new dependency, no product code.
+
+Dispatched: area-lead-platform (Sonnet, no builders, about 5 minutes) wrote `pi/` (udev rule, systemd unit, install script), `docs/zmk/` (reference keymap and options), bench D1-D12, BUTTONS.md section 9 (owner questions 10-14 with suggested defaults) and four unit tests that keep the udev ids, the ZMK keymap and the unit's flags in step with `config/buttons.json`. The lead read the rule, the unit, the install script and section 9 before submitting; no reviewer (docs and set-up files that cannot run here, 394 lines).
+
+`zmk.dev` was refused by the proxy (one try): all ZMK details are from memory and marked so. The domain was not requested by the team; whether to request it is question 12 for the owner.
+
+Not proven: everything (no Pi, dongle or pods). Open for stage 4: which user runs the server and so the Claude sessions (the unit uses a `revview` system user with no sign-in).
+
+Other open owner messages (WB3 reply still `planned` although WB3 merged as c609518; the publish refusal, follow-up (g)) were left for a normal cycle: out of this job.
