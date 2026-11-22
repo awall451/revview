@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-22, work/qa6-fixes: a quiet placeholder shows STARTING while the boot lasts, so no No session chosen flash; not yet re-run by QA)
 id: qa-20261122-r6-06
 title: After a service restart with one surviving window, --boot first shows "No session chosen: press up to open the list" with a crossed mic before it selects that window
 severity: cosmetic

@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-22, work/qa6-fixes: a bad REVVIEW_NETMON_HOST is logged and the default host is used; the server stays up; not yet re-run by QA)
 id: qa-20261122-r6-04
 title: A typo in the optional REVVIEW_NETMON_HOST makes the server exit 2 at start; on the Pi the whole bar would then sit on NO LINK with no reason shown
 severity: minor

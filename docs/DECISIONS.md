@@ -1103,6 +1103,8 @@ Owner steps: `pi/README.md`. Bench items P1-P14 in `docs/BENCH-TEST.md`, all unt
   this session yet") until Claude's SessionStart hook, not as STARTING; making a quiet placeholder read STARTING during
   the boot phase is a state-core change, left to core (it must not trap the driver if SessionStart is lost). Without
   `REVVIEW_START` and with no surviving window the bar says STARTING until the driver starts a session.
+  *(Superseded 2026-11-22, QA r6-01: that trapped the bar, as presses are dropped during STARTING. See "QA round 6:
+  STARTING always ends" below; the known gap is closed there too.)*
 - **RevviewNetwork: the server sends it, in-process, with `--netmon`** (`src/server/netmon.js`, injected probe and
   timers). "Online" = a default route on any interface (`/proc/net/route` or `/proc/net/ipv6_route`; no interface
   name, nothing about Ethernet) AND a TCP connect to `api.anthropic.com:443` within 3 s (`REVVIEW_NETMON_HOST`
@@ -1302,3 +1304,45 @@ Opus review: changes needed, 1 blocking, 8 smaller. Fixed:
   at key-off, so an update in progress can be cut at any time with or without the overlay; Claude Code is updated in
   the update procedure. The criterion "behaviour stays as today without the data set-up" is about the key-on session,
   which does stay as today.
+
+## 2026-11-22: QA round 6, STARTING always ends; part D (STARTING until the first hook); installer exit codes
+
+Tested in the unit suite only (fakes, injected timers); nothing run on a Pi.
+
+- **Rule: the boot STARTING always ends (r6-01).** `bootSessions` ends it in every path with the internal event
+  `RevviewBootDone` (no POST can forge it): nothing to start, one or several surviving windows, a start that worked, a
+  start or tmux listing that failed. The phase goes to `unknown`, so the buttons work and the menu's New session is
+  reachable. Notes (the board note, cleared by the next gesture): nothing to start and no windows: "No session yet:
+  open the menu for New session"; a relative `REVVIEW_START` (now refused before trying, no longer resolved against
+  the service's cwd): "Key-on session not started: start folder must be an absolute path"; a missing folder: "...:
+  start folder missing"; any other failure: "...: see the server log" (the log has the reason). A bound: after 60 s
+  without an outcome STARTING ends with "Key-on session is slow to start: see the server log" and the start goes on.
+  `--boot` without `--sessions` ends STARTING at once (nothing can start a session). Under `--data-lock`: INSERT KEY
+  while locked with working buttons (as 4B (c)); the start and its 60 s bound begin at the unlock; a failed start
+  there ends STARTING the same way.
+- **Presses are dropped only while the boot STARTING lasts** (phase `starting` and view `starting`), not during a
+  per-session STARTING.
+- **r6-06:** while the boot lasts a quiet placeholder (window listed, no hook yet) shows STARTING, so a restart with
+  one surviving window goes STARTING -> that session, without the "No session chosen" flash.
+- **Part D: a session revview starts (key-on or New session) shows STARTING until its first hook, at most 30 s.**
+  The server marks it with the internal `RevviewLaunching` after a successful start and arms a 30 s timer
+  (`launchLimitMs`, injectable) that sends `RevviewLaunchExpired`; after that a still-quiet session falls back to the
+  UNKNOWN placeholder "No events from this session yet". 30 s: Claude Code's SessionStart fires early in its start, a
+  few seconds even on a slow machine *(not measured on a Pi: bench P20 times it)*; 30 s is long enough not to flip to
+  UNKNOWN on a slow start and short enough that a lost SessionStart costs the driver half a minute, not the bar.
+  The list is at most 8 ids.
+- **Push-to-talk while the shown session is STARTING: dropped, with the note "Claude is still starting: push-to-talk
+  not sent".** Claude is still loading, so a Space could land before its input is ready (typed into the prompt or
+  lost). The allow rule for who receives keys is unchanged (this only adds a refusal). The mic is crossed while the
+  view is STARTING. After the 30 s fallback push-to-talk is sent as for any quiet placeholder today.
+- **r6-04:** a bad `REVVIEW_NETMON_HOST` is logged and the default `api.anthropic.com:443` is used; the server no
+  longer exits 2 (a bad optional setting must not cost the whole bar).
+- **Installer exit codes (r6-02, r6-03).** `setup.mjs`: 0 done; 1 a file refused or skipped so the appliance is half
+  set up (a symlink at ANY component of the path below the root, the home included; a missing `cmdline.txt` or
+  `config.txt`; a `cmdline.txt` with several lines or no `root=`; files left byte-identical); 2 bad arguments; 3 an
+  unexpected error (message, no stack). `install.sh`: 1 as before (rest done, final exit 1); any other non-zero code
+  from `setup.mjs` stops it: no hooks, no "done" line, exit with that code. A missing `lightdm.conf` stays a note
+  (exit 0). With `--root` as an ordinary user nothing is chowned (only root can give a file away). The standard
+  merged-/usr links (`/bin`, `/lib`, ...) are on none of the written paths, so no exception is needed.
+- **The Pi needs no npm package** (checked: src/, hooks/, pi/ import only `node:` modules and relative files), so
+  pi/README drops `sudo npm ci`; the repository comes by `git clone` over Wi-Fi or a copy from a laptop.

@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-22, work/qa6-fixes: pi/README: clone over Wi-Fi or copy from a laptop, no npm ci (no runtime package, checked), full undo list; not yet re-run by QA)
 id: qa-20261122-r6-07
 title: pi/README gaps for an owner with only a fresh SD card: how the repository gets to /opt/revview, an `sudo npm ci` that only installs dev tools, an incomplete Undo
 severity: minor

@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-22, work/qa6-fixes: RevviewBootDone ends the boot STARTING in every path, with a note when the start failed or there is nothing to start; 60 s bound; works under --data-lock; not yet re-run by QA)
 id: qa-20261122-r6-01
 title: With --boot and no key-on session (REVVIEW_START unset, wrong, or claude fails) the bar stays STARTING forever and drops every button, so the menu can never start a session
 severity: major

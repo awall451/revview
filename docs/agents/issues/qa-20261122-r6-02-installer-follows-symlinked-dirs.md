@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-22, work/qa6-fixes: the writer refuses a symlink at any component of the path below the root (home included); not yet re-run by QA)
 id: qa-20261122-r6-02
 title: The installer's symlink guard checks only the last path component; a symlinked ~/.config/labwc (or ~/.config) is followed and root writes a user-owned 0755 file at the link target
 severity: minor

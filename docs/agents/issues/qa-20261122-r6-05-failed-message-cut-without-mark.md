@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-22, work/qa6-fixes: a cut failed-turn message is 199 code points plus an ellipsis; not yet re-run by QA)
 id: qa-20261122-r6-05
 title: The failed-turn message is cut at 200 characters in the middle of a sentence with no ellipsis
 severity: cosmetic
