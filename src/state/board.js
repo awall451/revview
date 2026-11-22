@@ -323,10 +323,14 @@ function reduceInner(b, event) {
     }
     case 'RevviewButton': // a gesture is for the server's actions, never for the screen
       return b;
-    case 'RevviewStarting':
+    case 'RevviewStarting': {
+      // the sessions are forgotten, the driver's choice is not: it becomes `want`, so the same session is selected
+      // again when its events come back (a posted RevviewStarting can blank the bar, never redirect a button)
+      const want = b.want ?? b.selected;
       if (b.phase === 'starting' && b.ended.length === 0 && Object.keys(b.sessions).length === 0
-        && b.selected === null && b.want === null && b.nav === null) return b;
-      return { ...b, phase: 'starting', sessions: {}, ended: [], selected: null, want: null, nav: null };
+        && b.selected === null && b.want === want && b.nav === null) return b;
+      return { ...b, phase: 'starting', sessions: {}, ended: [], selected: null, want, nav: null };
+    }
     case 'RevviewSelect': {
       if (!isStr(event.session_id)) return b;
       const sid = event.session_id;

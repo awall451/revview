@@ -138,15 +138,22 @@ test('want protects its session from the cap', () => {
   assert.equal(Object.keys(c.sessions).length, MAX_SESSIONS);
 });
 
-test('RevviewStarting clears selected, want and nav; owned and projects stay', () => {
+test('RevviewStarting clears selected and nav, keeps the choice as want; owned and projects stay', () => {
   let b = run([ev('RevviewOwned', { ids: ['A'] }), ev('RevviewProjects', { paths: ['/p'] }), select('A'), select('N'), nav('menu')], three());
   b = reduceBoard(b, ev('RevviewStarting'));
   assert.equal(b.selected, null);
-  assert.equal(b.want, null);
+  assert.equal(b.want, 'N'); // the newest intention (a session revview started) wins over the old selection
   assert.equal(b.nav, null);
   assert.deepEqual(b.owned, ['A']);
   assert.deepEqual(b.projects, ['/p']);
   assert.equal(reduceBoard(b, ev('RevviewStarting')), b);
+  // without a pending start the selection itself is kept as want and comes back with its session's events
+  let c = run([select('A'), ev('RevviewStarting')], three());
+  assert.equal(c.selected, null);
+  assert.equal(c.want, 'A');
+  c = run([start('B'), start('A')], c);
+  assert.equal(c.selected, 'A');
+  assert.equal(boardView(c).position, null); // owned null here: no position
 });
 
 const P = ['/p/one', '/p/two', '/p/three'];
