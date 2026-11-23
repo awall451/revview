@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-23, work/qa7-bench: see DECISIONS "QA round 7"; not yet re-run by QA)
 id: qa-20261123-r7-03
 title: install.sh tells the owner to put the dongle ids in /etc/udev/rules.d/70-revview-dongle.rules, but the next install.sh run (Updating step 7) silently rewrites that file from the template; the README's own way (edit files inside the root-owned repo) is undone by the documented update
 severity: major

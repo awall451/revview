@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-23, work/qa7-bench: see DECISIONS "QA round 7"; not yet re-run by QA)
 id: qa-20261123-r7-06
 title: Bench items that start their own server (`npm start`, `node src/server/index.js --input ...`) collide with the installed revview user unit on port 8138 and the dongle grab; none says to stop the service first
 severity: minor

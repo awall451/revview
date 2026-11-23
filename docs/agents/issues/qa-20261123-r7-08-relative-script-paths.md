@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-23, work/qa7-bench: see DECISIONS "QA round 7"; not yet re-run by QA)
 id: qa-20261123-r7-08
 title: REVOKE (c) step 4 and some bench items give script paths relative to the repo (`pi/readonly.sh`, `pi/data-setup.sh`, `pi/install.sh`) while pi/README uses `/opt/revview/pi/...`
 severity: polish

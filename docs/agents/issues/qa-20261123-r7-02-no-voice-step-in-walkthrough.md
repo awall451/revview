@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-23, work/qa7-bench: see DECISIONS "QA round 7"; not yet re-run by QA)
 id: qa-20261123-r7-02
 title: The owner's walk-through never says how to set up voice or make the first drive: pi/README step 6 points to a design note, `/voice tap` and "keep Space" appear only in bench item S1, the mic recorder (SoX/arecord) is neither installed nor checked
 severity: major

@@ -1383,3 +1383,37 @@ Tested in the unit suite only (fakes, injected timers); nothing run on a Pi.
   second bench series is `S4B-1..S4B-19` (r6b-05); the README says the repository is public and clones without a
   sign-in (not checked from the VM). `install.sh` ends with "not done: some files were refused" instead of "done.
   Next: reboot" when it will exit 1, and a dangling `~/.claude` link is described as what it is (r6b-06).
+
+## 2026-11-23: QA round 7 (the owner's walk-through, fresh Pi to first drive)
+
+- **The owner's dongle ids and key map live in `/etc/revview/buttons.json` (r7-03).** `pi/setup.mjs` creates it once
+  from `config/buttons.json` (create-only, like `server.env`) and never overwrites it; the unit's `--input` reads it.
+  `pi/70-revview-dongle.rules` is now a template (`@VENDOR@`, `@PRODUCT@`): the installed rule is regenerated on every
+  run from the ids in the `/etc` file (4 hex digits, lowercased). A symlinked file, bad JSON or bad ids: the rule is
+  refused (left byte-identical, install exit 1, the message names the file). When the `/etc` file differs from the
+  repo default the installer prints one `note:` line with the `diff` command; it does not merge (an update that
+  changes the shipped key codes must be copied over by the owner). Rejected: keeping the repo copy as the place (lost
+  by the documented "copy over /opt/revview" update, and it blocks `git pull`); a separate ids file (two places
+  again). Tested on a fake root: edit, re-run, the edit and the rule stay (`tests/unit/pi-install.test.js`). Not run
+  on a Pi. A path-only `device` (no vendor/product) makes the rule refusal permanent: not supported for the installed
+  rule.
+- **Voice set-up and the first drive (r7-02).** `pi/README.md` ends with "First drive (parked)". Checked in the
+  installed Claude Code 2.1.330 (its strings; docs sites unreachable): `/voice [hold|tap|off]`, default hold; it
+  writes user settings (`voiceEnabled`, `voice.enabled`, `voice.mode`); default binding `space` -> `voice:pushToTalk`;
+  tap mode is "tap to start, tap to stop+submit"; needs a claude.ai sign-in; recording needs SoX (its own hint:
+  "Ubuntu/Debian: sudo apt-get install sox"). So `sox` is added to the installer's packages (the package name on
+  Raspberry Pi OS is taken from that hint, not checked on a Pi) and bench P21 checks it. From memory: the tmux detach
+  keys; nothing is known about the Pi's audio stack. `/voice tap` is run inside the revview tmux session so it lands
+  in the settings the sessions read (`CLAUDE_CONFIG_DIR` after the data set-up).
+- **r7-01:** the last session's end says "`<repo>` ended: open the menu for New session" (repo cut to 80 characters);
+  with others left it stays "`<repo>` ended". The key-on session (`RevviewLaunching` with `keyon`, from `--boot`)
+  whose window vanishes while still launching gets "Key-on session ended at once: see the server log" (the same text
+  as a start that failed at once). A push-to-talk tap with no session selected applies the internal
+  `RevviewNoSessionPress` (403 over HTTP), which clears only these ended notes so "Push-to-talk does nothing: no
+  revview session" shows. The allow rule and the press-drop rule are unchanged.
+- **Bench document (r7-04..08).** README "On the Pi" gives the reading order. BENCH-TEST starts with "First
+  afternoon" (18 ordered ids with what each needs); the rest is reference. The Stage 2 series is renamed HW1-HW7
+  (Honest states keep H1-H10; H8-H10 moved there); the new dongle item is D13 (D7 was taken). Duplicates are kept and
+  marked "superseded by X"; P13, P17, V3, V10 and HW7 say what the software does today; user-unit commands in the
+  items; a "stop the service first" note for hand-started servers; script paths `/opt/revview/pi/...`. No item was
+  deleted (149 rows before, 151 now, P21 and D13 new); all stay `untested`.

@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-23, work/qa7-bench: see DECISIONS "QA round 7"; not yet re-run by QA)
 id: qa-20261123-r7-07
 title: No reading order for the owner: the top-level README does not mention pi/README.md, and BENCH-TEST's 149 items are in build order (the first Pi set-up item, P1, is item ~120 of the file) with no "do these first" list or dependencies
 severity: major

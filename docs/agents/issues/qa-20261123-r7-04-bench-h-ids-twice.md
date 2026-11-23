@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-23, work/qa7-bench: see DECISIONS "QA round 7"; not yet re-run by QA)
 id: qa-20261123-r7-04
 title: BENCH-TEST still has duplicate ids: H1 to H7 exist twice ("Honest states" and "Stage 2: hook wiring"); r6b-05 fixed only the B series
 severity: minor

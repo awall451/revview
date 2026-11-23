@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-23, work/qa7-bench: see DECISIONS "QA round 7"; not yet re-run by QA)
 id: qa-20261123-r7-05
 title: BENCH-TEST items whose expected result no longer matches the software (P13, P17, V3, V10, Stage-2 H7) and about 12 duplicate or superseded items still listed as separate work
 severity: minor

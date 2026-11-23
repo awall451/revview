@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-23, work/qa7-bench: see DECISIONS "QA round 7"; not yet re-run by QA)
 id: qa-20261123-r7-01
 title: When the only session ends the bar says just "<repo> ended": no next step for the driver, a push-to-talk tap then gets no feedback, and a key-on Claude that dies after ~1 s gets no pointer to the log
 severity: minor
