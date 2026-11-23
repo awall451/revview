@@ -29,8 +29,9 @@ Updated 2026-11-23 (cycle 21, the close-out of owner job 20261123T052206Z-o-fe89
 
 ## In flight
 
-- `laptop-stop-fix` (cycle 21, 2 commits, head 0d8afcc, `ready/laptop-stop-fix` = `work/laptop-stop-fix`, 9 files, +220 -28, local `tools/check` 1398 tests, was 1392; `tools/check` untouched): SUBMITTED 2026-11-23. CHECK `gate-status laptop-stop-fix` FIRST. If merged: delete both branches and ask for a publish (`owner-publish request`; not asked yet for this topic, since only merged work is published). If failed: give the log to area-lead-platform (Sonnet). It was NOT reviewed by a second reviewer (small diff; the lead read the `run.sh` diff).
-- `ready/lead-notes-21` / `work/lead-notes-21` (these notes, on top of 0d8afcc): delete once merged.
+- `emu-test-leak` (cycle 21, 1 commit on top of gate main 23259c9, `ready/emu-test-leak` = `work/emu-test-leak`, 2 files, +26 -1, tests only + one DECISIONS line; local `tools/check` 1398): SUBMITTED 2026-11-23T07:20Z. CHECK `gate-status emu-test-leak` FIRST. If merged: delete both branches (no publish needed for it alone; the next publish carries it). If failed: area-lead-platform (Sonnet) with the log. What it fixes: three tests in `tests/unit/emulator-run.test.js` SIGKILLed only run.sh's process group, and run.sh starts the browser with `setsid`, so each test run left 3 stand-in "browser" processes behind for ever (not a run.sh bug); `finish()` now kills by the run's private directory and an `after` hook fails the file if a process is left.
+- `laptop-stop-fix` MERGED as 0d8afcc (1398 tests, was 1392), `lead-notes-21` MERGED as 23259c9; branches deleted; publish requested 2026-11-23 (check `owner-publish status`).
+- `ready/lead-notes-21b` / `work/lead-notes-21b` (these notes, on top of `emu-test-leak`): delete once merged.
 - No worktree left. No held change. No open owner message. Owner backlog item 4 ("Emulator on your laptop 4 (optional): drive real Claude Code sessions from the emulator (--live)", owner issue 20261123T034527Z-i-170701, state new) is NOT approved to run: wait for the owner to start it.
 - NEXT (normal cycle, nothing urgent): QA is due on the laptop path only if something new lands; otherwise the team is waiting on the owner's bench (`docs/BENCH-TEST.md`) and on the two open escalations. Do not invent work.
 

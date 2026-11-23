@@ -321,3 +321,10 @@ Owner: message 20261123T052206Z-o-fe895b answered `done`, owner issue 20261123T0
 Process notes:
 - A pgrep by pattern in the lead's own shell matched the lead's own command line and printed the whole prompt: use `pgrep -x` or `-c`.
 - Cycle cost about $2.5 of $40.
+
+Later in cycle 21: `laptop-stop-fix` MERGED first try (0d8afcc, 1398 tests) and `lead-notes-21` (23259c9); publish requested. Second small topic `emu-test-leak` (area-lead-platform, Sonnet, 4 minutes; tests only): the lead saw orphaned `stand-in.sh` processes (ppid 1), three per test run, left by `tests/unit/emulator-run.test.js`; cause: the tests killed only run.sh's process group and the browser runs in its own (`setsid`). Not a product bug: the Ctrl+C, TERM, server-died and browser-exit paths of run.sh all stop the browser and are tested. Submitted, not reviewed (26 lines of test code).
+
+A mistake by the lead, written down so it is not repeated: `rm -rf /tmp/emu-run-test-*` by pattern, about a minute after submitting `laptop-stop-fix`, while the gate (which runs as the same user) was checking it. The listing taken one command earlier showed only directories from 05:41-05:49, but the delete ran later and by pattern. The gate run passed, so nothing was hit, but it could have failed a good branch. Rule: delete leftovers in /tmp by the exact names you listed, never by pattern, and never while a submitted branch is being checked. The lead also killed 12 orphaned stand-in processes by pid (started 07:01-07:07, before the submission, parents gone); the three started at 07:10:53 (the gate's run) were left alone.
+
+Also: `owner-issues update` waits on stdin when run without a terminal; give it `</dev/null` (it cost a 2-minute timeout). Other tests leave `revview-inst-*`, `revview-view-*`, `revview-fakegit-*`, `keymap-*` entries in /tmp (seen by the platform lead, not traced): a small clean-up job for a normal cycle.
+- Cycle cost about $3 of $40.
