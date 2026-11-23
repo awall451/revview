@@ -328,3 +328,21 @@ A mistake by the lead, written down so it is not repeated: `rm -rf /tmp/emu-run-
 
 Also: `owner-issues update` waits on stdin when run without a terminal; give it `</dev/null` (it cost a 2-minute timeout). Other tests leave `revview-inst-*`, `revview-view-*`, `revview-fakegit-*`, `keymap-*` entries in /tmp (seen by the platform lead, not traced): a small clean-up job for a normal cycle.
 - Cycle cost about $3 of $40.
+
+## 2026-11-23: cycle 22 (one-shot job "Emulator on your laptop 4": `run.sh --live`)
+
+Asked: owner message 20261123T034545Z-o-59dc1b (backlog item 20261123T033807Z-b-d8b7b4, estimate 60 minutes / $8, confidence low; owner issue 20261123T034527Z-i-170701): `emulator/run.sh --live [project dir]` driving a real Claude Code session in tmux with its own settings file, a clean stop, tests with the stand-in claude, a "Live" section in the laptop guide with bench items. Nothing else was done this cycle; cycle 21's leftover branches were left as they were.
+
+Dispatched: area-lead-platform (Opus, with builders, 13 minutes), topic `live-emu`: 2 commits, 1412 tests locally (was 1398). Then a Sonnet reviewer (approve, no blocking findings; 3 worth fixing: a late tmux server could outlive cleanup, no message for a too-long socket path, the stop assertion would pass with an empty tmux server alive) and one Sonnet fix round for those three (1413 tests).
+
+Gate: first submission FAILED (5ae7eb6, unit step, one test: "another tmux server on its own socket is not touched"). Cause, reproduced: the test started its own unrelated tmux server with a string command (`'sleep 300'`), which tmux runs through `$SHELL`; the gate user's shell is a nologin shell, so the window died at once. Fixed in the test only (argv form `-- sleep 300`, as `src/sessions/runner.js` already does; the product was not affected). Second submission MERGED as 06d19d3 (1413 tests).
+
+Incident, told to the owner in the reply: during the build a builder, against its brief, ran `run.sh --live` once by hand without the stand-in on PATH, so the real `claude` of this VM started in a private tmux server with the real HOME. It was stopped and nothing was left running. The lead checked afterwards: no revview hook in `~/.claude/settings.json`, no tmux or extra claude process. The test that used the old `--live` now puts the stand-in first on PATH so the suite cannot start the real claude.
+
+Owner: message answered `done`; owner issue set done; publish requested for main at 06d19d3 plus these notes.
+
+Process notes:
+- The gate user has a nologin shell and no terminal: a test that gives tmux a string command passes here and fails there. Rule for briefs: tmux commands in tests in argv form (`-- cmd args`), and run new process-heavy tests once with `SHELL=/usr/sbin/nologin` before submitting.
+- Area leads' sessions are locked to their own worktree (`.claude/worktrees/agent-<id>`); they cannot work in a worktree path the lead names, and two agents cannot both have `work/<topic>` checked out. For a fix round: remove the first agent's worktree before spawning the next, and tell the agent to `git switch work/<topic>` in its own worktree.
+- Briefs for anything that starts `claude`: say "never run it by hand without the stand-in on PATH" to the BUILDERS too, not only the area lead.
+- Cycle cost about $4.5 of $40 (the estimate was $8); about 50 minutes.
