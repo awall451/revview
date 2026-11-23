@@ -307,3 +307,17 @@ Process notes:
 - `/home/agent/revview` has no `node_modules`; QA used `/tmp/held-tree/node_modules` for Playwright. Tell QA where one is.
 - The fix round was too big for one Sonnet agent inside the estimate (14 points); the estimate of 40 minutes had no room for a review round. Estimate a review and fix round into every item that changes a script.
 - Cycle cost about $5 of $40 (the estimate was $4).
+
+## 2026-11-23: cycle 21 (close-out of the one-shot job "Emulator on your laptop 3")
+
+Found: `laptop-guide` MERGED (d6c022e, 1392 tests) and published (8b5ca3e) after cycle 20 was cut off. The owner message was still open (`planned`), so it was handled as priority. Cleaned up: two worktrees, nine merged branches, 35 stale `/tmp/revview-emu-1001-*.pid` files and 8 `/tmp/emu-run-test-*` directories from cycle 20's killed test runs.
+
+Dispatched, in parallel (both Sonnet), what cycle 20 left open: a reviewer on the fix commit d6c022e and QA round 8 on a fresh clone of gate/main. Reviewer: the three earlier blocking findings are closed; one new real gap (`--stop` only looked where its own environment pointed, so a run from another shell was "not running"); pid 0/1 not rejected up front; `--stop` gave up at the first run that would not stop; the sheet contradicted itself about R; 5 of 11 mutations not caught (two of them need a second user). QA: all 8 earlier findings held, every key of the sheet pressed and matched; 2 new small findings (r8-01 read aloud is silent until a session is chosen, r8-02 `--stop` after `kill -9` of run.sh). The claim "Enter, N, Esc, Space, R only log the gesture in the demo" was re-checked and is true for the permission and done scenes.
+
+Then one fix round: area-lead-platform (Sonnet, no builders, 5 minutes), topic `laptop-stop-fix`, 2 commits, 1398 tests locally (was 1392). Not re-reviewed (small; the lead read the `run.sh` diff). Submitted.
+
+Owner: message 20261123T052206Z-o-fe895b answered `done`, owner issue 20261123T034512Z-i-781902 set done. No publish asked for `laptop-stop-fix` yet (it has not merged): next cycle.
+
+Process notes:
+- A pgrep by pattern in the lead's own shell matched the lead's own command line and printed the whole prompt: use `pgrep -x` or `-c`.
+- Cycle cost about $2.5 of $40.
