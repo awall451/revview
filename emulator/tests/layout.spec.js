@@ -246,7 +246,19 @@ test('unknown with no session at all (r6b-07): the note is the first line, no fi
   await expect(page.locator('#note1')).toHaveText('Push-to-talk does nothing: no revview session');
 });
 
-test('new looks: notes, repo and diff', async ({ openView, page }) => {
+test('ended with the next-step note (r7b-02), worst case: an 80-character repo, 1280x400, no overflow', async ({ openView, page }) => {
+  const repo = 'r'.repeat(80);
+  const note = `${repo} ended: open the menu for New session`;
+  await openView({ ...loadFixture('ended'), repo, voice: 'no-session', note });
+  await expect(page.locator('#note1')).toHaveText('No Claude Code session running');
+  await expect(page.locator('#note2')).toHaveText(note);
+  await expectFits(page);
+  await openView({ ...loadFixture('ended'), repo: 'alpha', voice: 'no-session', note: 'alpha ended: open the menu for New session' });
+  await expect(page.locator('#note2')).toHaveText('alpha ended: open the menu for New session');
+  await expectFits(page);
+});
+
+test('new looks: notes, repo and diff',async ({ openView, page }) => {
   await openView({ view: 'unknown', repo: 'r', branch: 'b', diff: { added: 1, removed: 1 } });
   await expect(page.locator('#note1')).toHaveText("Not known until Claude's next step");
   await expect(page.locator('#note2')).toHaveText('Push-to-talk may still work');

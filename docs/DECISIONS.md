@@ -1430,8 +1430,13 @@ Tested in the unit suite only (fakes, injected timers); nothing run on a Pi.
   is `/opt/revview/hooks/install.mjs`). The "stop the service first" note stays for the reference items that do start
   one by hand. All ids stay unique and present.
 - **r7b-02:** the normal end of a drive (the last session ends after hooks) gets the same note as r7-01:
-  "`<repo>` ended: open the menu for New session". It replaces "Voice input goes nowhere" on the ENDED screen (note2),
-  and the same push-to-talk tap clears it. Only the board's note condition changed (the "quiet" requirement is gone);
-  the allow rule and the others-left wording are unchanged. Locked and offline show their own views, not ENDED.
+  "`<repo>` ended: open the menu for New session", replacing "Voice input goes nowhere" on the ENDED screen (note2);
+  the same push-to-talk tap clears it. Rule: set for the last session only when revview runs sessions
+  (`owned !== null`: only then the menu has New session); the quiet-placeholder case is as before; without
+  `--sessions` the old behaviour stays (no note). While the data is locked the view drops this note (INSERT KEY shows
+  its own line; New session would be refused, r6b-03) and it shows again after unlock. The board cannot know whether
+  New session would fail for another reason (no start folder, tmux gone): then the tap says so, as before. Fit: emulator
+  test with an 80-character repo (1280x400, no overflow); no gallery shot covers it (the `ended` fixture has no note).
+  The allow rule and the others-left wording are unchanged.
 - **r7b-03:** `pi/README.md` says P1-P21. Older "P1-P14" texts in DECISIONS, JOURNAL, STATE and old issues are history
   and stay.

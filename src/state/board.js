@@ -203,8 +203,9 @@ export function reduceBoard(board, event) {
   // the selected session ended and others remain: the selection falls to another one, and the bar says so
   const wasSel = selectedOf(b);
   // (the last session ending says so too, quiet or not: the key-on Claude that exited at once, QA r6b-02; the normal
-  // end of a drive, QA r7b-02)
+  // end of a drive, QA r7b-02, only where revview runs sessions, so that the menu's New session exists)
   if (wasSel !== null && next !== b && !has(next.sessions, wasSel)
+    && (Object.keys(next.sessions).length > 0 || b.sessions[wasSel].quiet === true || b.owned !== null)
     && (event.hook_event_name === 'SessionEnd' || event.hook_event_name === 'RevviewOwned')) {
     const label = b.sessions[wasSel].state.repo;
     const last = Object.keys(next.sessions).length === 0;
@@ -777,7 +778,7 @@ function extrasOf(b, shownKey) {
     position: b.owned === null || i < 0 ? null : { index: i + 1, count: order.length },
     elsewhere: order.filter((k) => k !== shownKey && b.sessions[k].pending.length > 0).length,
     nav: navView(b),
-    note: typeof b.note === 'string' ? b.note : voice !== 'none' && shownKey !== null && b.sessions[shownKey].quiet === true && !startingOf(b, b.sessions[shownKey], shownKey) ? 'No events from this session yet' : null,
+    note: typeof b.note === 'string' ? (b.locked && b.note.endsWith(ENDED_NEXT) ? null : b.note) : voice !== 'none' && shownKey !== null && b.sessions[shownKey].quiet === true && !startingOf(b, b.sessions[shownKey], shownKey) ? 'No events from this session yet' : null,
     answered: answeredOf(shownKey === null ? null : b.sessions[shownKey]),
   };
 }

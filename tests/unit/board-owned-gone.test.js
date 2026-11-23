@@ -80,13 +80,13 @@ test('r5-04: the selected session ends, others remain: note "<repo> ended"', () 
   assert.equal(reduceBoard(e, ev('RevviewNav', { op: 'next' })).note, null);
 });
 
-test('r5-04: long labels are cut, a non-selected end sets no note, the last end says what to do next (r7b-02)', () => {
+test('r5-04: long labels are cut, a non-selected end sets no note, the last end sets none (no sessions run: no menu, r7b-02)', () => {
   const b = run([owned(A, B), start(A, 'x'.repeat(150)), start(B, 'beta'), ev('RevviewSelect', { session_id: A })]);
   const e = reduceBoard(b, ev('SessionEnd', { session_id: A }));
   assert.ok(e.note.length <= 120 && e.note.endsWith(' ended'));
   assert.equal(reduceBoard(b, ev('SessionEnd', { session_id: B })).note, null);
   const one = run([start(A, 'alpha'), ev('RevviewSelect', { session_id: A }), ev('SessionEnd', { session_id: A })]);
-  assert.equal(one.note, 'alpha ended: open the menu for New session');
+  assert.equal(one.note, null);
 });
 
 test('r5-03: voice none: the quiet placeholder note does not hide the "no session chosen" voice', () => {

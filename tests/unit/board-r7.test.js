@@ -89,3 +89,39 @@ test('r7-01: RevviewNoSessionPress also clears "<repo> ended" (others left, noth
   assert.equal(b.note, 'alpha ended');
   assert.equal(reduceBoard(b, ev('RevviewNoSessionPress')).note, null);
 });
+
+const HK = (name, id) => ev(name, { session_id: id, cwd: '/tmp/alpha' });
+const started = (...ids) => fold(initialBoard(), ev('RevviewOwned', { ids, names: ids.map((_, i) => ['alpha', 'beta'][i]) }),
+  ...ids.map((id) => HK('SessionStart', id)), ...ids.map((id) => HK('UserPromptSubmit', id)), ev('RevviewSelect', { session_id: ids[0] }));
+
+test('r7b-02: the normal end of the last session (it sent hooks, revview runs sessions): the next-step note', () => {
+  const b = reduceBoard(started(A), HK('SessionEnd', A));
+  assert.equal(boardView(b).view, 'ended');
+  assert.equal(boardView(b).note, 'alpha ended: open the menu for New session');
+});
+
+test('r7b-02: without --sessions (owned null) the last end sets no note: there is no menu', () => {
+  const b = fold(initialBoard(), HK('SessionStart', A), HK('UserPromptSubmit', A), ev('RevviewSelect', { session_id: A }), HK('SessionEnd', A));
+  assert.equal(boardView(b).view, 'ended');
+  assert.equal(boardView(b).note, null);
+});
+
+test('r7b-02: another session left: "<repo> ended" unchanged', () => {
+  const b = reduceBoard(started(A, B), HK('SessionEnd', A));
+  assert.equal(boardView(b).note, 'alpha ended');
+});
+
+test('r7b-02: locked data: the next-step note is not shown (New session would be refused), it is back after unlock', () => {
+  let b = reduceBoard(started(A), HK('SessionEnd', A));
+  b = reduceBoard(b, ev('RevviewDataLock', { locked: true }));
+  assert.equal(boardView(b).note, null);
+  assert.equal(boardView(reduceBoard(b, ev('RevviewDataLock', { locked: false }))).note, 'alpha ended: open the menu for New session');
+});
+
+test('r7b-02: a long repo name is cut: the note is 120 characters at most', () => {
+  const name = 'x'.repeat(100);
+  const b = fold(initialBoard(), ev('RevviewOwned', { ids: [A], names: [name] }), ev('RevviewSelect', { session_id: A }),
+    ev('UserPromptSubmit', { session_id: A, cwd: `/tmp/${name}` }), HK('SessionEnd', A));
+  const n = boardView(b).note;
+  assert.ok(n.length <= 120 && n.endsWith(' ended: open the menu for New session'), n);
+});
