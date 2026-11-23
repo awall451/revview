@@ -15,10 +15,10 @@ const map = JSON.parse(fs.readFileSync(MAP, 'utf8'));
 
 const sheet = () => buildSheet({ mapPath: MAP, scenesPath: SCENES });
 
-test('fits one screen: at most 24 lines of at most 80 columns', async () => {
+test('fits a 24-row terminal with the prompt: at most 22 lines of at most 80 columns', async () => {
   const lines = (await sheet()).split('\n');
   if (lines.at(-1) === '') lines.pop();
-  assert.ok(lines.length <= 24, `${lines.length} lines`);
+  assert.ok(lines.length <= 22, `${lines.length} lines`);
   for (const l of lines) assert.ok(l.length <= 80, `${l.length} columns: ${l}`);
 });
 
@@ -68,7 +68,17 @@ test('the demo keys come from scenes.js: every scene name and the range', async 
   const names = buildLoop(1).map((s) => s.name);
   for (const n of names) assert.ok(out.includes(n), n);
   assert.match(out, new RegExp(`1-${names.length}`));
-  assert.match(out, /nothing is sent to a Claude/);
+  assert.match(out, /nothing is sent to a Claude/i);
+});
+
+test('the footer says what really happens: no variable for speech, what the demo shows and what needs --live', async () => {
+  const out = await sheet();
+  assert.doesNotMatch(out, /REVVIEW_SPEECH/, 'the server reads config/speech.json by default');
+  assert.match(out, /R speaks on any machine that has espeak-ng or Piper/);
+  assert.doesNotMatch(out, /show what the bar would show/);
+  assert.match(out, /Left, Right, Up, Down, M, Backspace held/);
+  assert.match(out, /Enter, N, Esc, Space, R .*only log the gesture/);
+  assert.match(out, /needs --live/);
 });
 
 test('run.sh --keys prints exactly the sheet', async () => {
@@ -88,6 +98,16 @@ test('docs/EMULATOR-LAPTOP.md shows the real sheet and the real alias block, and
   const top = fs.readFileSync(new URL('../../README.md', import.meta.url), 'utf8').split('\n').slice(0, 4).join('\n');
   assert.match(top, /docs\/EMULATOR-LAPTOP\.md/);
   assert.match(fs.readFileSync(new URL('../../emulator/README.md', import.meta.url), 'utf8'), /docs\/EMULATOR-LAPTOP\.md/);
+  // the text says what happens (checked against the code by the fresh-clone QA): no speech variable, every scene's screen,
+  // what the demo shows and what needs --live, --stop for every run, -h
+  assert.doesNotMatch(doc, /only with\s+`?REVVIEW_SPEECH/);
+  assert.doesNotMatch(doc, /show what the bar would show/);
+  for (const w of ['WORKING', 'NEEDS PERMISSION', 'DONE', 'WAITING FOR ME', 'OFFLINE', 'INSERT KEY', 'CLAUDE EXITED']) assert.ok(doc.includes(w), w);
+  assert.match(doc, /No projects: add paths to the projects file/);
+  assert.match(doc, /Backspace \*\*tapped\*\*/);
+  assert.match(doc, /`--live`/);
+  assert.match(doc, /EVERY `run\.sh`/);
+  assert.ok(doc.includes('`-h`'));
   for (const o of ['--port', '--no-browser', '--scale', '--demo', '--live', '--keys', '--print-aliases', '--stop', '--help']) {
     assert.ok(doc.includes(`\`${o}`), `guide mentions ${o}`);
   }

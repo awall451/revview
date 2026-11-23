@@ -1497,8 +1497,8 @@ Tested in the unit suite only (fakes, injected timers); nothing run on a Pi.
   no `--dev-demo`, the server waits for real hook events). `--demo --live` is exit 2.
 - **Lifetime:** the player exits when its `/dev/demo` stream closes or a POST cannot connect (the server went away);
   `run.sh`'s EXIT trap kills and waits for it. If it dies alone, `run.sh` says so once and keeps serving.
-- **Not proven:** nothing has run on a real laptop (bench L3, L4). Speech in demo mode needs `REVVIEW_SPEECH` and
-  espeak-ng or Piper on the laptop; run.sh installs nothing.
+- **Not proven:** nothing has run on a real laptop (bench L3, L4). Speech in demo mode needs espeak-ng or Piper on the
+  laptop (no variable: the server uses `config/speech.json` by default); run.sh installs nothing.
 
 ## 2026-11-23: Emulator on your laptop 3 (the guide, the key sheet, aliases, stop)
 
@@ -1507,16 +1507,26 @@ Tested in the unit suite only (fakes, injected timers); nothing run on a Pi.
   from there. The words are one `LABELS` table in `emulator/keys-sheet.js`, beside the map's reader. The sheet is
   generated from `config/buttons.laptop.json` (keys, buttons, which have a hold or long hold) and `emulator/demo/scenes.js`
   (the scene names). `buildSheet()` throws, naming the button and gesture, when a mapped one has no label, and a test
-  also checks every mapped button and gesture is in the output and that it fits 24 lines of 80 columns. A label can still
+  also checks every mapped button and gesture is in the output and that it fits 22 lines of 80 columns (a 24-row terminal keeps its prompt and the first line). A label can still
   be WRONG if the code changes; the test does not run the keys through the real actions. `run.sh --keys` just runs the module.
-- **Stop:** `run.sh` writes `${XDG_RUNTIME_DIR:-/tmp}/revview-emu-<uid>-<pid>.pid` after the temp dir is made and removes it
-  in its EXIT trap. `--stop` (handled before the Node check, so it works without Node) reads the files of the current
-  user, checks `/proc/<pid>/cmdline` names `emulator/run.sh` (so a reused pid is not signalled), sends TERM, which runs the
-  existing trap (browser group, demo player, server, temp dir), waits up to 5 s, prints `stopped (pid N)` or `not running`.
-  Nothing running is exit 0; a script that does not stop in 5 s is exit 1. Several scripts (different `--port`) are all
-  stopped. Linux `/proc` only, like the rest of the script. A script stopped in the first moments, before the pid file is
-  written, is not found.
-- **Aliases:** `--print-aliases` only prints (a test points `HOME` at a temp dir and checks nothing is written). The path is
+- **Stop (pid file, fixed after review):** the first version wrote `/tmp/revview-emu-<uid>-<pid>.pid` and identified the
+  process by `emulator/run.sh` in `/proc/<pid>/cmdline`. Both were wrong: a planted symlink with that guessable name was
+  followed, and a run started as `cd emulator; bash run.sh` (or any process with that text in its command line) was
+  mistaken. Now `run.sh` writes `<pid>.pid` holding `pid start-time` (field 22 of `/proc/<pid>/stat`, after the last `)`)
+  into a private directory: `$XDG_RUNTIME_DIR/revview-emu` when that is a writable directory, else
+  `${TMPDIR:-/tmp}/revview-emu-<uid>`, else `/tmp/revview-emu-<uid>`; the directory is made mode 700 and must be a real
+  directory (not a symlink) owned by the user with no group or other access, otherwise the next place is tried; the file
+  is written with noclobber and mode 600. If no place works it prints `run.sh: no pid file; --stop will not find this
+  run` and runs on. `--stop` (before the Node check, so it works without Node) looks in the same three places, reads only
+  regular files it owns (a symlink or a FIFO is skipped and left, so a FIFO cannot hang it), signals a pid only when the
+  live process has the recorded start time, removes a stale file, never removes the file of a live matching process
+  (the run removes its own; one that does not stop in 5 s is exit 1), and says `stopped (pid N)` for EVERY run it
+  stopped. Nothing running is exit 0. Linux `/proc` only. A run stopped before its pid file is written is not found.
+  `REVVIEW_EMU_FALLBACK_TMP` replaces `/tmp` in the third place; only the tests set it, so they never touch the real
+  `/tmp`; every test of `run.sh` also gets a private `XDG_RUNTIME_DIR`. The third place is the real `/tmp` for a user:
+  a `--stop` there can still see a run that fell back to it.
+- **Aliases:** `--print-aliases` only prints (a test points `HOME` at a temp dir and checks nothing is written; the comment
+  line is fixed text, without the path, so a newline in the path cannot leave the comment). The path is
   quoted twice, with `printf %q` and then for the alias's single quotes; a test sources a block made for a path with a space
   and a quote. No alias or file is installed for the user.
 - **No install needed:** `run.sh`, the server, the player and the sheet import only `node:` modules; checked from a copy of

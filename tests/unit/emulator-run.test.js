@@ -51,14 +51,23 @@ const portOpen = (port) => new Promise((resolve) => {
 });
 
 // Start run.sh; resolves with helpers. Always clean up with run.finish().
-function start(args, { env = {}, browser = true, standOpts } = {}) {
+// Every run gets a private XDG_RUNTIME_DIR (dir/xdg) and a private stand-in for the /tmp fallback (dir/fallback), so a
+// test never sees or stops anybody else's run.sh and leaves nothing outside its own dir. An env value of null unsets.
+function start(args, { env = {}, browser = true, standOpts, cwd, script = RUN, setup } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emu-run-test-'));
   const tmp = path.join(dir, 'tmp');
+  const xdg = path.join(dir, 'xdg');
   fs.mkdirSync(tmp);
-  const e = { ...process.env, TMPDIR: tmp, ...env };
+  fs.mkdirSync(xdg, { mode: 0o700 });
+  const fallback = path.join(dir, 'fallback');
+  fs.mkdirSync(fallback);
+  if (setup) setup({ dir, tmp, xdg, fallback });
+  const e = { ...process.env, TMPDIR: tmp, XDG_RUNTIME_DIR: xdg, REVVIEW_EMU_FALLBACK_TMP: fallback, ...env };
+  for (const k of Object.keys(e)) if (e[k] === null) delete e[k];
   if (browser) e.REVVIEW_BROWSER = standIn(dir, standOpts);
-  const child = spawn('bash', [RUN, ...args], { env: e, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
-  const run = { dir, tmp, child, out: '', err: '', exited: null };
+  const child = spawn('bash', [script, ...args], { env: e, cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  const run = { dir, tmp, xdg, fallback, child, env: e, out: '', err: '', exited: null };
+  run.pidFile = () => path.join(xdg, 'revview-emu', `${child.pid}.pid`);
   child.stdout.on('data', (d) => { run.out += d; });
   child.stderr.on('data', (d) => { run.err += d; });
   child.on('exit', (code, sig) => { run.exited = { code, sig }; });
@@ -446,17 +455,18 @@ test('--keys lists the demo keys, every scene name and the no-Claude note', asyn
   const run = start(['--keys'], { browser: false });
   try {
     assert.equal((await run.exit()).code, 0);
-    assert.match(run.out, /^Demo keys \(demo mode only; the demo player handles them, not the bar\):$/m);
+    assert.match(run.out, /^Demo keys \(demo mode only; the demo player takes them, not the bar\):$/m);
     const { buildLoop } = await import('../../emulator/demo/scenes.js');
     const names = buildLoop(1).map((s) => s.name);
     assert.equal(names.length, 7);
     for (const n of names) assert.ok(run.out.includes(n), `scene ${n}`);
-    assert.match(run.out, /^ {2}1-7 .*jump to a scene/m);
+    assert.match(run.out, /^ {2}1-7 .*jump/m);
     assert.match(run.out, /^ {2}P +pause/m);
     assert.match(run.out, /\[ +slower/);
     assert.match(run.out, /\] +faster/);
-    assert.match(run.out, /nothing is sent to a Claude/);
-    assert.match(run.out, /REVVIEW_SPEECH=config\/speech\.json/);
+    assert.match(run.out, /nothing is sent to a Claude/i);
+    assert.doesNotMatch(run.out, /REVVIEW_SPEECH/);
+    assert.match(run.out, /espeak-ng/);
   } finally { run.finish(); }
 });
 
@@ -482,7 +492,7 @@ test('--help lists --print-aliases and --stop', async () => {
 // --print-aliases: prints the block, writes nothing, never touches $HOME/.bashrc
 test('--print-aliases prints the three aliases with the real path, writes nothing, exits 0', async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'emu-home-'));
-  const run = start(['--print-aliases'], { browser: false, env: { HOME: home, XDG_RUNTIME_DIR: home } });
+  const run = start(['--print-aliases'], { browser: false, env: { HOME: home } });
   try {
     assert.equal((await run.exit()).code, 0);
     const root = path.dirname(path.dirname(RUN));
@@ -510,54 +520,276 @@ test('--print-aliases quotes a clone path with spaces and quotes: the printed bl
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });
 
-// --stop: another terminal stops a running run.sh through its pid file
-test('--stop with nothing running says so and exits 0', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emu-stop-'));
-  try {
-    const r = spawnSync('bash', [RUN, '--stop'], { encoding: 'utf8', env: { ...process.env, XDG_RUNTIME_DIR: dir } });
-    assert.equal(r.status, 0);
-    assert.equal(r.stdout.trim(), 'not running');
-  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
-});
+// ---- the pid file: a private directory, the process start time, removed on every way out ----
+const uid = process.getuid();
+// field 22 of /proc/<pid>/stat, counted after the last ")" (the command name may hold spaces and parentheses)
+const startTime = (pid) => fs.readFileSync(`/proc/${pid}/stat`, 'utf8').replace(/^.*\) /s, '').split(' ')[19];
+const pidFileIn = (run, pid = run.child.pid) => path.join(run.xdg, 'revview-emu', `${pid}.pid`);
+const pidFiles = (run) => { try { return fs.readdirSync(path.join(run.xdg, 'revview-emu')); } catch { return []; } };
 
-test('--stop removes a stale pid file and says not running', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emu-stop-'));
-  try {
-    fs.writeFileSync(path.join(dir, `revview-emu-${process.getuid()}-1.pid`), '999999\n');
-    // a live pid that is not a run.sh must not be signalled
-    const other = spawn('sleep', ['30']);
-    fs.writeFileSync(path.join(dir, `revview-emu-${process.getuid()}-2.pid`), `${other.pid}\n`);
-    const r = spawnSync('bash', [RUN, '--stop'], { encoding: 'utf8', env: { ...process.env, XDG_RUNTIME_DIR: dir } });
-    assert.equal(r.status, 0);
-    assert.equal(r.stdout.trim(), 'not running');
-    assert.ok(alive(other.pid));
-    other.kill();
-    assert.deepEqual(fs.readdirSync(dir), []);
-  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
-});
-
-test('--stop stops a running run.sh: server, demo player and temp dir are gone, the pid file too', async () => {
-  const xdg = fs.mkdtempSync(path.join(os.tmpdir(), 'emu-xdg-'));
-  const run = start(['--no-browser'], { browser: false, env: { XDG_RUNTIME_DIR: xdg } });
+test('the pid file holds the pid and the start time, in a private directory under XDG_RUNTIME_DIR', async () => {
+  const run = start(['--no-browser']);
   try {
     await run.url();
-    const pidfile = path.join(xdg, `revview-emu-${process.getuid()}-${run.child.pid}.pid`);
-    await until(() => fs.existsSync(pidfile), 'pid file');
+    const f = pidFileIn(run);
+    await until(() => fs.existsSync(f), 'pid file');
+    assert.equal(fs.readFileSync(f, 'utf8'), `${run.child.pid} ${startTime(run.child.pid)}\n`);
+    const dir = path.dirname(f);
+    assert.equal(fs.statSync(dir).mode & 0o777, 0o700);
+    assert.equal(fs.lstatSync(dir).isSymbolicLink(), false);
+    assert.equal(fs.statSync(f).mode & 0o077, 0, 'the file is not readable by others');
+    process.kill(run.child.pid, 'SIGTERM');
+    assert.equal((await run.exit()).code, 0);
+  } finally { run.finish(); }
+});
+
+test('the pid file is gone after the browser stand-in closes', async () => {
+  const run = start([], { env: { REVVIEW_QUICK_EXIT_SECS: '0' } });
+  try {
+    await run.url();
+    await until(() => fs.existsSync(pidFileIn(run)), 'pid file');
+    fs.writeFileSync(path.join(run.dir, 'close'), '');
+    assert.equal((await run.exit()).code, 0);
+    assert.deepEqual(pidFiles(run), []);
+  } finally { run.finish(); }
+});
+
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+  test(`the pid file is gone after ${sig} to run.sh`, async () => {
+    const run = start([]);
+    try {
+      await run.url();
+      await run.stand();
+      await until(() => fs.existsSync(pidFileIn(run)), 'pid file');
+      process.kill(run.child.pid, sig);
+      assert.equal((await run.exit()).code, 0);
+      assert.deepEqual(pidFiles(run), []);
+    } finally { run.finish(); }
+  });
+}
+
+test('the pid file is gone after the server died and run.sh exited 1', async () => {
+  const run = start(['--no-browser']);
+  try {
+    await run.url();
+    await until(() => fs.existsSync(pidFileIn(run)), 'pid file');
+    process.kill(await until(() => run.serverPid(), 'server pid'), 'SIGKILL');
+    assert.equal((await run.exit()).code, 1);
+    assert.deepEqual(pidFiles(run), []);
+  } finally { run.finish(); }
+});
+
+test('without XDG_RUNTIME_DIR the directory is TMPDIR/revview-emu-<uid>, mode 700', async () => {
+  const run = start(['--no-browser'], { env: { XDG_RUNTIME_DIR: null } });
+  try {
+    await run.url();
+    const dir = path.join(run.tmp, `revview-emu-${uid}`);
+    const f = path.join(dir, `${run.child.pid}.pid`);
+    await until(() => fs.existsSync(f), 'pid file');
+    assert.equal(fs.statSync(dir).mode & 0o777, 0o700);
+    assert.deepEqual(fs.readdirSync(run.xdg), [], 'nothing under the unused XDG dir');
+    process.kill(run.child.pid, 'SIGTERM');
+    assert.equal((await run.exit()).code, 0);
+    assert.deepEqual(fs.readdirSync(dir), []);
+  } finally { run.finish(); }
+});
+
+test('a planted symlink where the directory should be is not followed: the next place is used', async () => {
+  const victim = fs.mkdtempSync(path.join(os.tmpdir(), 'emu-victim-'));
+  const run = start(['--no-browser'], {
+    env: { XDG_RUNTIME_DIR: null },
+    setup: ({ tmp }) => fs.symlinkSync(victim, path.join(tmp, `revview-emu-${uid}`)),
+  });
+  try {
+    await run.url();
+    const f = path.join(run.fallback, `revview-emu-${uid}`, `${run.child.pid}.pid`);
+    await until(() => fs.existsSync(f), 'pid file in the fallback directory');
+    assert.deepEqual(fs.readdirSync(victim), [], 'nothing written through the symlink');
+    assert.equal(run.err, '');
+    process.kill(run.child.pid, 'SIGTERM');
+    assert.equal((await run.exit()).code, 0);
+  } finally { run.finish(); fs.rmSync(victim, { recursive: true, force: true }); }
+});
+
+test('a symlinked revview-emu inside XDG_RUNTIME_DIR is not followed either', async () => {
+  const victim = fs.mkdtempSync(path.join(os.tmpdir(), 'emu-victim-'));
+  const run = start(['--no-browser'], { setup: ({ xdg }) => fs.symlinkSync(victim, path.join(xdg, 'revview-emu')) });
+  try {
+    await run.url();
+    await until(() => fs.existsSync(path.join(run.tmp, `revview-emu-${uid}`, `${run.child.pid}.pid`)), 'pid file in the TMPDIR directory');
+    assert.deepEqual(fs.readdirSync(victim), []);
+    process.kill(run.child.pid, 'SIGTERM');
+    assert.equal((await run.exit()).code, 0);
+  } finally { run.finish(); fs.rmSync(victim, { recursive: true, force: true }); }
+});
+
+test('a directory open to others is not used', async () => {
+  const run = start(['--no-browser'], {
+    env: { XDG_RUNTIME_DIR: null },
+    setup: ({ tmp }) => { const d = path.join(tmp, `revview-emu-${uid}`); fs.mkdirSync(d); fs.chmodSync(d, 0o777); },
+  });
+  try {
+    await run.url();
+    await until(() => fs.existsSync(path.join(run.fallback, `revview-emu-${uid}`, `${run.child.pid}.pid`)), 'pid file in the fallback directory');
+    assert.deepEqual(fs.readdirSync(path.join(run.tmp, `revview-emu-${uid}`)), [], 'the open directory was not used');
+    process.kill(run.child.pid, 'SIGTERM');
+    assert.equal((await run.exit()).code, 0);
+  } finally { run.finish(); }
+});
+
+test('no safe directory at all: one clear line, no raw bash error, the run keeps going', async () => {
+  const run = start(['--no-browser'], {
+    env: { XDG_RUNTIME_DIR: '/nonexistent', REVVIEW_EMU_FALLBACK_TMP: '/nonexistent/x' },
+    setup: ({ tmp }) => fs.symlinkSync('/nonexistent', path.join(tmp, `revview-emu-${uid}`)),
+  });
+  try {
+    await run.url();
+    await until(() => /^Serving until/m.test(run.out), 'serving');
+    assert.equal(run.exited, null);
+    assert.equal(run.err.trim(), 'run.sh: no pid file; --stop will not find this run');
+    process.kill(run.child.pid, 'SIGTERM');
+    assert.equal((await run.exit()).code, 0);
+  } finally { run.finish(); }
+});
+
+// ---- --stop ----
+// Async, never spawnSync, when the run.sh to stop is a child of this process: this process must reap it.
+function stop(env, opts = {}) {
+  const c = spawn('bash', [RUN, '--stop'], { env: { ...process.env, ...env }, cwd: opts.cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+  let out = '';
+  let err = '';
+  c.stdout.on('data', (d) => { out += d; });
+  c.stderr.on('data', (d) => { err += d; });
+  const timer = setTimeout(() => c.kill('SIGKILL'), 20000);
+  return new Promise((resolve) => c.on('exit', (status, sig) => { clearTimeout(timer); resolve({ status, sig, out, err }); }));
+}
+const envOf = (run) => ({ TMPDIR: run.tmp, XDG_RUNTIME_DIR: run.xdg, REVVIEW_EMU_FALLBACK_TMP: run.fallback });
+// a stop with nothing else in the way: private dirs of its own
+function lone(fn) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emu-stop-'));
+  const x = { dir, xdg: path.join(dir, 'xdg'), tmp: path.join(dir, 'tmp'), fallback: path.join(dir, 'fallback') };
+  fs.mkdirSync(x.xdg, { mode: 0o700 });
+  fs.mkdirSync(x.tmp);
+  x.pidDir = path.join(x.xdg, 'revview-emu');
+  fs.mkdirSync(x.pidDir, { mode: 0o700 });
+  return Promise.resolve(fn(x)).finally(() => fs.rmSync(dir, { recursive: true, force: true }));
+}
+
+test('--stop with nothing running says so and exits 0', () => lone(async (x) => {
+  const r = await stop(envOf(x));
+  assert.equal(r.status, 0);
+  assert.equal(r.out.trim(), 'not running');
+}));
+
+test('--stop: a stale file (pid gone) and a live pid that is another process are removed, neither is signalled', () => lone(async (x) => {
+  fs.writeFileSync(path.join(x.pidDir, '1.pid'), '999999 12345\n');
+  const other = spawn('sleep', ['30']);
+  // an unrelated process whose command line even says emulator/run.sh must not match either
+  const decoy = spawn('bash', ['-c', 'sleep 30', 'emulator/run.sh', '--no-browser']);
+  fs.writeFileSync(path.join(x.pidDir, '2.pid'), `${other.pid} 1\n`);
+  fs.writeFileSync(path.join(x.pidDir, '3.pid'), `${decoy.pid} 1\n`);
+  fs.writeFileSync(path.join(x.pidDir, '4.pid'), 'garbage\n');
+  try {
+    const r = await stop(envOf(x));
+    assert.equal(r.status, 0);
+    assert.equal(r.out.trim(), 'not running');
+    assert.ok(alive(other.pid), 'the other process was signalled');
+    assert.ok(alive(decoy.pid), 'the decoy was signalled');
+    assert.deepEqual(fs.readdirSync(x.pidDir), []);
+  } finally { other.kill(); decoy.kill(); }
+}));
+
+test('--stop does not read a symlink or a FIFO, and does not hang on one', () => lone(async (x) => {
+  const other = spawn('sleep', ['30']);
+  const victim = path.join(x.dir, 'victim.pid');
+  // a symlink to a file that would match: the live process with its real start time
+  fs.writeFileSync(victim, `${other.pid} ${startTime(other.pid)}\n`);
+  fs.symlinkSync(victim, path.join(x.pidDir, '5.pid'));
+  const fifo = path.join(x.pidDir, '6.pid');
+  assert.equal(spawnSync('mkfifo', [fifo]).status, 0);
+  try {
+    const r = await stop(envOf(x));
+    assert.equal(r.sig, null, 'stop hung and was killed');
+    assert.equal(r.status, 0);
+    assert.equal(r.out.trim(), 'not running');
+    assert.ok(alive(other.pid), 'the process behind the symlink was signalled');
+    assert.deepEqual(fs.readdirSync(x.pidDir).sort(), ['5.pid', '6.pid'], 'the symlink and the FIFO are left alone');
+  } finally { other.kill(); }
+}));
+
+test('--stop ignores a pid directory that is a symlink', () => lone(async (x) => {
+  const other = spawn('sleep', ['30']);
+  const real = path.join(x.dir, 'real');
+  fs.mkdirSync(real, { mode: 0o700 });
+  fs.writeFileSync(path.join(real, '7.pid'), `${other.pid} ${startTime(other.pid)}\n`);
+  fs.rmSync(x.pidDir, { recursive: true });
+  fs.symlinkSync(real, x.pidDir);
+  try {
+    const r = await stop(envOf(x));
+    assert.equal(r.out.trim(), 'not running');
+    assert.ok(alive(other.pid));
+  } finally { other.kill(); }
+}));
+
+test('--stop stops a running run.sh: server, demo player and temp dir are gone, the pid file too', async () => {
+  const run = start(['--no-browser']);
+  try {
+    await run.url();
+    await until(() => fs.existsSync(pidFileIn(run)), 'pid file');
     const server = await until(() => run.serverPid(), 'server pid');
     assert.ok(alive(server));
-    // async: this process is run.sh's parent and must reap it, or --stop would see a zombie
-    const stopper = spawn('bash', [RUN, '--stop'], { env: { ...process.env, XDG_RUNTIME_DIR: xdg } });
-    let said = '';
-    stopper.stdout.on('data', (d) => { said += d; });
-    const status = await new Promise((resolve) => stopper.on('exit', resolve));
-    const r = { status, stdout: said };
+    const r = await stop(envOf(run));
     assert.equal(r.status, 0);
-    assert.match(r.stdout, /^stopped \(pid \d+\)$/m);
+    assert.match(r.out, /^stopped \(pid \d+\)$/m);
     assert.equal((await run.exit()).code, 0);
     assert.ok(!alive(server), 'server still running');
     assert.deepEqual(leftovers(run), []);
-    assert.deepEqual(fs.readdirSync(xdg), []);
-    const again = spawnSync('bash', [RUN, '--stop'], { encoding: 'utf8', env: { ...process.env, XDG_RUNTIME_DIR: xdg } });
-    assert.equal(again.stdout.trim(), 'not running');
-  } finally { run.finish(); fs.rmSync(xdg, { recursive: true, force: true }); }
+    assert.deepEqual(pidFiles(run), []);
+    assert.equal((await stop(envOf(run))).out.trim(), 'not running');
+  } finally { run.finish(); }
+});
+
+test('--stop finds a run started from inside emulator/ with a relative path, and stops it', async () => {
+  const emu = path.dirname(RUN);
+  for (const script of ['run.sh', './run.sh']) {
+    const run = start(['--no-browser'], { cwd: emu, script });
+    try {
+      await run.url();
+      await until(() => fs.existsSync(pidFileIn(run)), 'pid file');
+      const r = await stop(envOf(run), { cwd: emu });
+      assert.match(r.out, /^stopped \(pid \d+\)$/m, `${script}: ${r.out}`);
+      assert.equal((await run.exit()).code, 0);
+      assert.deepEqual(pidFiles(run), []);
+    } finally { run.finish(); }
+  }
+});
+
+// three started at once into one XDG_RUNTIME_DIR: the first to make revview-emu must not make the others fall back
+test('--stop stops every run.sh of the user that is running (three started together share one directory)', async () => {
+  const a = start(['--no-browser']);
+  const rest = [1, 2].map(() => start(['--no-browser'], { env: { XDG_RUNTIME_DIR: a.xdg } }));
+  const all = [a, ...rest];
+  try {
+    for (const r of all) await r.url();
+    await until(() => all.every((r) => fs.existsSync(path.join(a.xdg, 'revview-emu', `${r.child.pid}.pid`))), 'all pid files in the one directory');
+    const r = await stop(envOf(a));
+    assert.equal(r.out.match(/^stopped \(pid \d+\)$/gm)?.length, 3, r.out);
+    for (const x of all) assert.equal((await x.exit()).code, 0);
+    assert.deepEqual(pidFiles(a), []);
+  } finally { for (const x of all) x.finish(); }
+});
+
+test('--print-aliases: the comment line does not carry the path (a newline in it cannot break out of the comment)', () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'emu-alias-'));
+  const clone = path.join(base, 'a\nrm -rf x\nb');
+  fs.mkdirSync(path.join(clone, 'emulator'), { recursive: true });
+  fs.copyFileSync(RUN, path.join(clone, 'emulator/run.sh'));
+  try {
+    const r = spawnSync('bash', [path.join(clone, 'emulator/run.sh'), '--print-aliases'], { encoding: 'utf8' });
+    assert.equal(r.status, 0);
+    const lines = r.stdout.trimEnd().split('\n');
+    assert.equal(lines[0], '# revview emulator');
+    assert.equal(lines.length, 4, r.stdout);
+    for (const l of lines.slice(1)) assert.match(l, /^alias revview(-keys|-stop)?='/);
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });

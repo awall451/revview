@@ -26,9 +26,10 @@ $usage_line
   --keys         print the key cheatsheet (and the demo keys) and exit
   --print-aliases  print a block of shell aliases (revview, revview-keys, revview-stop) with this
                  clone's path filled in, ready to paste into ~/.bashrc, and exit. Only prints
-  --stop         stop the run.sh that is running (from another terminal): prints "stopped" or
-                 "not running" and exits 0; exits 1 if one did not stop within 5 s
-  --help         this text
+  --stop         stop EVERY run.sh of this user that is running (from another terminal): prints
+                 "stopped (pid N)" for each, or "not running", and exits 0; exits 1 if one did not
+                 stop within 5 s
+  --help, -h     this text
 
 Environment:
   REVVIEW_BROWSER           path or command of the browser to use
@@ -39,7 +40,9 @@ Environment:
 The script stops when the browser window closes, or on Ctrl+C / TERM / HUP. Exit codes: 0 after the
 window closed or after Ctrl+C / TERM / HUP; 1 on a start failure (Node too old, server did not start)
 or when the server stops while running; 2 on a bad option.
-A running script writes its pid to ${XDG_RUNTIME_DIR:-/tmp}/revview-emu-<uid>-<pid>.pid (removed on exit); --stop reads it.
+A running script writes its pid and start time to <pid>.pid in a private directory (mode 700, yours):
+\$XDG_RUNTIME_DIR/revview-emu, else \${TMPDIR:-/tmp}/revview-emu-<uid>, else /tmp/revview-emu-<uid>. It is
+removed on exit; --stop reads those files.
 USAGE
 }
 
@@ -83,13 +86,43 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-pid_dir=${XDG_RUNTIME_DIR:-/tmp}
+uid=$(id -u)
+# where a pid file can be, in the order the writer tries: a private directory of the user
+# (REVVIEW_EMU_FALLBACK_TMP only lets the tests keep the last place out of the real /tmp)
+pid_dir_candidates() {
+  {
+    if [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -d "$XDG_RUNTIME_DIR" ] && [ -w "$XDG_RUNTIME_DIR" ]; then
+      echo "$XDG_RUNTIME_DIR/revview-emu"
+    fi
+    echo "${TMPDIR:-/tmp}/revview-emu-$uid"
+    echo "${REVVIEW_EMU_FALLBACK_TMP:-/tmp}/revview-emu-$uid"
+  } | awk '!seen[$0]++'
+}
+# a real directory (not a symlink) that is the user's own and closed to group and others; with $2 = make, an absent
+# one is made (mode 700)
+pid_dir_safe() {
+  local d=$1 mode
+  # a failed mkdir is not an error here: another run.sh may have just made it; the checks below decide
+  if [ "${2:-}" = make ] && [ ! -e "$d" ] && [ ! -L "$d" ]; then (umask 077; mkdir -m 700 -- "$d") 2> /dev/null; fi
+  [ -d "$d" ] && [ ! -L "$d" ] && [ -O "$d" ] || return 1
+  mode=$(stat -c %a -- "$d" 2> /dev/null) || return 1
+  [[ "$mode" =~ ^[0-7]+$ ]] && [ $((8#$mode & 8#077)) -eq 0 ]
+}
+# the start time of a process: field 22 of /proc/<pid>/stat, counted after the last ")" (the name may hold one)
+start_time() {
+  local s f
+  { s=$(< "/proc/$1/stat"); } 2> /dev/null || return 1
+  s=${s##*) }
+  read -r -a f <<< "$s"
+  [ -n "${f[19]:-}" ] || return 1
+  echo "${f[19]}"
+}
 
 if [ -n "$want_aliases" ]; then
   # only prints; the path is quoted for the shell, then for the alias's single quotes
   q=$(printf '%q' "$root/emulator/run.sh")
   alias_line() { printf "alias %s='%s'\n" "$1" "${2//\'/\'\\\'\'}"; }
-  echo "# revview emulator (from: bash $root/emulator/run.sh --print-aliases)"
+  echo "# revview emulator"
   alias_line revview "bash $q"
   alias_line revview-keys "bash $q --keys"
   alias_line revview-stop "bash $q --stop"
@@ -97,21 +130,28 @@ if [ -n "$want_aliases" ]; then
 fi
 
 if [ -n "$want_stop" ]; then
-  # signal every run.sh of this user that has a pid file; a stale file (pid gone, or not a run.sh) is removed
+  # Stop EVERY run.sh of this user that is running. A pid file is "pid start-time"; it is only trusted when it is a
+  # regular file of ours in a safe directory, and the pid is signalled only when that process still has that start
+  # time (a reused pid has another). A stale file is removed; the file of a live run.sh never is (it removes its own).
   found=0
-  for f in "$pid_dir"/revview-emu-"$(id -u)"-*.pid; do
-    [ -e "$f" ] || continue
-    p=$(< "$f")
-    if [[ "$p" =~ ^[0-9]+$ ]] && kill -0 "$p" 2> /dev/null && tr '\0' ' ' < "/proc/$p/cmdline" 2> /dev/null | grep -q 'emulator/run\.sh'; then
-      kill -TERM "$p" 2> /dev/null
-      n=0
-      while kill -0 "$p" 2> /dev/null && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n + 1)); done
-      if kill -0 "$p" 2> /dev/null; then echo "run.sh: pid $p did not stop within 5 s" >&2; exit 1; fi
-      echo "stopped (pid $p)"
-      found=1
-    fi
-    rm -f "$f"
-  done
+  while IFS= read -r d; do
+    pid_dir_safe "$d" || continue
+    for f in "$d"/*.pid; do
+      { [ -f "$f" ] && [ ! -L "$f" ] && [ -O "$f" ]; } || continue
+      p=
+      st=
+      read -r p st < "$f" 2> /dev/null
+      if [[ "$p" =~ ^[0-9]+$ ]] && [[ "$st" =~ ^[0-9]+$ ]] && [ "$(start_time "$p")" = "$st" ]; then
+        kill -TERM "$p" 2> /dev/null
+        n=0
+        while kill -0 "$p" 2> /dev/null && [ "$(start_time "$p")" = "$st" ] && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n + 1)); done
+        if kill -0 "$p" 2> /dev/null && [ "$(start_time "$p")" = "$st" ]; then echo "run.sh: pid $p did not stop within 5 s" >&2; exit 1; fi
+        echo "stopped (pid $p)"
+        found=1
+      fi
+      rm -f -- "$f"
+    done
+  done < <(pid_dir_candidates)
   [ "$found" = 1 ] || echo "not running"
   exit 0
 fi
@@ -174,8 +214,14 @@ trap 'exit 0' INT TERM HUP
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/revview-emu.XXXXXX") || { echo "run.sh: cannot make a temp dir" >&2; exit 1; }
 log="$work/server.log"
-pidfile="$pid_dir/revview-emu-$(id -u)-$$.pid"
-echo $$ > "$pidfile" 2> /dev/null || pidfile=
+# the pid file for --stop: the first safe directory that takes it; if none does, say so and run on
+mystart=$(start_time $$)
+while IFS= read -r d; do
+  pid_dir_safe "$d" make || continue
+  rm -f -- "$d/$$.pid" # a leftover of an earlier run.sh with this pid; noclobber below refuses anything planted since
+  if (umask 077; set -o noclobber; printf '%s %s\n' "$$" "$mystart" > "$d/$$.pid") 2> /dev/null; then pidfile="$d/$$.pid"; break; fi
+done < <(pid_dir_candidates)
+[ -n "$pidfile" ] || echo "run.sh: no pid file; --stop will not find this run" >&2
 
 server_args=(--dev-bridge --dev-keys "$keymap")
 [ "$mode" = live ] || server_args+=(--dev-demo)

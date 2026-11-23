@@ -35,9 +35,7 @@ export async function buildSheet({ mapPath = DEFAULT_MAP, scenesPath = DEFAULT_S
   const holdMs = m.timing?.holdMs ?? 400;
   const longMs = m.timing?.longHoldMs ?? 1000;
   const out = [];
-  out.push('Laptop keys (click the window first). Tap = press and release.');
-  out.push(`Hold = ${holdMs / 1000} s, long hold = ${longMs / 1000} s.`);
-  out.push('');
+  out.push(`Click the window first. Tap = press and release; hold = ${holdMs / 1000} s, long hold = ${longMs / 1000} s.`);
   out.push(`${pad('KEY', 10)}${pad('BUTTON', 14)}${pad('TAP', 16)}${pad('HOLD', 13)}LONG HOLD`);
   for (const b of m.buttons) {
     const l = LABELS[b.button];
@@ -49,14 +47,14 @@ export async function buildSheet({ mapPath = DEFAULT_MAP, scenesPath = DEFAULT_S
   const { buildLoop } = await import(pathToFileURL(scenesPath).href);
   const names = buildLoop(1).map((s) => s.name);
   out.push('');
-  out.push('Demo keys (demo mode only; the demo player handles them, not the bar):');
-  out.push(`  1-${names.length}   jump to a scene:`);
-  out.push(`        ${names.join(', ')}`);
-  out.push('  P     pause / continue          [  slower          ]  faster');
-  out.push('');
-  out.push('In demo mode nothing is sent to a Claude: allow, deny, cancel and talk only');
-  out.push('show what the bar would show. Read aloud speaks only with');
-  out.push('REVVIEW_SPEECH=config/speech.json and espeak-ng (or Piper) installed.');
+  out.push('Demo keys (demo mode only; the demo player takes them, not the bar):');
+  out.push(`  1-${names.length}  jump: ${names.join(', ')}`);
+  out.push('  P  pause / continue          [  slower          ]  faster');
+  out.push('In the demo these change the screen: Left, Right, Up, Down, M, Backspace held');
+  out.push('(go to the session that needs you most). Enter picks a row in a list or menu.');
+  out.push('Enter, N, Esc, Space, R on a permission or done screen only log the gesture: no');
+  out.push('real session is behind them (needs --live). Nothing is sent to a Claude.');
+  out.push('R speaks on any machine that has espeak-ng or Piper installed.');
   return `${out.join('\n')}\n`;
 }
 
