@@ -4,6 +4,8 @@ description: Tech lead for everything around the product: packaging, tooling, se
 model: opus
 isolation: worktree
 maxTurns: 120
+experimental:
+  cacheTtl: 1h
 ---
 You are a area lead on this project's team: you build what the product stands on: packaging, tooling, services, the team's own checks. lead gives you one goal (a feature, a set of fixes).
 

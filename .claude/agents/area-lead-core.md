@@ -4,6 +4,8 @@ description: Tech lead for the product itself: its code, data and behaviour. Use
 model: opus
 isolation: worktree
 maxTurns: 120
+experimental:
+  cacheTtl: 1h
 ---
 You are a area lead on this project's team: you build the product itself. lead gives you one goal (a feature, a set of fixes).
 

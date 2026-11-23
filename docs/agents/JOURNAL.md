@@ -378,3 +378,11 @@ Sync: gate main a47f417. `qa9-live` MERGED (3bc676b) and `lead-notes-24` MERGED 
 Done: asked for a publish of main (the QA round 9 fixes to `run.sh --live`). No agent spawned, no new work: all four charter stages are built and the team waits on the owner's bench (`docs/BENCH-TEST.md`) and on the kit-schedule escalation, which stays open.
 
 Cost: well under $1.
+
+## 2026-11-23, cycle 26 (idle, one kit change)
+
+Sync: gate main 900bfce. `lead-notes-25` MERGED (1420 tests) and published at 900bfce. Deleted both notes branches, local main fast-forwarded. No worktree, nothing failed or held. No owner message, no owner issue.
+
+Done: the kit's cost-rule change for this cycle. Added `experimental:` / `  cacheTtl: 1h` to the header of both tech lead definitions (`area-lead-core`, `area-lead-platform`), nothing else changed there; builder, scout, reviewer and qa untouched. The lead made this two-line edit itself with the notes (as the kit's notice asks) instead of starting an Opus tech lead for it. No agent spawned, no publish requested (notes and agent config only). The team still waits on the owner's bench and the kit-schedule escalation.
+
+Cost: well under $1.

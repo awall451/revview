@@ -1,6 +1,6 @@
 # STATE
 
-Updated 2026-11-23 (cycle 25, idle cycle: `qa9-live` MERGED as 3bc676b with `lead-notes-24` a47f417, 1420 tests; branches deleted; publish requested for main at a47f417 plus these notes). Before it: cycle 24 (rebase and resubmit of `qa9-live`), cycle 23 (QA round 9 on `run.sh --live`: 1 major, 2 minor, 3 polish, all six fixed), cycle 22 (one-shot "Emulator on your laptop 4", `live-emu` MERGED 06d19d3, published 998fb0a), cycles 17-21 (QA 7b, laptop emulator, demo, guide, stop fixes), all merged. Milestone 1 CLOSED; stages 2, 3 and 4 BUILT; milestone 2 complete in the repository; all of it unproven on the Pi. What is left is the owner's bench.
+Updated 2026-11-23 (cycle 26, idle cycle: `lead-notes-25` MERGED as 900bfce, 1420 tests, and PUBLISHED at 900bfce; one kit-requested change submitted with these notes: `experimental: cacheTtl: 1h` in the header of both tech lead definitions). Before it: cycle 25 (`qa9-live` MERGED 3bc676b, publish requested), cycle 24 (rebase and resubmit of `qa9-live`), cycle 23 (QA round 9 on `run.sh --live`: 1 major, 2 minor, 3 polish, all six fixed), cycle 22 (one-shot "Emulator on your laptop 4", `live-emu` MERGED 06d19d3, published 998fb0a), cycles 17-21 (QA 7b, laptop emulator, demo, guide, stop fixes), all merged. Milestone 1 CLOSED; stages 2, 3 and 4 BUILT; milestone 2 complete in the repository; all of it unproven on the Pi. What is left is the owner's bench.
 
 ## Roadmap (the charter's four stages)
 
@@ -29,9 +29,9 @@ Updated 2026-11-23 (cycle 25, idle cycle: `qa9-live` MERGED as 3bc676b with `lea
 
 ## In flight
 
-- Nothing in flight except these notes: `ready/lead-notes-25` / `work/lead-notes-25` (delete both once merged, fast-forward local `main`).
-- `qa9-live` MERGED 2026-11-23 (3bc676b, gate main a47f417, 1420 tests). Publish requested in cycle 25 (`owner-publish status` shows whether the console has pushed it; last published before that: 998fb0a).
-- No worktree left. No held change. No open owner message or owner issue. Local `main` = gate main a47f417 at the end of cycle 25.
+- Only these notes: `ready/lead-notes-26` / `work/lead-notes-26` (delete both once merged, fast-forward local `main`). The branch also carries the kit's cost-rule change: two lines `experimental:` / `  cacheTtl: 1h` added to the header of `.claude/agents/area-lead-core.md` and `area-lead-platform.md`, nothing else in those files. If it fails at the gate, read the log first; the kit's notice repeats until the lines are on main.
+- Published: main at 900bfce (2026-11-23T20:02Z). Nothing product-side is unpublished; the cycle 26 branch is team notes and agent config only, so no publish was requested for it.
+- No worktree left. No held change. No open owner message or owner issue. Local `main` = gate main 900bfce at the start of cycle 26.
 - Rule: when a work branch and the notes go in the same cycle, stack the notes on the work branch.
 - What `qa9-live` contains (DECISIONS.md "QA round 9"; issues `qa-20261123-r9-00..06`, committed on that branch): `run.sh --live` passes a projects list (the user's `REVVIEW_PROJECTS`, else a generated `projects.json` with just DIR) so menu -> New session works; the leftover-process pattern in the guide and bench L11 is `tmux .*revview-emu\.|src/server/index.js` and a test pins it against a real run; "Claude exited at once ..." message (exit 1) when the session dies at start; a DIR with `#` or a control character is refused before anything starts (exit 2); `--stop` says on stderr that it only looked under this shell's TMPDIR; the empty pid directory is removed on exit; bench L14, L15 added.
 - NOT fixed there, known: the FIRST session of a `--live` run shows UNKNOWN, not STARTING, until its first hook (it starts through `--start` without `--boot`; the guide now says so, DECISIONS records it). The "Claude exited at once" message only catches a claude that dies before the server is up; one that dies a little later still gives the old path. The `--keys` sheet is at its line limit, so the "Too early: press again" 1.5 s rule is only in the guide. Not reviewed by a reviewer (385 lines, lead read the `run.sh` diff) and the fixes were NOT re-run by QA.
