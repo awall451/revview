@@ -249,3 +249,17 @@ Process notes:
 - Cycle cost about $7 of $40.
 
 Gate: `qa7-bench` MERGED first try at 01:37Z on 2026-11-23 (383dc5c, 1293 tests). Notes branch based on that commit, submitted after the verdict. Publish requested.
+
+## 2026-11-23: cycle 17 (short cycle: QA round 7b)
+
+Start: gate main e33cbfa, `lead-notes-16` merged and published (01:47Z), no owner message, no open issue. Chosen: the one planned job, QA round 7b (Sonnet), then one Sonnet lead for what it found.
+
+QA round 7b (about 3 minutes): r7-01..08 all held (real server with a stand-in `claude`, the installer twice in a fake root, the documents read in the owner's order); `tools/check` 1293. New: r7b-01 minor (First afternoon mixed hand-started servers and the service without saying when to stop or start it; one relative path), r7b-02 polish (the normal end of a drive showed no next step), r7b-03 polish (`pi/README.md` said P1-P14, the list has P1-P21).
+
+Dispatched: area-lead-core on Sonnet, topic `qa7b-fixes`. It did the work itself. First report claimed a new unit test that was not on the branch (its write had been rejected and it did not notice), and the note was set also without `--sessions`, where there is no menu; the changed r5-04 assertion pinned that untrue case. Sent back once: the note only when `board.owned !== null`, hidden while locked, real tests (three seen failing against the old code), an emulator fit test with an 80-character repo. 1299 tests. S1 and S3 of First afternoon now use a session of the running service; S3's hook install dropped (HW1 does it). DECISIONS.md "QA round 7b".
+
+Review: the lead read the core diff (two lines of logic); no reviewer agent.
+
+Process notes:
+- Check a report's "added a test" against `git diff --stat`: it caught a test that did not exist.
+- Cycle cost about $2.5 of $40.
