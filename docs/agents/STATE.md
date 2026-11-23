@@ -1,6 +1,6 @@
 # STATE
 
-Updated 2026-11-23 (cycle 22, one-shot owner job 20261123T034545Z-o-59dc1b "Emulator on your laptop 4": `live-emu` MERGED as 06d19d3 (1413 tests); owner message answered `done`, owner issue 20261123T034527Z-i-170701 done, publish requested). Before it: cycle 21 (`laptop-stop-fix` 0d8afcc and `emu-test-leak` ee25893, both MERGED; gate main was 3d3dc72, published). Before it: cycle 20 (`laptop-guide`), cycle 19 (`demo-mode`, 49fc200), cycle 18 (`laptop-emu`, 86a5f21), cycle 17 (QA round 7b, `qa7b-fixes`, 86bdaa3). Milestone 1 CLOSED; stages 2, 3 and 4 BUILT; milestone 2 complete in the repository; all of it unproven on the Pi. What is left is the owner's bench.
+Updated 2026-11-23 (cycle 23, normal cycle: QA round 9 on `run.sh --live` (1 major, 2 minor, 3 polish), all six fixed in `qa9-live` 9c51ce6, SUBMITTED, verdict not yet read; 1420 tests on the branch). Before it: cycle 22 (one-shot "Emulator on your laptop 4", `live-emu` MERGED 06d19d3, 1413 tests, published 998fb0a). Before it: cycles 17-21 (QA 7b, laptop emulator, demo, guide, stop fixes), all merged. Milestone 1 CLOSED; stages 2, 3 and 4 BUILT; milestone 2 complete in the repository; all of it unproven on the Pi. What is left is the owner's bench.
 
 ## Roadmap (the charter's four stages)
 
@@ -29,10 +29,12 @@ Updated 2026-11-23 (cycle 22, one-shot owner job 20261123T034545Z-o-59dc1b "Emul
 
 ## In flight
 
-- Nothing in flight. `live-emu` MERGED (06d19d3). `ready/lead-notes-22` / `work/lead-notes-22` (these notes): delete once merged.
-- Leftover local branches from cycle 21, NOT touched in the one-shot cycle 22 (it was told to leave earlier work alone): `ready/emu-test-leak`, `work/emu-test-leak`, `ready/lead-notes-21b`, `work/lead-notes-21b`. Both topics are merged (gate main 3d3dc72): the next normal cycle deletes the four branches. Local `main` is behind gate/main: reset it (`git checkout main && git reset --hard gate/main`).
-- No worktree left. No held change. No open owner message. All four "Emulator on your laptop" backlog items are done.
-- NEXT (normal cycle, nothing urgent): a QA pass on `run.sh --live` with the stand-in on a fresh clone is due (the one-shot had a Sonnet review, no QA round); otherwise the team is waiting on the owner's bench (`docs/BENCH-TEST.md`, now including L7-L13) and on the two open escalations. Do not invent work.
+- `ready/qa9-live` (= `work/qa9-live`, 9c51ce6, one commit on gate main 998fb0a): QA round 9 fixes, SUBMITTED in cycle 23. Next cycle: read the verdict; merged -> delete both branches and ask for a publish (`owner-publish request`); failed -> give the gate log to `area-lead-core` (Sonnet) as a fix task.
+- `ready/lead-notes-23` / `work/lead-notes-23` (these notes): delete once merged.
+- No worktree left. No held change. No open owner message. Local `main` = gate main 998fb0a at the end of cycle 23 (fast-forward it after the merges).
+- What `qa9-live` contains (DECISIONS.md "QA round 9"; issues `qa-20261123-r9-00..06`, committed on that branch): `run.sh --live` passes a projects list (the user's `REVVIEW_PROJECTS`, else a generated `projects.json` with just DIR) so menu -> New session works; the leftover-process pattern in the guide and bench L11 is `tmux .*revview-emu\.|src/server/index.js` and a test pins it against a real run; "Claude exited at once ..." message (exit 1) when the session dies at start; a DIR with `#` or a control character is refused before anything starts (exit 2); `--stop` says on stderr that it only looked under this shell's TMPDIR; the empty pid directory is removed on exit; bench L14, L15 added.
+- NOT fixed there, known: the FIRST session of a `--live` run shows UNKNOWN, not STARTING, until its first hook (it starts through `--start` without `--boot`; the guide now says so, DECISIONS records it). The "Claude exited at once" message only catches a claude that dies before the server is up; one that dies a little later still gives the old path. The `--keys` sheet is at its line limit, so the "Too early: press again" 1.5 s rule is only in the guide. Not reviewed by a reviewer (385 lines, lead read the `run.sh` diff) and the fixes were NOT re-run by QA.
+- NEXT (nothing urgent): after `qa9-live` merges, IDLE cycles again (sync, verdicts, inbox, stop; well under $1). The team is waiting on the owner's bench (`docs/BENCH-TEST.md`, now L1-L15) and on the kit-schedule escalation. Do not invent work.
 
 ## Emulator on the owner's laptop (owner backlog, four items)
 

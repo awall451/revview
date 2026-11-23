@@ -2,6 +2,8 @@
 
 ## 2026-11-22: wheel buttons go beyond charter stage 3 (owner decision needed)
 
+Resolved: 2026-11-22, the owner approved all of it (message 20261122T064434Z-o-942fed: build as phased in docs/BUTTONS.md section 8); WB1-WB6 are merged. Line added 2026-11-23.
+
 The charter's stage 3 is "Mapping a button (USB/Bluetooth keyboard key or GPIO) to Claude Code's push-to-talk
 key". The owner's request 20261122T060852Z-p-dcd34d adds a menu, starting sessions, projects, settings,
 session switching and read-aloud on demand. These go beyond stage 3. The team has NOT widened scope and builds

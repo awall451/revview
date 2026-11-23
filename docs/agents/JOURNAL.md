@@ -346,3 +346,17 @@ Process notes:
 - Area leads' sessions are locked to their own worktree (`.claude/worktrees/agent-<id>`); they cannot work in a worktree path the lead names, and two agents cannot both have `work/<topic>` checked out. For a fix round: remove the first agent's worktree before spawning the next, and tell the agent to `git switch work/<topic>` in its own worktree.
 - Briefs for anything that starts `claude`: say "never run it by hand without the stand-in on PATH" to the BUILDERS too, not only the area lead.
 - Cycle cost about $4.5 of $40 (the estimate was $8); about 50 minutes.
+
+## 2026-11-23: cycle 23 (normal cycle: QA round 9 on `run.sh --live`)
+
+Sync: gate main 998fb0a, nothing failed or held; deleted the four leftover cycle 21 branches; local main fast-forwarded. No owner message, no owner issue.
+
+Decided: the one piece of due work was the QA pass on `run.sh --live` that the one-shot cycle 22 skipped. QA (Sonnet, fresh clone, stand-in claude first on PATH, about 10 minutes) filed one major (r9-01: menu -> New session says "No projects" in a live run, and the CLAUDE EXITED screen sends the owner there), two minor (r9-02 the guide's leftover grep misses the private tmux server; r9-03 a claude that exits at once gives a tmux error) and three polish (r9-04 `#` in DIR refused late; r9-05 "Too early" rule and UNKNOWN not in the guide; r9-06 `--stop` with another TMPDIR). Cleanup, isolation from HOME, key routing and two runs side by side all held. No real claude was started.
+
+Dispatched: `area-lead-core` (Sonnet), one goal, all six. Branch `work/qa9-live` 9c51ce6, check green, 1420 tests (1098 unit + 321 emulator + seed). The lead read the `run.sh` diff: small and plain; no reviewer (385 lines, one test assertion changed for a stated reason). Submitted as `ready/qa9-live`. Not fixed, on purpose: the first live session shows UNKNOWN instead of STARTING (needs `--boot` or a start-order change; documented instead).
+
+Housekeeping: the scope escalation (wheel buttons beyond stage 3) was answered by the owner on 2026-11-22 but still showed as waiting: added its `Resolved:` line. The kit-schedule escalation stays open (nothing the team can do).
+
+Process note: the QA agent writes issue files into the lead's checkout uncommitted; the area lead copies them into its worktree and commits them with the fix, then the lead deletes the untracked copies. That worked; keep it.
+
+Cost: about $3 of $40, about 30 minutes.
