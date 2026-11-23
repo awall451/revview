@@ -360,3 +360,13 @@ Housekeeping: the scope escalation (wheel buttons beyond stage 3) was answered b
 Process note: the QA agent writes issue files into the lead's checkout uncommitted; the area lead copies them into its worktree and commits them with the fix, then the lead deletes the untracked copies. That worked; keep it.
 
 Cost: about $3 of $40, about 30 minutes.
+
+## 2026-11-23: cycle 24 (idle cycle: resubmit `qa9-live`)
+
+Sync: gate main d2ecf26 (`lead-notes-23` merged). `qa9-live` 9c51ce6 REJECTED: "not based on current main". Cause: the notes branch and the work branch were both cut from 998fb0a and submitted together; the gate merged the notes first. Not a check failure.
+
+Done: rebased `work/qa9-live` onto d2ecf26 (no conflict, same 385-line diff, now 3bc676b), `ready/qa9-live` moved there. These notes are stacked on top of it as `ready/lead-notes-24`, so whichever the gate takes first, the other is based on (or contained in) main. No agent spawned, no new work: the team still waits on the owner's bench. No owner message, no owner issue. Publish: to be asked next cycle once `qa9-live` is on main.
+
+Process note: submit the notes stacked on the cycle's work branch, never side by side from the same base.
+
+Cost: well under $1.
