@@ -293,3 +293,17 @@ Process notes:
 - Cycle cost about $3.6 of $40 (the estimate was $6).
 
 Gate: `demo-mode` MERGED first try on 2026-11-23 (49fc200, 1361 tests, was 1336). Notes submitted after the verdict. Publish requested.
+
+## 2026-11-23: cycle 20 (one-shot job: "Emulator on your laptop 3")
+
+Asked: owner message 20261123T052206Z-o-fe895b (backlog item 20261123T033802Z-b-e11467, estimate 40 minutes / $4; owner issue 20261123T034512Z-i-781902): the laptop guide, the generated `--keys` cheatsheet, the bashrc aliases, a fresh-clone QA pass, two bench items, a publish. Nothing else was done this cycle.
+
+Dispatched: area-lead-platform (Sonnet, no builders), topic `laptop-guide`: 2 commits, 1375 tests (was 1361). Then in parallel: QA (Sonnet) as the owner on a fresh clone with only node on the PATH (every key of the sheet pressed through Playwright; 8 findings, none major: the guide said speech needs `REVVIEW_SPEECH` (wrong, `config/speech.json` is the default), "allow/deny/cancel/talk show what the bar would show" (nothing visible happens in the demo), stale bench L1, `--stop` wording) and a Sonnet reviewer (changes needed, 3 blocking, all on `--stop`: pid file in shared /tmp follows a planted symlink; the `/proc` cmdline check said "not running" for `cd emulator; bash run.sh` and deleted its pid file; a FIFO made `--stop` hang; 6 of 8 mutations caught). One fix round (area-lead-platform, Sonnet), commit d6c022e on `work/laptop-guide-fix`.
+
+Over the estimate: the owner's notice at 60 minutes stopped the fix agent before its final checks (it had run 49 minutes). Its one local `tools/check` run had a single failure in `tests/unit/hook-event.test.js:237` (timing, untouched file, loaded machine). Submitted as it was: the gate decides. The fix round was not re-reviewed and not re-run by QA.
+
+Process notes:
+- Tests that start `run.sh` wrote pid files into the shared `/tmp`; QA's `--stop` stopped another agent's run and QA deleted about 40 stale pid files that were not its own. Tests now use a private `XDG_RUNTIME_DIR`. Rule for briefs: anything that signals processes by a shared file gets a private directory in tests from the first version.
+- `/home/agent/revview` has no `node_modules`; QA used `/tmp/held-tree/node_modules` for Playwright. Tell QA where one is.
+- The fix round was too big for one Sonnet agent inside the estimate (14 points); the estimate of 40 minutes had no room for a review round. Estimate a review and fix round into every item that changes a script.
+- Cycle cost about $5 of $40 (the estimate was $4).
