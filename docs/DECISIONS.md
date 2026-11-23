@@ -1440,3 +1440,31 @@ Tested in the unit suite only (fakes, injected timers); nothing run on a Pi.
   The allow rule and the others-left wording are unchanged.
 - **r7b-03:** `pi/README.md` says P1-P21. Older "P1-P14" texts in DECISIONS, JOURNAL, STATE and old issues are history
   and stay.
+
+## 2026-11-23: Emulator on your laptop 1 (`emulator/run.sh`)
+
+- **Key map:** `config/buttons.laptop.json` (dev bridge only; `config/buttons.json` unchanged): arrows, Enter = press,
+  Backspace = back (hold = home), Space = push-to-talk, R = read aloud (hold = stop), Esc = cancel (long hold),
+  N = deny, M = menu; no spare. The keymap parser now also accepts Up/Down/Left/Right/Enter/Backspace/Space/Esc and
+  letters A-Z (Linux codes from input-event-codes.h, browser codes ArrowUp/KeyM/...).
+- **Option:** server `--dev-keys <file>`, an error (exit 2) without `--dev-bridge`; the bridge then gets its own
+  pipeline from that file. `GET /dev/keys` (registered only with the dev bridge, like `POST /dev/key`) lists the
+  bound browser codes; `devkeys.js` prevents their default action unless Ctrl/Alt/Meta is held (browser shortcuts
+  keep working). Without `--dev-bridge` nothing changes; the 403 rules and `pi/` are untouched.
+- **Scale:** `--scale S` adds `--force-device-scale-factor=S` and keeps `--window-size=1280,400`. Chromium's
+  `--window-size` is in device-independent pixels (seen in headless Chromium: width 1920 at factor 1.5 gave
+  innerWidth 1920), so the window is S times bigger on screen and the page keeps its 1280x400 CSS viewport (the fit
+  logic sees the panel size). Without `--scale` no factor is forced (a HiDPI laptop keeps its own).
+- **Port:** the server starts on port 0 and the script reads the real port from its `view:` line (no race);
+  `--port N` fixes it. 127.0.0.1 only, as always.
+- **Browser order:** `REVVIEW_BROWSER`, else chromium, chromium-browser, google-chrome, google-chrome-stable,
+  microsoft-edge, microsoft-edge-stable; its own `mktemp` profile (`--user-data-dir`), removed by the trap. If the
+  browser returns within `REVVIEW_QUICK_EXIT_SECS` (default 3 s), the script says the window may be in another
+  instance (or names the failure status) and keeps serving until Ctrl+C. No browser: prints the URL and serves.
+- **WSL2 (from memory, untested):** detected by `WSL_DISTRO_NAME` or "microsoft"/"wsl" in the kernel release. A Linux
+  browser is used if found and WSLg is there (`WAYLAND_DISPLAY` or `DISPLAY`); else Windows Chrome/Edge under
+  `/mnt/c/Program Files...` with URL host `localhost` (WSL2 localhost forwarding) and a profile under the Windows
+  `%TEMP%` (`cmd.exe` + `wslpath`).
+- **Tests:** the shell test of `run.sh` is a node:test file (`tests/unit/emulator-run.test.js`, stand-in browser) so
+  it runs in the existing unit step; `tools/check` is unchanged; its lint step shellchecks `emulator/run.sh` as a
+  tracked `.sh` file.

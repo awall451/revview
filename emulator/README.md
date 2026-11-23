@@ -89,3 +89,13 @@ overlap or overflow, inverted row with its bar, scroll marks, the old look witho
 
 `tests/wb4-live.spec.js`: the same looks driven by key presses (dev key bridge, `/?devkeys=1`) against a live server with a
 fake session runner (no tmux): switch, list, back, home, New session, list timeout, and the 403 for posted internal events.
+
+## Laptop (Linux / WSL2)
+
+`bash emulator/run.sh [--scale 1.5]` starts the server with the dev key bridge and the laptop key map
+(`config/buttons.laptop.json`) and opens the 1280x400 page in its own Chromium, Chrome or Edge window. It needs only
+Node 22+ and one of those browsers (`REVVIEW_BROWSER` picks one). Closing the window, or Ctrl+C, stops everything and
+removes the temp profile. `--keys` prints the key map (Backspace hold = home, R hold = stop, Esc long hold = Ctrl+C),
+`--no-browser` only serves, `--port N` fixes the port, `--help` lists the rest. Tested only against a stand-in browser
+(`tests/unit/emulator-run.test.js`): nothing has run on a real laptop or a real WSL2 yet, and the WSL2 / Windows browser
+paths are from memory.

@@ -287,3 +287,14 @@ partition and a spare stick first, not on data you need.
 | S4B-17 | While LOCKED, post a fake unlock: `curl -s -X POST --data-binary '{"hook_event_name":"RevviewDataLock","locked":false}' http://127.0.0.1:8138/event` | Answer 204, but the bar still shows INSERT KEY and no session starts: the post is only a poke, the mount table decides | untested |
 | S4B-18 | After a `git pull` that changes `pi/data.mjs`: the Updating order (update with the stick in, reboot without it, `data-setup.sh` without `--format`, reboot with it) | `data-setup.sh` refuses while the data is open and works with it locked; the new unit/rule files are in place; the data unlocks at the next boot | untested |
 | S4B-19 | `docs/REVOKE.md` (c) on a SPARE card and stick: `luksKillSlot` the stick's slot, make a new stick by hand, `luksAddKey --pbkdf pbkdf2 --iter-time 500`, `data-setup.sh` without `--format`, reboot with the new stick | The new stick unlocks at boot and the old one does not; `luksDump` shows the new slot as `pbkdf2`. Note any cryptsetup option that failed (all from memory) | untested |
+
+## Emulator on your laptop 1 (2026-11-23)
+
+Written and tested only with a stand-in browser and headless Chromium on the build VM; nothing has run on a real
+laptop desktop or WSL2. WSL2 detection and the Windows browser paths are from memory. DECISIONS "Emulator on your
+laptop 1".
+
+| # | Try | Should happen | State |
+|---|---|---|---|
+| L1 | Linux laptop with Chromium or Chrome: `bash emulator/run.sh`, then `--scale 1.5`; press M, arrows, Backspace, Enter; close the window | A window without browser bars opens on the empty bar; M opens the menu, arrows move, Backspace closes, Enter opens the list ("No sessions"); Space and arrows do not scroll. With `--scale 1.5` it is 1.5 times bigger and the bar still fits (note whether the title bar eats part of the 400 px). Closing the window ends the script; `pgrep -af src/server/index.js` shows nothing, no `revview-emu.*` dir is left in `/tmp`. If Chrome hands the URL to a running instance, note the message | untested |
+| L2 | WSL2 on Windows 11: `bash emulator/run.sh` with a Linux Chromium under WSLg, then without one (Windows Chrome or Edge) | WSLg: as L1. Windows browser: the window opens via `localhost`, keys work, closing it ends the script and the `revview-emu.*` profile under the Windows `%TEMP%` is gone. Note any wrong path or detection | untested |
