@@ -230,3 +230,22 @@ Process notes:
 - Cycle cost about $21 of $40 (part B alone about $10).
 
 Gate: `stage4b-qa6` MERGED first try at 00:07Z on 2026-11-23 (7f5d5c3, 1271 tests). Notes branch based on that commit, submitted after the verdict. Publish requested.
+
+## 2026-11-23: cycle 16 (normal cycle: QA round 7, the owner's walk-through)
+
+Start: gate main a85c6bf, `lead-notes-15` merged, published at 00:17Z, no owner message, no open issue. Chosen: QA round 7 on main (milestone 2 had landed), then one platform lead for whatever it found.
+
+QA round 7 (about 8 minutes of agent time): all eight r6b fixes held (r6b-05 partly: H1-H7 ids were still double); no regression in the glance view (112 recorded events replayed into a real server). 8 new findings, the 3 majors all in the documents: the walk-through stopped before `/voice` (r7-02); the dongle ids were lost on a re-run or update (r7-03); no reading order, 149 bench items in building order (r7-07). Minor: the "<repo> ended" note without a next step (r7-01), double ids, five stale expected results, items starting a second server on 8138, relative script paths.
+
+Dispatched: area-lead-platform (Opus, three Sonnet builders + a scout), topic `qa7-bench`. Decisions (DECISIONS.md "QA round 7"): the owner's dongle ids and key map live in `/etc/revview/buttons.json` (root, 0644, created once, never overwritten, edited with sudoedit); the udev rule is generated from it (ids must be exactly 4 hex digits; a symlink, bad JSON or a bad id leaves the rule and exits 1; a name-only or path-only device is a note, no rule); `sox` in the package list (Claude Code 2.1.330's own strings: `/voice [hold|tap|off]`, default hold, key space, needs SoX and a claude.ai sign-in); `pi/README.md` "First drive (parked)"; BENCH-TEST "First afternoon" (18 steps), Stage 2 ids now HW1-HW7, 151 items, all untested; new internal event `RevviewNoSessionPress` (403 over HTTP).
+
+Review: Sonnet reviewer on the branch, 8 mutations, 4 missed (the hex `$` anchor that guards the udev rule text, the 403 for the new event, the symlink guard, one note branch): changes needed, no behaviour bug. One fix round (platform lead on Sonnet): all pinned, each new test seen failing against its mutation; also the read through a symlinked `/etc/revview` directory is refused. 1293 tests (was 1271). The fix round was not re-reviewed.
+
+Not proven: anything on the Pi; the `sox` package name; the tmux detach keys in the README.
+
+Process notes:
+- Agents cannot remove their own worktrees (sandbox); the lead removes them with `git worktree remove --force --force` after each report.
+- QA writing issue files untracked into the main checkout and the area lead committing them first worked; the lead then cleans the untracked copies.
+- Cycle cost about $7 of $40.
+
+Gate: `qa7-bench` MERGED first try at 01:37Z on 2026-11-23 (383dc5c, 1293 tests). Notes branch based on that commit, submitted after the verdict. Publish requested.

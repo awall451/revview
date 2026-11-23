@@ -1,6 +1,6 @@
 # STATE
 
-Updated 2026-11-23 (cycle 15, a normal cycle: milestone 2 parts B, C and D built and MERGED together as ONE topic `stage4b-qa6`, gate main 7f5d5c3, 1271 tests, was 1064). Milestone 1 CLOSED; stages 2, 3 and 4 BUILT; all of it unproven on the Pi. Milestone 2 is complete in the repository: what is left is the owner's bench.
+Updated 2026-11-23 (cycle 16, a normal cycle: QA round 7 and its fixes, ONE topic `qa7-bench`, head 383dc5c, 1293 tests, was 1271; MERGED at 01:37Z as 383dc5c). Milestone 1 CLOSED; stages 2, 3 and 4 BUILT; milestone 2 complete in the repository; all of it unproven on the Pi. What is left is the owner's bench.
 
 ## Roadmap (the charter's four stages)
 
@@ -29,8 +29,8 @@ Updated 2026-11-23 (cycle 15, a normal cycle: milestone 2 parts B, C and D built
 
 ## In flight
 
-- Nothing. `stage4b-qa6` MERGED at 00:07Z on 2026-11-23 as 7f5d5c3 (18 commits, 64 files, about +4900 -200; `tools/check` untouched, no new dependency). Ready and work branches deleted. A publish was requested.
-- `ready/lead-notes-15` (these notes): next cycle delete it and `work/lead-notes-15` once merged.
+- Nothing. `qa7-bench` MERGED at 01:37Z on 2026-11-23 as 383dc5c (6 commits on a85c6bf, 31 files, about +900 -100; `tools/check` untouched, no new dependency). Ready and work branches deleted. A publish was requested.
+- `ready/lead-notes-16` (these notes, on top of 383dc5c): next cycle delete it and `work/lead-notes-16` once merged.
 - No worktree left. No held change.
 
 ## Milestone 2: the Pi appliance (charter stage 4)
@@ -69,14 +69,14 @@ Design: `docs/BUTTONS.md`; recordings `fixtures/buttons/`. Phases:
 
 ## Next
 
-1. (done in cycle 15: `stage4b-qa6` merged, publish requested.) Handle the verdict of `lead-notes-15`.
-2. The software for all four charter stages is built; nothing is proven on a Pi. The team's remaining work is small. Candidates, in order: (a) QA round 7 on main: re-run r6b-01..08, the whole owner walk-through `pi/README.md` + `docs/REVOKE.md` + `docs/BENCH-TEST.md` as one document set (is the bench list in a sensible order for one afternoon at the bench? duplicates, stale items); (b) one bench guide: an ordered "first afternoon" path through the bench items (platform, Sonnet); (c) leftovers below.
-3. Leftovers (none blocking): `pi/data.mjs` exits 1 for both refusal and crash; the key-on Claude's exit REASON is not logged (needs tmux `remain-on-exit`); no script installs Piper (checksum unknown here); hold-mode push-to-talk not built (tap is the charter's mode); locking the data when the stick is pulled is not built (DESIGN: later, maybe); `linkedComponent` checks then writes (a race in principle, installer runs once as root); "<repo> ended" now also shows when the only session ends (wanted, check in QA 7).
-4. Do not invent features beyond the charter. If QA round 7 is clean, cycles should be short: answer owner messages and bench reports, fix what the bench finds.
+1. Handle the verdict of `lead-notes-16` (`qa7-bench` is merged, publish requested in cycle 16).
+2. The software for all four charter stages is built and QA round 7 (cycle 16) found no product regression; its 8 findings (3 major, all in the owner's documents) are fixed and merged (`qa7-bench`). The fixes were reviewed (Sonnet reviewer, 8 mutations; one fix round) but NOT re-run by QA. The owner's path is now: top-level README "On the Pi" -> `pi/README.md` (ends with "First drive (parked)") -> `docs/BENCH-TEST.md` "First afternoon" (18 ordered steps) -> the rest as reference; `docs/REVOKE.md`.
+3. Do not invent features beyond the charter. Cycles should now be SHORT and cheap: answer owner messages and bench reports, fix what the bench finds. A QA round 7b (re-run r7-01..08 as the owner reading the documents once more, Sonnet-sized) is the only planned work; do it in cycle 17 or 18, then idle cycles: sync, verdicts, inbox, stop.
+4. Leftovers (none blocking): `pi/data.mjs` exits 1 for both refusal and crash; the key-on Claude's exit REASON is not logged (needs tmux `remain-on-exit`); no script installs Piper (checksum unknown here); hold-mode push-to-talk not built (tap is the charter's mode); locking the data when the stick is pulled is not built (DESIGN: later, maybe); when the shipped key map changes, the owner merges it into `/etc/revview/buttons.json` by hand (the installer prints a `note:` with the `diff` command); the package name `sox` on Raspberry Pi OS is taken from Claude Code's own hint, unverified (bench P21).
 
 ## QA issues
 
-No open QA issue after `stage4b-qa6`: r6-01..07 and r6b-01..08 closed there (r6b not yet re-run by QA; r6b-02 closed with a caveat: the log says Claude exited, not why).
+No open QA issue after `qa7-bench`: r7-01..08 closed there (not yet re-run by QA). All eight r6b fixes were re-run in round 7 and held.
 Known limits: a prompt tied to a call whose PostToolUse was lost still shows NEEDS PERMISSION until Stop/idle_prompt/a driver prompt; a late hook from a really dead owned Claude shows its session again; a posted SessionEnd hides a live owned window for up to one 5 s poll; a duplicate Post whose Pre was never seen is not caught; sessions not started by revview that die without SessionEnd stay on the bar; QA noted, unproven: if `/clear` changes the session id inside the same tmux window, the buttons may lose that window.
 
 ## Small follow-ups
