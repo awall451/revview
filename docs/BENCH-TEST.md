@@ -298,3 +298,13 @@ laptop 1".
 |---|---|---|---|
 | L1 | Linux laptop with Chromium or Chrome: `bash emulator/run.sh`, then `--scale 1.5`; press M, arrows, Backspace, Enter; close the window | A window without browser bars opens on the empty bar; M opens the menu, arrows move, Backspace closes, Enter opens the list ("No sessions"); Space and arrows do not scroll. With `--scale 1.5` it is 1.5 times bigger and the bar still fits (note whether the title bar eats part of the 400 px). Closing the window ends the script; `pgrep -af src/server/index.js` shows nothing, no `revview-emu.*` dir is left in `/tmp`. If Chrome hands the URL to a running instance, note the message | untested |
 | L2 | WSL2 on Windows 11: `bash emulator/run.sh` with a Linux Chromium under WSLg, then without one (Windows Chrome or Edge) | WSLg: as L1. Windows browser: the window opens via `localhost`, keys work, closing it ends the script and the `revview-emu.*` profile under the Windows `%TEMP%` is gone. Note any wrong path or detection | untested |
+
+## Emulator on your laptop 2: demo mode (2026-11-23)
+
+Tested only on the build VM (in-process server with an injected clock, stand-in browser, headless Chromium); nothing has
+run on a real laptop. DECISIONS "Emulator on your laptop 2".
+
+| # | Try | Should happen | State |
+|---|---|---|---|
+| L3 | Linux laptop: `bash emulator/run.sh`, watch one full loop, then press 1-7, P, `[` and `]`; close the window | The bar shows working, permission, done, waiting, offline, insert key, ended at a pace you can follow and loops; the terminal prints one `demo: N scene` line per scene. Each digit jumps to its scene, P freezes and resumes, `[` `]` slow down and speed up; the bar's own keys (M, arrows, Enter, Backspace) still work during the demo. Closing the window ends the script; `pgrep -af 'demo/player.js\|src/server/index.js'` shows nothing | untested |
+| L4 | Same, `bash emulator/run.sh --live` | No `demo:` lines; the bar stays on its empty state until real Claude Code hooks post to the port; digits do nothing | untested |

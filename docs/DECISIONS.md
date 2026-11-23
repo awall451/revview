@@ -1473,3 +1473,29 @@ Tested in the unit suite only (fakes, injected timers); nothing run on a Pi.
   cleans up and exits 1. The browser runs in its own process group (`setsid`, else `pkill -P`) and the whole group is
   stopped on exit, so its children go too (a process that leaves the group itself could survive). The traps are set
   before `mktemp -d`; the port probe no longer silences stderr for the rest of the script.
+
+## 2026-11-23: Emulator on your laptop 2 (demo mode)
+
+- **Player beside the server, keys through it:** `emulator/demo/player.js` is its own process that POSTs to `/event`
+  like a hook script would. The page's dev key forwarder (`devkeys.js`, unchanged) already sends every key to
+  `POST /dev/key`; with the new server flag `--dev-demo` (an error without `--dev-bridge`) the demo codes (Digit1-9,
+  KeyP, BracketLeft, BracketRight, `DEMO_CODES`) are not fed to the bridge but written to `GET /dev/demo`, an SSE
+  stream (at most 2 clients) the player listens on. Without `--dev-demo` nothing changes; reducer and view are untouched.
+  127.0.0.1 and the origin rules as always. None of the codes is bound in `config/buttons.laptop.json` (a test checks).
+- **Scenes only from what the product has:** Claude events from the real recordings, re-addressed per session (as in
+  `emulator/wb4/recipes.js`); offline and insert key by `RevviewNetwork` / `RevviewDataLock`, the events the product's
+  own monitors send (accepted over POST under the dev bridge). The permission prompt is finished from its recording
+  before "done", and all three sessions end for "ended", because the bar shows the neediest session and "ended" only
+  when the last one goes. **Compaction is left out:** the board has no compaction view (a compacting session is
+  WORKING), so a scene would repeat "working". So the keys are 1-7; 8 and 9 do nothing.
+- **Loop and jumps:** a loop ends with SessionEnd for its sessions and both overlays cleared; the next loop uses fresh
+  session ids (`demo<loop>-<repo>`: ended ids are remembered by the board). A jump to N does the same, then posts
+  everything up to scene N's target at once and paces on from there; a generation counter drops the old run's steps.
+- **Timing:** the player takes an injected clock (`setTimeout`/`clearTimeout`); default 1.5 s between events, 5 s hold
+  on each scene, speeds 0.25-4x. Tests drive a fake clock; no test waits on wall time for pacing.
+- **Default and `--live`:** `run.sh` plays the demo unless `--live` is given ("a real session is asked for": no player,
+  no `--dev-demo`, the server waits for real hook events). `--demo --live` is exit 2.
+- **Lifetime:** the player exits when its `/dev/demo` stream closes or a POST cannot connect (the server went away);
+  `run.sh`'s EXIT trap kills and waits for it. If it dies alone, `run.sh` says so once and keeps serving.
+- **Not proven:** nothing has run on a real laptop (bench L3, L4). Speech in demo mode needs `REVVIEW_SPEECH` and
+  espeak-ng or Piper on the laptop; run.sh installs nothing.

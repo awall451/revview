@@ -99,3 +99,20 @@ removes the temp profile. `--keys` prints the key map (Backspace hold = home, R 
 `--no-browser` only serves, `--port N` fixes the port, `--help` lists the rest. Tested only against a stand-in browser
 (`tests/unit/emulator-run.test.js`): nothing has run on a real laptop or a real WSL2 yet, and the WSL2 / Windows browser
 paths are from memory.
+
+### Demo mode (the default)
+
+Without `--live`, `run.sh` also starts the demo player (`emulator/demo/player.js`, scenes in `emulator/demo/scenes.js`): it
+posts the recorded sessions in `fixtures/sessions/*.jsonl` (re-addressed as three sessions, revview, garden and notes) to
+the server at a watchable pace and loops until the window closes. Scenes: 1 working, 2 permission, 3 done, 4 waiting,
+5 offline, 6 insert-key, 7 ended. Demo keys, handled by the player and not by the bar (the server sends them to the
+player over `GET /dev/demo`, present only with `--dev-bridge --dev-demo`): 1-7 jump to a scene, P pause/continue, `[`
+slower, `]` faster; `--keys` lists them under their own heading. `--live` means a real session is asked for: no player,
+the server waits for real Claude Code hook events on its port.
+
+**What demo mode cannot show:** nothing is sent to a Claude. Allow, deny, cancel and push-to-talk show what the bar
+would show, with nothing real behind them. Read aloud speaks only with `REVVIEW_SPEECH=config/speech.json` and espeak-ng
+(or Piper) installed on the laptop; `run.sh` installs nothing. Compaction is not a scene: the bar has no compaction view
+(a compacting session shows WORKING). Tested only against a server on the build VM with an injected clock
+(`tests/unit/emulator-demo.test.js`), the stand-in browser (`tests/unit/emulator-run.test.js`) and headless Chromium
+(`tests/demo-keys.spec.js`); not on a real laptop.
