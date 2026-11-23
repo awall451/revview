@@ -1,5 +1,7 @@
 # Revview
 
+Try the display on your laptop, no Pi needed: [docs/EMULATOR-LAPTOP.md](docs/EMULATOR-LAPTOP.md).
+
 Revview is a glanceable dashboard display for hands-free Claude Code while
 driving. A Raspberry Pi 4 Model B with a 7.9" 1280×400 bar screen sits on the dash
 and runs Claude Code natively; a button on the steering wheel is push-to-talk (Claude

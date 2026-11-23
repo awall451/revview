@@ -76,3 +76,19 @@ test('run.sh --keys prints exactly the sheet', async () => {
   assert.equal(r.status, 0);
   assert.equal(r.stdout, await sheet());
 });
+
+test('docs/EMULATOR-LAPTOP.md shows the real sheet and the real alias block, and is linked', async () => {
+  const doc = fs.readFileSync(new URL('../../docs/EMULATOR-LAPTOP.md', import.meta.url), 'utf8');
+  assert.ok(doc.includes(`\`\`\`\n${await sheet()}\`\`\``), 'the guide has the sheet as --keys prints it');
+  // the alias block of the guide is the real output for a clone in ~/revview
+  const real = spawnSync('bash', [RUN, '--print-aliases'], { encoding: 'utf8' }).stdout;
+  const root = path.dirname(path.dirname(RUN));
+  const shown = real.split(root).join('~/revview').replace(/^# .*$/m, '# revview emulator');
+  assert.ok(doc.includes(`\`\`\`\n${shown}\`\`\``), 'the guide has the alias block');
+  const top = fs.readFileSync(new URL('../../README.md', import.meta.url), 'utf8').split('\n').slice(0, 4).join('\n');
+  assert.match(top, /docs\/EMULATOR-LAPTOP\.md/);
+  assert.match(fs.readFileSync(new URL('../../emulator/README.md', import.meta.url), 'utf8'), /docs\/EMULATOR-LAPTOP\.md/);
+  for (const o of ['--port', '--no-browser', '--scale', '--demo', '--live', '--keys', '--print-aliases', '--stop', '--help']) {
+    assert.ok(doc.includes(`\`${o}`), `guide mentions ${o}`);
+  }
+});

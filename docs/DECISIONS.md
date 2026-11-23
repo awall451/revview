@@ -1499,3 +1499,28 @@ Tested in the unit suite only (fakes, injected timers); nothing run on a Pi.
   `run.sh`'s EXIT trap kills and waits for it. If it dies alone, `run.sh` says so once and keeps serving.
 - **Not proven:** nothing has run on a real laptop (bench L3, L4). Speech in demo mode needs `REVVIEW_SPEECH` and
   espeak-ng or Piper on the laptop; run.sh installs nothing.
+
+## 2026-11-23: Emulator on your laptop 3 (the guide, the key sheet, aliases, stop)
+
+- **Where gesture labels come from:** what a tap, hold or long hold DOES is in code only as if-chains (`reduceNav` in
+  `src/state/board.js`, `dispatch` in `src/sessions/actions.js`), not as an action table, so nothing could be derived
+  from there. The words are one `LABELS` table in `emulator/keys-sheet.js`, beside the map's reader. The sheet is
+  generated from `config/buttons.laptop.json` (keys, buttons, which have a hold or long hold) and `emulator/demo/scenes.js`
+  (the scene names). `buildSheet()` throws, naming the button and gesture, when a mapped one has no label, and a test
+  also checks every mapped button and gesture is in the output and that it fits 24 lines of 80 columns. A label can still
+  be WRONG if the code changes; the test does not run the keys through the real actions. `run.sh --keys` just runs the module.
+- **Stop:** `run.sh` writes `${XDG_RUNTIME_DIR:-/tmp}/revview-emu-<uid>-<pid>.pid` after the temp dir is made and removes it
+  in its EXIT trap. `--stop` (handled before the Node check, so it works without Node) reads the files of the current
+  user, checks `/proc/<pid>/cmdline` names `emulator/run.sh` (so a reused pid is not signalled), sends TERM, which runs the
+  existing trap (browser group, demo player, server, temp dir), waits up to 5 s, prints `stopped (pid N)` or `not running`.
+  Nothing running is exit 0; a script that does not stop in 5 s is exit 1. Several scripts (different `--port`) are all
+  stopped. Linux `/proc` only, like the rest of the script. A script stopped in the first moments, before the pid file is
+  written, is not found.
+- **Aliases:** `--print-aliases` only prints (a test points `HOME` at a temp dir and checks nothing is written). The path is
+  quoted twice, with `printf %q` and then for the alias's single quotes; a test sources a block made for a path with a space
+  and a quote. No alias or file is installed for the user.
+- **No install needed:** `run.sh`, the server, the player and the sheet import only `node:` modules; checked from a copy of
+  the tree without `node_modules`. The guide says so; `npm ci` is for the developer tests.
+- **Untested:** nothing has run on a real laptop (bench L5) or on WSL2 (bench L6); the guide's WSL2 section and the
+  tiling window manager advice are from knowledge and marked so. The guide's cheatsheet and alias block are checked
+  against the real output by a test, but the text around them is not.

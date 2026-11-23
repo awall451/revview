@@ -308,3 +308,13 @@ run on a real laptop. DECISIONS "Emulator on your laptop 2".
 |---|---|---|---|
 | L3 | Linux laptop: `bash emulator/run.sh`, watch one full loop, then press 1-7, P, `[` and `]`; close the window | The bar shows working, permission, done, waiting, offline, insert key, ended at a pace you can follow and loops; the terminal prints one `demo: N scene` line per scene. Each digit jumps to its scene, P freezes and resumes, `[` `]` slow down and speed up; the bar's own keys (M, arrows, Enter, Backspace) still work during the demo. Closing the window ends the script; `pgrep -af 'demo/player.js\|src/server/index.js'` shows nothing | untested |
 | L4 | Same, `bash emulator/run.sh --live` | No `demo:` lines; the bar stays on its empty state until real Claude Code hooks post to the port; digits do nothing | untested |
+
+## Emulator on your laptop 3: the guide (2026-11-23)
+
+Written and tested only on the build VM; the guide `docs/EMULATOR-LAPTOP.md` has never been followed on a real laptop.
+DECISIONS "Emulator on your laptop 3".
+
+| # | Try | Should happen | State |
+|---|---|---|---|
+| L5 | Native Linux laptop with Node 22+ and Chromium or Chrome, a fresh folder: follow `docs/EMULATOR-LAPTOP.md` word for word (clone with https or ssh, `cd revview`, `bash emulator/run.sh`, with no `npm ci`); then `--keys`, `--print-aliases` pasted into `~/.bashrc`, `revview`, and `revview-stop` from a second terminal | Every command in the guide works as written with no install step; the window opens; `--keys` fits your terminal screen and every key on it does what its row says; the aliases work in a new shell (also with a path that has a space); `revview-stop` prints `stopped (pid N)`, the window closes, `pgrep -af 'demo/player.js\|src/server/index.js'` shows nothing, and a second `revview-stop` prints `not running`. Note anything the guide got wrong or left out (a tiling window manager: is the window 1280x400?) | untested |
+| L6 | WSL2 on Windows 11, a fresh folder: follow the guide's WSL2 section: with a Linux browser under WSLg, then without one (Windows Chrome or Edge); `revview-stop` from a second WSL terminal | As the guide says, or note exactly what differs: which browser was picked, whether `localhost` reached the server, whether closing a Windows browser window ended the script, whether the `revview-emu.*` profile under the Windows `%TEMP%` is gone, whether `--stop` found the pid file under `XDG_RUNTIME_DIR` | untested |
