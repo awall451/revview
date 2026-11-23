@@ -642,6 +642,18 @@ export function parseArgs(argv) {
       if (next === undefined || next.startsWith('--')) throw new Error('--projects needs a file');
       out.projects = next;
       i++;
+    } else if (a === '--tmux-socket') {
+      const next = argv[i + 1];
+      if (next === undefined || next.startsWith('--')) throw new Error('--tmux-socket needs an absolute file path');
+      if (!next.startsWith('/')) throw new Error(`--tmux-socket needs an absolute file path, got ${next}`);
+      out.tmuxSocket = next;
+      i++;
+    } else if (a === '--claude-settings') {
+      const next = argv[i + 1];
+      if (next === undefined || next.startsWith('--')) throw new Error('--claude-settings needs an absolute file path');
+      if (!next.startsWith('/')) throw new Error(`--claude-settings needs an absolute file path, got ${next}`);
+      out.claudeSettings = next;
+      i++;
     } else if (a === '--speech') {
       const next = argv[i + 1];
       if (next === undefined || next.startsWith('--')) throw new Error('--speech needs a file');
@@ -771,7 +783,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   let runner = null;
   let selectId = null; // the session the buttons act on at boot: the last one started, else the only one there is
   if (args.sessions) {
-    runner = createSessionRunner({ socket: { name: 'revview' }, log: (m) => console.error(m) });
+    runner = createSessionRunner({
+      socket: args.tmuxSocket ? { path: args.tmuxSocket } : { name: 'revview' },
+      ...(args.claudeSettings ? { claude: ['claude', '--settings', args.claudeSettings] } : {}),
+      log: (m) => console.error(m),
+    });
     if (!args.boot) {
       try {
         const existing = await runner.list();
@@ -819,7 +835,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   console.log(`view:  ${url}/`);
   console.log(`post:  curl -s -X POST --data-binary @- ${url}/event < <(head -1 fixtures/sessions/working-turn.jsonl)`);
   if (input) console.log('input: reading wheel buttons (GET /buttons)');
-  if (runner) console.log(`sessions: private tmux server (-L revview), ${selectId === null ? 'selected: none' : `${selectedNow ? 'selected' : 'wanted'}: ${selectId}`}`);
+  if (runner) console.log(`sessions: private tmux server (${args.tmuxSocket ? `-S ${args.tmuxSocket}` : '-L revview'}), ${selectId === null ? 'selected: none' : `${selectedNow ? 'selected' : 'wanted'}: ${selectId}`}`);
   console.log(speechLine);
   if (netmonLine) console.log(netmonLine);
   if (args.boot) console.log('boot: STARTING until the first session is on the board');

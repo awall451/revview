@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { liveFixture } from './emu-live-helpers.js';
 
 // emulator/run.sh with a stand-in browser (a bash script that records its args and PID, then waits for a
 // "close" file or a signal). Each run gets its own TMPDIR so leftovers can be asserted.
@@ -393,7 +394,9 @@ test('default is demo mode: the server has --dev-demo, GET /dev/demo is routed, 
 });
 
 test('--live: no player, no --dev-demo, GET /dev/demo is not routed', async () => {
-  const run = start(['--live', '--no-browser']);
+  // the stand-in claude (a shim first on PATH), a fresh HOME and a temp project dir as cwd: never the real claude
+  const fx = liveFixture();
+  const run = start(['--live', '--no-browser'], { env: fx.env, cwd: fx.proj });
   try {
     const url = await run.url();
     const port = portOf(url);
@@ -406,7 +409,10 @@ test('--live: no player, no --dev-demo, GET /dev/demo is not routed', async () =
     assert.doesNotMatch(run.out, /^demo:/m);
     process.kill(run.child.pid, 'SIGTERM');
     assert.equal((await run.exit()).code, 0);
-  } finally { run.finish(); }
+  } finally {
+    run.finish();
+    fx.cleanup();
+  }
 });
 
 test('--demo and --live together exit 2 with usage, in either order', async () => {

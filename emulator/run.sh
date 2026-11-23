@@ -9,7 +9,7 @@ set -u
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 root=$(dirname "$here")
-usage_line='usage: bash emulator/run.sh [--port N] [--no-browser] [--scale S] [--demo | --live] [--keys] [--print-aliases] [--stop] [--help]'
+usage_line='usage: bash emulator/run.sh [--port N] [--no-browser] [--scale S] [--demo | --live [DIR]] [--keys] [--print-aliases] [--stop] [--help]'
 
 usage() {
   cat <<USAGE
@@ -21,8 +21,12 @@ $usage_line
                  the page keeps its 1280x400 viewport
   --demo         (default) play a looping demo of the bar's states: a demo player posts the recorded
                  Claude Code sessions (fixtures/sessions) to the server; nothing is sent to a Claude
-  --live         a real session is asked for: no demo player; the server waits for
-                 real Claude Code hook events posted to its port (the one in the view: line). Not with --demo
+  --live [DIR]   a real Claude Code session in DIR (default: the current directory; must exist), no demo
+                 player. The server starts it in its own PRIVATE tmux server (the socket is in this run's temp
+                 dir; your own tmux is never touched) and the bar shows its real Claude Code hook events. The
+                 hooks come from a settings file in the temp dir, given to that claude with --settings: nothing is
+                 written to ~/.claude, ~/.claude.json or DIR/.claude. Needs tmux and claude on PATH. The attach:
+                 line says how to look at the session. Not with --demo. The port is a free one unless --port is given
   --keys         print the key cheatsheet (and the demo keys) and exit
   --print-aliases  print a block of shell aliases (revview, revview-keys, revview-stop) with this
                  clone's path filled in, ready to paste into ~/.bashrc, and exit. Only prints
@@ -39,7 +43,8 @@ Environment:
 
 The script stops when the browser window closes, or on Ctrl+C / TERM / HUP. Exit codes: 0 after the
 window closed or after Ctrl+C / TERM / HUP; 1 on a start failure (Node too old, server did not start)
-or when the server stops while running; 2 on a bad option.
+or when the server stops while running, or with --live when tmux or claude is not on PATH; 2 on a bad option
+(also a --live DIR that is not a directory).
 A running script writes its pid and start time to <pid>.pid in a private directory (mode 700, yours):
 \$XDG_RUNTIME_DIR/revview-emu, else \${TMPDIR:-/tmp}/revview-emu-<uid>, else /tmp/revview-emu-<uid>. It is
 removed on exit. --stop reads those files in ALL of: \$XDG_RUNTIME_DIR/revview-emu, /run/user/<uid>/revview-emu,
@@ -57,6 +62,7 @@ port=
 no_browser=
 scale=
 mode=
+live_dir=
 want_keys=
 want_aliases=
 want_stop=
@@ -70,6 +76,11 @@ while [ $# -gt 0 ]; do
     --demo | --live)
       [ -z "$mode" ] || [ "$mode" = "${1#--}" ] || bad "--demo and --live cannot be used together"
       mode=${1#--}
+      if [ "$mode" = live ] && [ $# -ge 2 ] && [[ "$2" != -* ]]; then
+        [ -d "$2" ] || bad "--live: not a directory: $2"
+        live_dir=$(cd -- "$2" && pwd -P) || bad "--live: cannot enter: $2"
+        shift
+      fi
       ;;
     --port)
       [ $# -ge 2 ] || bad "--port needs a value"
@@ -199,7 +210,15 @@ if [ -n "$want_keys" ]; then
   exit 0
 fi
 
+# --live: Claude Code needs tmux (the server runs it there) and claude itself; checked before anything is made or started
+if [ "$mode" = live ]; then
+  command -v tmux > /dev/null 2>&1 || { echo "run.sh: --live needs tmux on PATH (not found); install tmux" >&2; exit 1; }
+  command -v claude > /dev/null 2>&1 || { echo "run.sh: --live needs Claude Code (claude) on PATH (not found); install Claude Code" >&2; exit 1; }
+  [ -n "$live_dir" ] || live_dir=$(pwd -P)
+fi
+
 work=
+sock=
 spid=
 dpid=
 bpid=
@@ -226,6 +245,8 @@ cleanup() {
     kill "$spid" 2> /dev/null
     wait "$spid" 2> /dev/null
   fi
+  # the private tmux server of a --live run (ONLY that socket) ends the Claude session in it
+  if [ -n "$sock" ]; then tmux -S "$sock" kill-server 2> /dev/null; fi
   if [ -n "$winprofile" ]; then rm -rf "$winprofile"; fi
   if [ -n "$work" ]; then rm -rf "$work"; fi
   if [ -n "$pidfile" ]; then rm -f "$pidfile"; fi
@@ -244,16 +265,29 @@ while IFS= read -r d; do
 done < <(pid_dir_candidates)
 [ -n "$pidfile" ] || echo "run.sh: no pid file; --stop will not find this run" >&2
 
-server_args=(--dev-bridge --dev-keys "$keymap")
-[ "$mode" = live ] || server_args+=(--dev-demo)
-node "$root/src/server/index.js" "${port:-0}" "${server_args[@]}" > "$log" 2>&1 &
-spid=$!
-
 fail() {
   echo "run.sh: $1" >&2
   [ -s "$log" ] && tail -n 15 "$log" >&2
   exit 1
 }
+
+server_args=(--dev-bridge --dev-keys "$keymap")
+if [ "$mode" = live ]; then
+  # the hooks must know the port before Claude starts: pick it here (they read REVVIEW_PORT, which Claude inherits)
+  if [ -z "$port" ]; then
+    port=$(node -e 'const s=require("net").createServer();s.listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})' 2> /dev/null)
+    [[ "$port" =~ ^[0-9]+$ ]] || fail "could not pick a free port"
+  fi
+  node "$root/hooks/install.mjs" --settings "$work/claude-settings.json" > "$log" 2>&1 || fail "could not write the Claude Code settings file"
+  sock="$work/tmux.sock"
+  server_args+=(--tmux-socket "$sock" --claude-settings "$work/claude-settings.json" --start "$live_dir")
+  REVVIEW_PORT=$port node "$root/src/server/index.js" "$port" "${server_args[@]}" > "$log" 2>&1 &
+else
+  server_args+=(--dev-demo)
+  node "$root/src/server/index.js" "${port:-0}" "${server_args[@]}" > "$log" 2>&1 &
+fi
+spid=$!
+
 answers() { # a bare HTTP GET over /dev/tcp, no curl needed
   local line
   { exec 3<> "/dev/tcp/127.0.0.1/$1"; } 2> /dev/null || return 1
@@ -278,7 +312,10 @@ while :; do
 done
 
 if [ "$mode" = live ]; then
-  echo "live mode: no demo; the server waits for real Claude Code hook events posted to 127.0.0.1:$actual"
+  echo "live mode: no demo; Claude Code runs in $live_dir and sends its real Claude Code hook events to 127.0.0.1:$actual"
+  printf 'attach: tmux -S %q attach -t revview\n' "$sock"
+  if [ -n "${TMUX:-}" ]; then echo "(you are inside tmux: run the attach line from a shell outside tmux, or prefix it with TMUX=)"; fi
+  echo "detach again with Ctrl-b d; closing the window, Ctrl+C or run.sh --stop ends this Claude session"
 else
   node "$root/emulator/demo/player.js" --url "http://127.0.0.1:$actual" &
   dpid=$!

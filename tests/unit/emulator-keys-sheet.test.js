@@ -69,6 +69,7 @@ test('the demo keys come from scenes.js: every scene name and the range', async 
   for (const n of names) assert.ok(out.includes(n), n);
   assert.match(out, new RegExp(`1-${names.length}`));
   assert.match(out, /nothing is sent to a Claude/i);
+  assert.match(out, /--live/);
 });
 
 test('the footer says what really happens: no variable for speech, what the demo shows and what needs --live', async () => {
@@ -80,7 +81,9 @@ test('the footer says what really happens: no variable for speech, what the demo
   assert.doesNotMatch(out, /show what the bar would show/);
   assert.match(out, /Left, Right, Up, Down, M, Backspace held/);
   assert.match(out, /Enter, N, Esc, Space on a permission or done screen only log the gesture/);
-  assert.match(out, /needs --live/);
+  assert.match(out, /in the demo: nothing is sent to a Claude\. With --live they go to the run's/);
+  assert.match(out, /own Claude: Enter allows a shown permission, N denies, Esc and Space are sent/);
+  assert.doesNotMatch(out, /no\s+real session is behind them/);
 });
 
 test('run.sh --keys prints exactly the sheet', async () => {

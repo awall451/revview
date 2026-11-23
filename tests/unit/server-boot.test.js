@@ -128,3 +128,16 @@ test('parseArgs: existing behaviour unchanged', () => {
     assert.throws(() => parseArgs(['--nope']), /unknown option --nope/);
   });
 });
+
+test('parseArgs: --tmux-socket and --claude-settings need an absolute value', () => {
+  assert.equal(parseArgs([]).tmuxSocket, undefined);
+  assert.equal(parseArgs([]).claudeSettings, undefined);
+  const a = parseArgs(['--tmux-socket', '/x/t.sock', '--claude-settings', '/x/s.json']);
+  assert.equal(a.tmuxSocket, '/x/t.sock');
+  assert.equal(a.claudeSettings, '/x/s.json');
+  for (const flag of ['--tmux-socket', '--claude-settings']) {
+    assert.throws(() => parseArgs([flag]), new RegExp(`${flag} needs`));
+    assert.throws(() => parseArgs([flag, '--sessions']), new RegExp(`${flag} needs`));
+    assert.throws(() => parseArgs([flag, 'relative/path']), /absolute/);
+  }
+});
