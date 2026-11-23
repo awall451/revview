@@ -3,7 +3,7 @@
 Stage 4, parts A and B: a fresh Raspberry Pi OS Trixie arm64 (desktop, labwc / Wayland) on a Pi 4B with the 7.9" 1280x400
 panel becomes the appliance: power on, straight into the bar, Claude sessions feeding it. NOTHING HERE WAS RUN ON A
 PI (part B too: it is written, not run). The file edits were tested only against a fake root in a temp dir (`tests/unit/pi-*.test.js`); everything else is
-in `docs/BENCH-TEST.md` (P1-P14 for part A, S4B-1 to S4B-19 for part B, and D/W/R/H items), all `untested`. Commands and names marked *(from memory)* could
+in `docs/BENCH-TEST.md` (P1-P14 for part A, S4B-1 to S4B-19 for part B, and the D, W, R, HW (Stage 2 hooks) and H (honest states) items), all `untested`. Commands and names marked *(from memory)* could
 not be checked here (documentation sites are not reachable from the team's VM). Decisions: `docs/DECISIONS.md`
 "stage 4A". Part B (read-only root, encrypted data partition with the key stick, Piper) is described below; decisions in "stage 4B". If the Pi or the stick is lost: `docs/REVOKE.md`.
 
@@ -15,7 +15,7 @@ not be checked here (documentation sites are not reachable from the team's VM). 
 | `setup.mjs` | Called by `install.sh`: every file edit and generated file (below). Pure functions, unit-tested. |
 | `kiosk.sh` | The kiosk respawn loop: Chromium on the boot page, restarted when it exits; pause markers. |
 | `revview.service` | systemd USER unit template of the server: `--input --sessions --boot --netmon`, never `--dev-bridge`, no ordering on the kiosk. |
-| `70-revview-dongle.rules` | udev rule for the wheel-button dongle (group `input`). Its USB ids are a placeholder. |
+| `70-revview-dongle.rules` | udev rule TEMPLATE for the wheel-button dongle (group `input`): the installer fills in the USB ids of `/etc/revview/buttons.json` and writes the rule on every run. |
 | `lib.sh` | Sourced by the other scripts: reads the mount table; refuses to write when `/` is the read-only overlay or `/boot/firmware` is read-only. |
 | `readonly.sh` | `status`, `enable`, `disable` of the read-only root (raspi-config's overlay file system and read-only boot partition). Run last. |
 | `data-setup.sh` | Makes (with `--format`) or registers the encrypted data partition and the key stick; moves `~/.claude`, `~/repos`, `~/.ssh` onto it. Run by hand. |
@@ -56,7 +56,7 @@ and `audio`. The older set-up's `revview` system user is no longer used.
    only install the dev tools for the checks (Playwright, ESLint), which the Pi never runs.
 6. **Claude Code**, as the kiosk user (not root): install it with Anthropic's native installer *(from memory:
    `curl -fsSL https://claude.ai/install.sh | bash`, which puts `claude` in `~/.local/bin`)*, then run `claude` once
-   in a terminal and sign in with your claude.ai account. Set up `/voice` and its key as in `docs/BUTTONS.md`.
+   in a terminal and sign in with your claude.ai account. Voice (`/voice tap`, the key stays on Space) is set up once after the install: see "First drive (parked)" at the end.
 7. **Run the installer**, as root:
 
    ```
@@ -66,7 +66,7 @@ and `audio`. The older set-up's `revview` system user is no longer used.
 
    Options: `--rotate 270` if the panel is mounted the other way up (180 degrees), `--output HDMI-A-2` if the panel is
    on the other port, `--no-apt` to skip packages. It prints one line per thing it did. What it does:
-   - packages (only the missing ones): `chromium tmux python3 espeak-ng wlr-randr` *(names from memory)*;
+   - packages (only the missing ones): `chromium tmux python3 espeak-ng wlr-randr sox` *(names from memory; `sox` records the microphone for `/voice`)*;
    - groups `input` and `audio` for the user;
    - quiet boot: `/boot/firmware/config.txt` gets `disable_splash=1`; `/boot/firmware/cmdline.txt` loses `splash` and
      gets `quiet loglevel=0 logo.nologo vt.global_cursor_default=0` (kept on ONE line, CRLF becomes LF). It also
@@ -82,7 +82,8 @@ and `audio`. The older set-up's `revview` system user is no longer used.
    - the kiosk: `~/.config/labwc/autostart` (rotation, then `kiosk.sh`). It replaces the desktop's own autostart, so
      there is no panel, no desktop and no icons. An autostart you had before is saved as `autostart.revview-backup`;
    - the server: `/etc/systemd/user/revview.service`, enabled, lingering on for the user;
-   - the dongle udev rule; `/etc/revview/server.env` (only if missing; all settings commented out);
+   - `/etc/revview/buttons.json`, your copy of `config/buttons.json` (USB ids and key map; written only if missing, never overwritten), and the dongle udev rule `/etc/udev/rules.d/70-revview-dongle.rules`, generated on every run from the ids in that file (a missing, damaged or symlinked file, or ids that are not 4 hex digits, leave the rule as it was and the installer exits 1). If your file differs from the repo's `config/buttons.json` it prints one `note:` line; after an update compare them with `diff`;
+   - `/etc/revview/server.env` (only if missing; all settings commented out);
    - the Claude Code hooks for the user (`hooks/install.mjs`, into `~/.claude/settings.json`);
    - an old `/etc/systemd/system/revview.service` from the earlier set-up is disabled and removed.
 
@@ -114,8 +115,12 @@ and `audio`. The older set-up's `revview` system user is no longer used.
      is logged and the default is used (IPv6 literals like `[::1]:443` are not accepted).
 9. **Reboot**: `sudo reboot`. Expected: a quiet boot, the desktop logs in by itself, the bar shows NO LINK for a
    moment, then STARTING, then your session.
-10. **Dongle ids**, once the real dongle exists: read them with `lsusb` and `/proc/bus/input/devices` (bench W1, D5),
-    put the same ids in `pi/70-revview-dongle.rules` and `config/buttons.json`, and run the installer again.
+10. **Dongle ids and keys**, once the real dongle exists: read the ids with `lsusb` and `/proc/bus/input/devices`
+    (bench W1, D5). Edit `/etc/revview/buttons.json` (`device.vendor`, `device.product` and the keys): it is your file,
+    kept by every re-run of the installer and every update. Then run `sudo bash /opt/revview/pi/install.sh --user NAME
+    /opt/revview` again, with the same options as the first time (e.g. `--rotate 270`), to regenerate the udev rule, and `systemctl --user restart revview` as the kiosk user (or
+    reboot). Do not edit the rule or `config/buttons.json` in the repository. With the read-only overlay on, `/etc`
+    edits are lost at the next boot: turn the overlay off first (see Updating). Bench D13.
 
 ## Encrypted data and the key stick
 
@@ -218,7 +223,7 @@ makes no sense under the overlay)*. Run this step LAST, after the install, the d
    /dev/STICK` (see "Encrypted data and the key stick"); then reboot WITH the stick in (the overlay is still off, so this is safe), and
    carry on with step 7: `install.sh` writes the hooks into the unlocked data. If only `pi/unlock.sh` changed, skip this: it runs from `/opt/revview` and takes effect at once.
    Not tried on a Pi.
-7. Run `install.sh` again (step 7). It refuses (exit 2, nothing written) under the overlay, and when `/boot/firmware`
+7. Run `install.sh` again (step 7). Your `/etc/revview/buttons.json` is kept (a `note:` line says if it differs from the new `config/buttons.json`: compare with `diff`); the dongle rule is regenerated from its ids. It refuses (exit 2, nothing written) under the overlay, and when `/boot/firmware`
    is read-only: that is the sign that step 1 or 2 is missing.
 8. `sudo bash /opt/revview/pi/readonly.sh enable`, then reboot (with the stick in).
 
@@ -255,7 +260,7 @@ need changing. The paths in that file are the ones above.
     data set-up);
   - `/etc/systemd/user/revview.service` and `/etc/systemd/user/default.target.wants/revview.service` (the link);
   - `/var/lib/systemd/linger/NAME` (or `loginctl disable-linger NAME`);
-  - `/etc/revview/server.env` (and `/etc/revview/` if empty);
+  - `/etc/revview/server.env` and `/etc/revview/buttons.json` (your key map; keep a copy if you want it), and `/etc/revview/` if empty;
   - `~/.config/labwc/autostart`: on a fresh Pi it had no backup, so just delete it (the desktop's own autostart
     applies again); if `autostart.revview-backup` exists, move it back over it;
   - the hooks: `node /opt/revview/hooks/install.mjs --remove` as the kiosk user (it removes only revview's entries
@@ -281,7 +286,7 @@ need changing. The paths in that file are the ones above.
 - **Network** (`--netmon`): every 10 s the server checks for a default route on any interface (Wi-Fi hotspot, or the
   bench's Ethernet; nothing depends on either) and opens a TCP connection to the Claude API host. Two failures in a
   row show OFFLINE; one success clears it.
-- **Buttons**: `src/input` finds the dongle by the USB ids in `config/buttons.json`; the user's `input` group lets the
+- **Buttons**: `src/input` finds the dongle by the USB ids in `/etc/revview/buttons.json` (the unit's `--input`; `config/buttons.json` is only the default it is created from); the user's `input` group lets the
   server read and grab it; a missing dongle shows NO BUTTONS and is retried.
 - **Read aloud**: `espeak-ng` is installed; Piper is optional (section Piper). The user unit runs inside the user's audio session.
 
@@ -290,3 +295,47 @@ need changing. The paths in that file are the ones above.
 Nothing of part B was run on a Pi (bench items S4B-1 to S4B-19). No script installs Piper. No shutdown HAT or ignition wiring
 (not needed with the read-only root). Clevis/Tang unlock and a password prompt at boot are not done (DESIGN: later,
 maybe). See DECISIONS "stage 4B".
+
+## First drive (parked)
+
+Do this once, after the install and a reboot, with the car parked. Nothing here was run on a Pi or in a car.
+Facts marked *(Claude Code 2.1.330)* were read from the installed Claude Code's own strings; the rest is marked
+*(from memory, untested)*.
+
+**Set up voice, once, as the kiosk user.** Voice is a setting of Claude Code, user-wide (not per project):
+`/voice tap` writes it to the user settings, `~/.claude/settings.json` (or `settings.json` in `CLAUDE_CONFIG_DIR` when
+that is set). Before the encrypted-data set-up that is `~/.claude/settings.json` on the card; after it,
+`/etc/revview/data.env` sets `CLAUDE_CONFIG_DIR=/home/NAME/.claude`, which is a link onto the unlocked data partition
+(so do this with the stick in). Do it INSIDE a revview session so that the setting lands where the sessions read it:
+
+1. `tmux -L revview attach`, as the kiosk user (a terminal, or ssh). If there is no session yet, start one from the menu
+   (New session) first. The sessions get `CLAUDE_CONFIG_DIR` from the service, so `/voice` run there writes the
+   settings they read.
+2. In the Claude prompt type `/voice tap`. Expected: `Turned on voice mode (tap)` and a hint like `Tap <key> (with input
+   empty) to start, tap again to send.` *(Claude Code 2.1.330)*. The command is `/voice [hold|tap|off]`, default
+   `hold`; revview sends one Space per tap, so tap mode is the one that works.
+3. Leave push-to-talk on Space (Claude Code's default binding `space` to `voice:pushToTalk`, in the Chat context
+   *(Claude Code 2.1.330)*). Do not rebind it: the wheel's push-to-talk button sends exactly one Space.
+4. If it says SoX is missing ("Voice mode needs SoX to record"), the `sox` package was not installed (install step
+   skipped with `--no-apt`, or no network): `sudo apt-get install sox`, then run `/voice tap` again. If it says
+   "Voice mode needs a microphone, and SoX couldn't open one." or "there's no audio device here.", the USB mic is not
+   seen by the kiosk user's audio session (bench P14). `command -v rec` should print a path (`rec` comes with SoX).
+5. If it says "Voice mode needs a Claude.ai account. Run /login to sign in.", sign in with your claude.ai account:
+   voice is not available with an API key, another provider or an organisation sign-in *(Claude Code 2.1.330)*.
+6. Detach: Ctrl+B then D *(from memory, untested)*.
+
+**Then, parked, drive one turn by voice.** With the bar on WAITING FOR ME for the session (the mic mark is next to the
+position, not crossed out):
+
+1. Tap push-to-talk on the wheel, speak, tap it again: the second tap sends. *(Behaviour of Claude Code's tap mode,
+   *Claude Code 2.1.330*; the wheel's one-Space-per-tap is revview's.)*
+2. What the bar can say, in its own words (src/view/view.js, src/state/board.js): `STARTING` with "Not ready for voice
+   yet" while the session has no first hook yet (a tap then is not sent; the bar says "Claude is still starting:
+   push-to-talk not sent"); `WORKING` once Claude is on your request; `NEEDS PERMISSION` when it asks (answer with the
+   wheel); `WAITING FOR ME` or `DONE` when the turn is over and it is your turn. A crossed-out mic names the reason: "No network:
+   push-to-talk will not work", "No wheel buttons found". The bar has no "recording" state of its own: whether the
+   recording started is seen in the Claude prompt (`tmux -L revview attach`), not on the bar.
+3. Record the result in `docs/BENCH-TEST.md`: S1 (voice mode set up in the revview session), P13 and P14 (a spoken turn
+   reaches Claude; the mic is heard), P21 (SoX present: `command -v rec` prints a path and `/voice tap` says "Turned on
+   voice mode (tap)") and D13 (dongle ids kept: edit `/etc/revview/buttons.json`, re-run `install.sh`, the edit and the
+   rule stay).

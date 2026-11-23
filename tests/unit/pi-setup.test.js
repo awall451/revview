@@ -182,7 +182,10 @@ test('CLI: writes every file, with backups, in order', withRoot((r) => {
   assert.match(fs.readFileSync(p('boot/firmware/cmdline.txt'), 'utf8'), /rotate=90\n$/);
   assert.match(fs.readFileSync(p('boot/firmware/config.txt'), 'utf8'), /disable_splash=1\n$/);
   assert.match(fs.readFileSync(p('etc/lightdm/lightdm.conf'), 'utf8'), /^autologin-user=alice$/m);
-  assert.equal(fs.readFileSync(p('etc/udev/rules.d/70-revview-dongle.rules'), 'utf8'), fs.readFileSync(path.join(ROOT, 'pi/70-revview-dongle.rules'), 'utf8'));
+  // the rule is the template with the ids of config/buttons.json (1d50 / 615e) filled in
+  assert.equal(fs.readFileSync(p('etc/udev/rules.d/70-revview-dongle.rules'), 'utf8'),
+    fs.readFileSync(path.join(ROOT, 'pi/70-revview-dongle.rules'), 'utf8').replaceAll('@VENDOR@', '1d50').replaceAll('@PRODUCT@', '615e'));
+  assert.equal(fs.readFileSync(p('etc/revview/buttons.json'), 'utf8'), fs.readFileSync(path.join(ROOT, 'config/buttons.json'), 'utf8'));
   assert.match(fs.readFileSync(p('etc/udev/rules.d/71-revview-touch.rules'), 'utf8'), /"0 -1 1 1 0 0"/);
   const unit = fs.readFileSync(p('etc/systemd/user/revview.service'), 'utf8');
   assert.match(unit, /^ConditionUser=alice$/m);
@@ -204,7 +207,7 @@ test('CLI: a second run only prints unchanged and changes nothing', withRoot((r)
   const res = cli(r);
   assert.equal(res.code, 0, res.err);
   for (const l of res.lines) assert.match(l, /^(unchanged|warning) /, l);
-  assert.equal(res.lines.filter((l) => l.startsWith('unchanged')).length, 10);
+  assert.equal(res.lines.filter((l) => l.startsWith('unchanged')).length, 11); // +1: /etc/revview/buttons.json
   assert.deepEqual(snapshot(r), before);
 }));
 

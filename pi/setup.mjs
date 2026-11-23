@@ -129,6 +129,17 @@ export function renderUnit(template, { dir, node, user }) {
   return String(template).replaceAll('@REVVIEW_DIR@', dir).replaceAll('@NODE@', node).replaceAll('@USER@', user);
 }
 
+const HEX4 = /^[0-9a-fA-F]{4}$/;
+
+// The dongle rule: the template with the ids of the owner's buttons.json filled in. Throws (with the file named
+// by the caller) when the ids are missing or not exactly 4 hex digits.
+export function renderDongleRule(template, { vendor, product }) {
+  for (const [k, v] of [['vendor', vendor], ['product', product]]) {
+    if (typeof v !== 'string' || !HEX4.test(v)) throw new Error(`device.${k} must be exactly 4 hex digits, e.g. "1d50" (got ${JSON.stringify(v)})`);
+  }
+  return String(template).replaceAll('@VENDOR@', vendor.toLowerCase()).replaceAll('@PRODUCT@', product.toLowerCase());
+}
+
 export function renderServerEnv() {
   return `# Environment of the revview server (read by the user unit, one KEY=value per line, no quotes).
 # Written by pi/install.sh when missing; never overwritten. Restart: systemctl --user restart revview
@@ -213,7 +224,36 @@ function main(argv) {
   // a missing lightdm.conf stays a plain note (no exit code change): the desktop autologin is another way to get it
   else say(`skipped ${lightdm}: no lightdm.conf; set Desktop Autologin with raspi-config`);
 
-  write(R('/etc/udev/rules.d/70-revview-dongle.rules'), fs.readFileSync(path.join(piDir, '70-revview-dongle.rules'), 'utf8'));
+  // The owner's key map and dongle ids: created once from the repo's default, never overwritten.
+  const ETC_BUTTONS = '/etc/revview/buttons.json';
+  const etcButtons = R(ETC_BUTTONS);
+  const repoButtons = path.join(o.dir, 'config/buttons.json');
+  const repoButtonsText = fs.readFileSync(path.join(path.dirname(piDir), 'config/buttons.json'), 'utf8');
+  write(etcButtons, repoButtonsText, { createOnly: true });
+  // The rule follows the ids in that file (the repo copy when a dry run has not created it yet).
+  let ids = null;
+  if (isLink(etcButtons)) refuse(R('/etc/udev/rules.d/70-revview-dongle.rules'), `${ETC_BUTTONS} is a symlink; not read through it, so the dongle ids are unknown`);
+  else {
+    const text = readOr(etcButtons) ?? repoButtonsText;
+    try {
+      const dev = JSON.parse(text)?.device;
+      ids = { vendor: dev?.vendor, product: dev?.product };
+    } catch (e) {
+      refuse(R('/etc/udev/rules.d/70-revview-dongle.rules'), `${ETC_BUTTONS} is not valid JSON (${e.message}); fix it, the rule was left as it was`);
+    }
+  }
+  if (ids) {
+    let rule = null;
+    try {
+      rule = renderDongleRule(fs.readFileSync(path.join(piDir, '70-revview-dongle.rules'), 'utf8'), ids);
+    } catch (e) {
+      refuse(R('/etc/udev/rules.d/70-revview-dongle.rules'), `${ETC_BUTTONS}: ${e.message}; fix it, the rule was left as it was`);
+    }
+    if (rule !== null) write(R('/etc/udev/rules.d/70-revview-dongle.rules'), rule);
+  }
+  if (readOr(etcButtons) !== null && !isLink(etcButtons) && readOr(etcButtons) !== repoButtonsText) {
+    say(`note: ${ETC_BUTTONS} (yours, kept) differs from ${repoButtons} (the default); after an update compare them: diff ${ETC_BUTTONS} ${repoButtons}`);
+  }
   write(R('/etc/udev/rules.d/71-revview-touch.rules'), renderTouchRule(o.rotate));
   write(R('/etc/systemd/user/revview.service'), renderUnit(fs.readFileSync(path.join(piDir, 'revview.service'), 'utf8'), o));
 

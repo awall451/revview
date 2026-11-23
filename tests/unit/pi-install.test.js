@@ -282,3 +282,88 @@ test('install.sh: setup.mjs exit 2 (bad arguments): exit 2 with its own message,
     assert.doesNotMatch(res.out, /^done\. Next:/m);
     assert.equal(fs.existsSync(path.join(r, 'home/alice/.claude/settings.json')), false);
   }));
+
+// ---- r7-03: the dongle ids and key map live in /etc/revview/buttons.json and survive re-runs ----
+
+const RULE = 'etc/udev/rules.d/70-revview-dongle.rules';
+const BTNS = 'etc/revview/buttons.json';
+
+test('install.sh: first run creates /etc/revview/buttons.json from config/buttons.json and the rule has 1d50/615e', withRoot((r) => {
+  const res = run(base(r));
+  assert.equal(res.code, 0, res.out + res.err);
+  assert.equal(fs.readFileSync(path.join(r, BTNS), 'utf8'), fs.readFileSync(path.join(ROOT, 'config/buttons.json'), 'utf8'));
+  const rule = fs.readFileSync(path.join(r, RULE), 'utf8');
+  assert.match(rule, /ATTRS\{idVendor\}=="1d50", ATTRS\{idProduct\}=="615e"/);
+  assert.doesNotMatch(rule, /@VENDOR@|@PRODUCT@/);
+  assert.doesNotMatch(res.out, /^note: \/etc\/revview\/buttons\.json/m);
+}));
+
+test('install.sh: an edit of the ids in /etc/revview/buttons.json is kept and the rule follows it', withRoot((r) => {
+  assert.equal(run(base(r)).code, 0);
+  const f = path.join(r, BTNS);
+  const cfg = JSON.parse(fs.readFileSync(f, 'utf8'));
+  cfg.device.vendor = 'ABCD';
+  cfg.device.product = '12ef';
+  const edited = `${JSON.stringify(cfg, null, 2)}\n`;
+  fs.writeFileSync(f, edited);
+  const res = run(base(r));
+  assert.equal(res.code, 0, res.out + res.err);
+  assert.equal(fs.readFileSync(f, 'utf8'), edited);
+  const rule = fs.readFileSync(path.join(r, RULE), 'utf8');
+  assert.match(rule, /ATTRS\{idVendor\}=="abcd", ATTRS\{idProduct\}=="12ef"/);
+  assert.doesNotMatch(rule, /"1d50"|"615e"/);
+  assert.match(res.out, /^note: \/etc\/revview\/buttons\.json \(yours, kept\) differs from .*\/config\/buttons\.json \(the default\); after an update compare them: diff /m);
+}));
+
+test('install.sh: invalid ids in /etc/revview/buttons.json: exit 1, the rule stays, the message names the file', withRoot((r) => {
+  assert.equal(run(base(r)).code, 0);
+  const rulePath = path.join(r, RULE);
+  const before = fs.readFileSync(rulePath, 'utf8');
+  const f = path.join(r, BTNS);
+  for (const [label, text] of [['bad hex', JSON.stringify({ device: { vendor: 'zz', product: '615e' } })],
+    ['missing', JSON.stringify({ device: { vendor: '1d50' } })], ['not json', '{nope']]) {
+    fs.writeFileSync(f, text);
+    const res = run(base(r));
+    assert.equal(res.code, 1, `${label}: ${res.out}${res.err}`);
+    assert.equal(fs.readFileSync(rulePath, 'utf8'), before, label);
+    assert.match(res.out + res.err, /\/etc\/revview\/buttons\.json/, label);
+  }
+}));
+
+test('install.sh: /etc/revview/buttons.json as a symlink is refused, the rule stays', withRoot((r) => {
+  assert.equal(run(base(r)).code, 0);
+  const rulePath = path.join(r, RULE);
+  const before = fs.readFileSync(rulePath, 'utf8');
+  const f = path.join(r, BTNS);
+  const real = path.join(r, 'elsewhere.json');
+  fs.renameSync(f, real);
+  fs.symlinkSync(real, f);
+  const res = run(base(r));
+  assert.equal(res.code, 1, res.out + res.err);
+  assert.equal(fs.readFileSync(rulePath, 'utf8'), before);
+  assert.match(res.out + res.err, /\/etc\/revview\/buttons\.json/);
+}));
+
+test('install.sh: the rendered unit reads --input /etc/revview/buttons.json', withRoot((r) => {
+  assert.equal(run(base(r)).code, 0);
+  const unit = fs.readFileSync(path.join(r, 'etc/systemd/user/revview.service'), 'utf8');
+  const exec = unit.split('\n').find((l) => l.startsWith('ExecStart='));
+  assert.match(exec, / --input \/etc\/revview\/buttons\.json /);
+  assert.doesNotMatch(exec, /config\/buttons\.json/);
+}));
+
+test('install.sh: the Next: line names /etc/revview/buttons.json, the re-run and the restart', withRoot((r) => {
+  const res = run(base(r));
+  assert.equal(res.code, 0, res.out + res.err);
+  const next = res.out.slice(res.out.indexOf('done. Next:'));
+  assert.match(next, /edit \/etc\/revview\/buttons\.json/);
+  assert.match(next, /sudo bash .*pi\/install\.sh/);
+  assert.match(next, /systemctl --user restart revview/);
+  assert.doesNotMatch(next, /70-revview-dongle\.rules and config\/buttons\.json/);
+}));
+
+test('install.sh: the packages needed include sox (voice recording)', withRoot((r) => {
+  const res = run(base(r));
+  const line = res.out.split('\n').find((l) => l.startsWith('skipped packages'));
+  assert.match(line, /needed: .*\bsox\b/);
+}));

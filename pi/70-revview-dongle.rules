@@ -1,8 +1,10 @@
 # udev rule for the wheel-button dongle (untested: no dongle, no Pi at the time of writing).
 #
-# PLACEHOLDER: idVendor and idProduct below are ZMK's default USB ids (1d50:615e), written from memory and
-# NOT read from a real dongle. Fill in the real ones from `lsusb` once the dongle exists, and keep them equal
-# to `device.vendor` and `device.product` in config/buttons.json (bench items W1 and D5).
+# TEMPLATE: pi/install.sh writes /etc/udev/rules.d/70-revview-dongle.rules from this file on every run, with
+# @VENDOR@ and @PRODUCT@ replaced by `device.vendor` and `device.product` of /etc/revview/buttons.json. The ids
+# come from that file: edit it (read the real ones with `lsusb`), not this one nor the generated rule, and run
+# install.sh again (bench items W1, D5 and D13). The default ids there, ZMK's 1d50:615e, were written from memory
+# and not read from a real dongle.
 #
 # What it does:
 # - gives the event nodes of this USB device to group "input", mode 0660, so the server's user (in group
@@ -16,5 +18,5 @@
 #
 # The file name starts with 70 so it runs after 60-input-id.rules, which sets ID_INPUT_KEYBOARD.
 
-SUBSYSTEM=="input", KERNEL=="event[0-9]*", ATTRS{idVendor}=="1d50", ATTRS{idProduct}=="615e", GROUP="input", MODE="0660"
-SUBSYSTEM=="input", KERNEL=="event[0-9]*", ATTRS{idVendor}=="1d50", ATTRS{idProduct}=="615e", ENV{ID_INPUT_KEYBOARD}=="1", SYMLINK+="input/revview-dongle"
+SUBSYSTEM=="input", KERNEL=="event[0-9]*", ATTRS{idVendor}=="@VENDOR@", ATTRS{idProduct}=="@PRODUCT@", GROUP="input", MODE="0660"
+SUBSYSTEM=="input", KERNEL=="event[0-9]*", ATTRS{idVendor}=="@VENDOR@", ATTRS{idProduct}=="@PRODUCT@", ENV{ID_INPUT_KEYBOARD}=="1", SYMLINK+="input/revview-dongle"

@@ -19,7 +19,9 @@
 #   "a file was refused", 2 bad arguments, 3 a crash; install.sh maps 4 to its own 1 and 2 to its own 2.)
 # What it changes (see pi/setup.mjs): /boot/firmware/cmdline.txt and config.txt (quiet boot, rotated console),
 #   /etc/lightdm/lightdm.conf (autologin), udev rules (dongle, touch rotation), /etc/systemd/user/revview.service
-#   and its enable symlink, /var/lib/systemd/linger/<user>, /etc/revview/server.env (only if missing),
+#   and its enable symlink, /var/lib/systemd/linger/<user>, /etc/revview/server.env and /etc/revview/buttons.json
+#   (each only if missing: the owner's files, the USB ids and key map are edited there and kept by every re-run;
+#   the udev dongle rule is regenerated from the ids in /etc/revview/buttons.json on every run),
 #   ~/.config/labwc/autostart (kiosk, no desktop), the user's Claude Code hooks, packages, groups input and audio.
 #   A changed file that existed gets a copy once: <file>.revview-backup.
 # Re-run it any time: it is idempotent. Then reboot.
@@ -97,7 +99,7 @@ case "$home" in /*) ;; *) die "home of $user is not absolute: $home" ;; esac
 echo "user $user ($uid:$gid), home $home, repo $dir, rotate $rotate, output $output, root $root"
 
 # Packages.
-pkgs="chromium tmux python3 espeak-ng wlr-randr"
+pkgs="chromium tmux python3 espeak-ng wlr-randr sox"
 if [ "$real" -eq 1 ] && [ "$apt" -eq 1 ]; then
   missing=()
   for p in $pkgs; do
@@ -212,6 +214,9 @@ done. Next:
   - reboot to start everything (kiosk, server, boot screen);
   - sign in to Claude Code as $user if not done: run \`claude\` once in a terminal;
   - logs, as $user: journalctl --user -u revview
-  - fill in the dongle's real USB ids in /etc/udev/rules.d/70-revview-dongle.rules and config/buttons.json.
+  - dongle ids and keys: edit /etc/revview/buttons.json (USB ids and keys; kept by every re-run and update), then run
+    sudo bash $dir/pi/install.sh --user $user $dir  again (with the same options as now) to regenerate the udev rule,
+    and restart as $user:
+    systemctl --user restart revview  (or reboot).
 EOF
 exit 0

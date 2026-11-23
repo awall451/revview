@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { loadConfig, DEFAULT_CONFIG_PATH } from '../../src/input/keymap.js';
+import { renderDongleRule } from '../../pi/setup.mjs';
 
 const read = (rel) => readFileSync(new URL(`../../${rel}`, import.meta.url), 'utf8');
 
@@ -32,7 +33,12 @@ test('the shipped key map covers every F13-F24 action of the BUTTONS.md table, o
 
 test('the dongle USB ids in the config and the udev rule agree', () => {
   const cfg = loadConfig(DEFAULT_CONFIG_PATH);
-  const rule = read('pi/70-revview-dongle.rules');
+  const template = read('pi/70-revview-dongle.rules');
+  assert.match(template, /idVendor\}=="@VENDOR@"/);
+  assert.match(template, /idProduct\}=="@PRODUCT@"/);
+  // the installed rule: the template with the ids of the config (/etc/revview/buttons.json, created from this one)
+  const rule = renderDongleRule(template, cfg.device);
+  assert.doesNotMatch(rule, /@VENDOR@|@PRODUCT@/);
   assert.match(rule, new RegExp(`idVendor\\}=="${cfg.device.vendor}"`));
   assert.match(rule, new RegExp(`idProduct\\}=="${cfg.device.product}"`));
 });
