@@ -9,7 +9,7 @@ set -u
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 root=$(dirname "$here")
-usage_line='usage: bash emulator/run.sh [--port N] [--no-browser] [--scale S] [--demo | --live] [--keys] [--help]'
+usage_line='usage: bash emulator/run.sh [--port N] [--no-browser] [--scale S] [--demo | --live] [--keys] [--print-aliases] [--stop] [--help]'
 
 usage() {
   cat <<USAGE
@@ -24,6 +24,10 @@ $usage_line
   --live         a real session is asked for: no demo player; the server waits for
                  real Claude Code hook events posted to its port (the one in the view: line). Not with --demo
   --keys         print the key cheatsheet (and the demo keys) and exit
+  --print-aliases  print a block of shell aliases (revview, revview-keys, revview-stop) with this
+                 clone's path filled in, ready to paste into ~/.bashrc, and exit. Only prints
+  --stop         stop the run.sh that is running (from another terminal): prints "stopped" or
+                 "not running" and exits 0; exits 1 if one did not stop within 5 s
   --help         this text
 
 Environment:
@@ -35,6 +39,7 @@ Environment:
 The script stops when the browser window closes, or on Ctrl+C / TERM / HUP. Exit codes: 0 after the
 window closed or after Ctrl+C / TERM / HUP; 1 on a start failure (Node too old, server did not start)
 or when the server stops while running; 2 on a bad option.
+A running script writes its pid to ${XDG_RUNTIME_DIR:-/tmp}/revview-emu-<uid>-<pid>.pid (removed on exit); --stop reads it.
 USAGE
 }
 
@@ -49,10 +54,14 @@ no_browser=
 scale=
 mode=
 want_keys=
+want_aliases=
+want_stop=
 while [ $# -gt 0 ]; do
   case "$1" in
     --help | -h) usage; exit 0 ;;
     --keys) want_keys=1 ;;
+    --print-aliases) want_aliases=1 ;;
+    --stop) want_stop=1 ;;
     --no-browser) no_browser=1 ;;
     --demo | --live)
       [ -z "$mode" ] || [ "$mode" = "${1#--}" ] || bad "--demo and --live cannot be used together"
@@ -74,6 +83,39 @@ while [ $# -gt 0 ]; do
   shift
 done
 
+pid_dir=${XDG_RUNTIME_DIR:-/tmp}
+
+if [ -n "$want_aliases" ]; then
+  # only prints; the path is quoted for the shell, then for the alias's single quotes
+  q=$(printf '%q' "$root/emulator/run.sh")
+  alias_line() { printf "alias %s='%s'\n" "$1" "${2//\'/\'\\\'\'}"; }
+  echo "# revview emulator (from: bash $root/emulator/run.sh --print-aliases)"
+  alias_line revview "bash $q"
+  alias_line revview-keys "bash $q --keys"
+  alias_line revview-stop "bash $q --stop"
+  exit 0
+fi
+
+if [ -n "$want_stop" ]; then
+  # signal every run.sh of this user that has a pid file; a stale file (pid gone, or not a run.sh) is removed
+  found=0
+  for f in "$pid_dir"/revview-emu-"$(id -u)"-*.pid; do
+    [ -e "$f" ] || continue
+    p=$(< "$f")
+    if [[ "$p" =~ ^[0-9]+$ ]] && kill -0 "$p" 2> /dev/null && tr '\0' ' ' < "/proc/$p/cmdline" 2> /dev/null | grep -q 'emulator/run\.sh'; then
+      kill -TERM "$p" 2> /dev/null
+      n=0
+      while kill -0 "$p" 2> /dev/null && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n + 1)); done
+      if kill -0 "$p" 2> /dev/null; then echo "run.sh: pid $p did not stop within 5 s" >&2; exit 1; fi
+      echo "stopped (pid $p)"
+      found=1
+    fi
+    rm -f "$f"
+  done
+  [ "$found" = 1 ] || echo "not running"
+  exit 0
+fi
+
 quick=${REVVIEW_QUICK_EXIT_SECS:-3}
 [[ "$quick" =~ ^[0-9]+$ ]] || bad "REVVIEW_QUICK_EXIT_SECS must be a whole number: $quick"
 
@@ -92,31 +134,7 @@ fi
 keymap="$root/config/buttons.laptop.json"
 
 if [ -n "$want_keys" ]; then
-  # shellcheck disable=SC2016  # the JS has its own template strings
-  node -e '
-    const m = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
-    const hold = { back: "home", "read-aloud": "stop", cancel: "Ctrl+C" };
-    console.log("Keys (focus the emulator window first). tap = press and release; hold = about 0.4 s; long hold = about 1 s.");
-    for (const b of m.buttons) {
-      const kind = b.longHold ? "long hold" : b.hold ? "hold" : "";
-      const extra = kind ? `, ${kind}: ${hold[b.button] || "(see config)"}` : "";
-      console.log(`  ${String(b.key).padEnd(12)} tap: ${b.button}${extra}`);
-    }
-  ' "$keymap" || exit 1
-  # shellcheck disable=SC2016  # the JS has its own template strings
-  node --input-type=module -e '
-    const { pathToFileURL } = await import("node:url");
-    const { buildLoop } = await import(pathToFileURL(process.argv[1]).href);
-    const names = buildLoop(1).map((s, i) => `${i + 1} ${s.name}`).join(", ");
-    console.log("");
-    console.log("Demo keys (demo mode only, handled by the demo player, not the bar):");
-    console.log(`  1-${names.split(", ").length}          jump to a scene (${names})`);
-    console.log("  P            pause / continue");
-    console.log("  [            slower");
-    console.log("  ]            faster");
-    console.log("");
-    console.log("In demo mode nothing is sent to a Claude: allow, deny, cancel and push-to-talk show what the bar would show, with nothing real behind them. Read aloud speaks only with REVVIEW_SPEECH=config/speech.json and espeak-ng (or Piper) installed on the laptop; run.sh installs nothing.");
-  ' "$root/emulator/demo/scenes.js" || exit 1
+  node "$here/keys-sheet.js" "$keymap" || exit 1
   exit 0
 fi
 
@@ -126,6 +144,7 @@ dpid=
 bpid=
 bgrp=
 winprofile=
+pidfile=
 
 # shellcheck disable=SC2317  # called through the EXIT trap
 cleanup() {
@@ -148,12 +167,15 @@ cleanup() {
   fi
   if [ -n "$winprofile" ]; then rm -rf "$winprofile"; fi
   if [ -n "$work" ]; then rm -rf "$work"; fi
+  if [ -n "$pidfile" ]; then rm -f "$pidfile"; fi
 }
 trap cleanup EXIT
 trap 'exit 0' INT TERM HUP
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/revview-emu.XXXXXX") || { echo "run.sh: cannot make a temp dir" >&2; exit 1; }
 log="$work/server.log"
+pidfile="$pid_dir/revview-emu-$(id -u)-$$.pid"
+echo $$ > "$pidfile" 2> /dev/null || pidfile=
 
 server_args=(--dev-bridge --dev-keys "$keymap")
 [ "$mode" = live ] || server_args+=(--dev-demo)

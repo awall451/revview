@@ -5,7 +5,7 @@ import http from 'node:http';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 // emulator/run.sh with a stand-in browser (a bash script that records its args and PID, then waits for a
@@ -206,16 +206,14 @@ test('no browser found: prints the URL and keeps serving', async () => {
   } finally { run.finish(); }
 });
 
-test('--keys lists all 11 keys', async () => {
+test('--keys lists all 11 keys and the hold meanings (details: emulator-keys-sheet.test.js)', async () => {
   const run = start(['--keys'], { browser: false });
   try {
     const { code } = await run.exit();
     assert.equal(code, 0);
-    const lines = run.out.split('\n').filter((l) => /tap:/.test(l));
-    assert.equal(lines.length, 11);
-    assert.match(run.out, /Backspace.*hold: home/);
-    assert.match(run.out, /R .*hold: stop/);
-    assert.match(run.out, /Esc.*long hold: Ctrl\+C/);
+    assert.equal(run.out.split('\n').filter((l) => /^\S+ +[a-z-]+ {2,}\S/.test(l) && !/^KEY /.test(l)).length, 11);
+    assert.match(run.out, /^Backspace +back +back +home/m);
+    assert.match(run.out, /^Esc +cancel .*Ctrl\+C$/m);
   } finally { run.finish(); }
 });
 
@@ -448,18 +446,17 @@ test('--keys lists the demo keys, every scene name and the no-Claude note', asyn
   const run = start(['--keys'], { browser: false });
   try {
     assert.equal((await run.exit()).code, 0);
-    assert.match(run.out, /^Demo keys \(demo mode only, handled by the demo player, not the bar\):$/m);
+    assert.match(run.out, /^Demo keys \(demo mode only; the demo player handles them, not the bar\):$/m);
     const { buildLoop } = await import('../../emulator/demo/scenes.js');
     const names = buildLoop(1).map((s) => s.name);
     assert.equal(names.length, 7);
     for (const n of names) assert.ok(run.out.includes(n), `scene ${n}`);
     assert.match(run.out, /^ {2}1-7 .*jump to a scene/m);
     assert.match(run.out, /^ {2}P +pause/m);
-    assert.match(run.out, /^ {2}\[ +slower/m);
-    assert.match(run.out, /^ {2}\] +faster/m);
+    assert.match(run.out, /\[ +slower/);
+    assert.match(run.out, /\] +faster/);
     assert.match(run.out, /nothing is sent to a Claude/);
     assert.match(run.out, /REVVIEW_SPEECH=config\/speech\.json/);
-    assert.equal(run.out.split('\n').filter((l) => /tap:/.test(l)).length, 11);
   } finally { run.finish(); }
 });
 
@@ -470,4 +467,97 @@ test('--help describes --demo and --live', async () => {
     assert.match(run.out, /--demo /);
     assert.match(run.out, /--live [\s\S]*real Claude Code hook events/);
   } finally { run.finish(); }
+});
+
+test('--help lists --print-aliases and --stop', async () => {
+  const run = start(['--help'], { browser: false });
+  try {
+    assert.equal((await run.exit()).code, 0);
+    assert.match(run.out, /^usage: .*\[--print-aliases\] \[--stop\]/m);
+    assert.match(run.out, /--print-aliases /);
+    assert.match(run.out, /--stop /);
+  } finally { run.finish(); }
+});
+
+// --print-aliases: prints the block, writes nothing, never touches $HOME/.bashrc
+test('--print-aliases prints the three aliases with the real path, writes nothing, exits 0', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'emu-home-'));
+  const run = start(['--print-aliases'], { browser: false, env: { HOME: home, XDG_RUNTIME_DIR: home } });
+  try {
+    assert.equal((await run.exit()).code, 0);
+    const root = path.dirname(path.dirname(RUN));
+    assert.match(run.out, new RegExp(`^alias revview='bash ${root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/emulator/run\\.sh'$`, 'm'));
+    assert.match(run.out, /^alias revview-keys='bash .*\/emulator\/run\.sh --keys'$/m);
+    assert.match(run.out, /^alias revview-stop='bash .*\/emulator\/run\.sh --stop'$/m);
+    assert.deepEqual(fs.readdirSync(home), []);
+    assert.deepEqual(fs.readdirSync(run.tmp), []);
+    assert.equal(run.err, '');
+  } finally { run.finish(); fs.rmSync(home, { recursive: true, force: true }); }
+});
+
+test('--print-aliases quotes a clone path with spaces and quotes: the printed block, sourced, runs the clone', async () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'emu-alias-'));
+  const clone = path.join(base, "my clone's dir");
+  fs.mkdirSync(path.join(clone, 'emulator'), { recursive: true });
+  fs.copyFileSync(RUN, path.join(clone, 'emulator/run.sh'));
+  try {
+    const r = spawnSync('bash', [path.join(clone, 'emulator/run.sh'), '--print-aliases'], { encoding: 'utf8', env: { ...process.env, HOME: base } });
+    assert.equal(r.status, 0);
+    // run the aliases in a fresh interactive-like shell that only echoes its args: swap bash for printf
+    const probe = spawnSync('bash', ['-c', `shopt -s expand_aliases; bash() { printf '%s\\n' "$@"; }; ${r.stdout}\nrevview-stop`], { encoding: 'utf8' });
+    assert.equal(probe.stdout.trim().split('\n').join('|'), `${path.join(clone, 'emulator/run.sh')}|--stop`);
+    assert.deepEqual(fs.readdirSync(base), ["my clone's dir"]);
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});
+
+// --stop: another terminal stops a running run.sh through its pid file
+test('--stop with nothing running says so and exits 0', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emu-stop-'));
+  try {
+    const r = spawnSync('bash', [RUN, '--stop'], { encoding: 'utf8', env: { ...process.env, XDG_RUNTIME_DIR: dir } });
+    assert.equal(r.status, 0);
+    assert.equal(r.stdout.trim(), 'not running');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('--stop removes a stale pid file and says not running', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emu-stop-'));
+  try {
+    fs.writeFileSync(path.join(dir, `revview-emu-${process.getuid()}-1.pid`), '999999\n');
+    // a live pid that is not a run.sh must not be signalled
+    const other = spawn('sleep', ['30']);
+    fs.writeFileSync(path.join(dir, `revview-emu-${process.getuid()}-2.pid`), `${other.pid}\n`);
+    const r = spawnSync('bash', [RUN, '--stop'], { encoding: 'utf8', env: { ...process.env, XDG_RUNTIME_DIR: dir } });
+    assert.equal(r.status, 0);
+    assert.equal(r.stdout.trim(), 'not running');
+    assert.ok(alive(other.pid));
+    other.kill();
+    assert.deepEqual(fs.readdirSync(dir), []);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('--stop stops a running run.sh: server, demo player and temp dir are gone, the pid file too', async () => {
+  const xdg = fs.mkdtempSync(path.join(os.tmpdir(), 'emu-xdg-'));
+  const run = start(['--no-browser'], { browser: false, env: { XDG_RUNTIME_DIR: xdg } });
+  try {
+    await run.url();
+    const pidfile = path.join(xdg, `revview-emu-${process.getuid()}-${run.child.pid}.pid`);
+    await until(() => fs.existsSync(pidfile), 'pid file');
+    const server = await until(() => run.serverPid(), 'server pid');
+    assert.ok(alive(server));
+    // async: this process is run.sh's parent and must reap it, or --stop would see a zombie
+    const stopper = spawn('bash', [RUN, '--stop'], { env: { ...process.env, XDG_RUNTIME_DIR: xdg } });
+    let said = '';
+    stopper.stdout.on('data', (d) => { said += d; });
+    const status = await new Promise((resolve) => stopper.on('exit', resolve));
+    const r = { status, stdout: said };
+    assert.equal(r.status, 0);
+    assert.match(r.stdout, /^stopped \(pid \d+\)$/m);
+    assert.equal((await run.exit()).code, 0);
+    assert.ok(!alive(server), 'server still running');
+    assert.deepEqual(leftovers(run), []);
+    assert.deepEqual(fs.readdirSync(xdg), []);
+    const again = spawnSync('bash', [RUN, '--stop'], { encoding: 'utf8', env: { ...process.env, XDG_RUNTIME_DIR: xdg } });
+    assert.equal(again.stdout.trim(), 'not running');
+  } finally { run.finish(); fs.rmSync(xdg, { recursive: true, force: true }); }
 });
