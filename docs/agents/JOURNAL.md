@@ -280,3 +280,16 @@ Process notes:
 - Cycle cost about $3.5 of $40 (the estimate was $9).
 
 Gate: `laptop-emu` MERGED first try on 2026-11-23 (86a5f21, 1336 tests). Notes submitted after the verdict. Publish requested.
+
+## 2026-11-23: cycle 19 (one-shot job: "Emulator on your laptop 2: demo mode")
+
+Asked: owner message 20261123T043808Z-o-6f7dfb (backlog item 20261123T033802Z-b-d8b2ba, estimate 50 minutes / $6; owner issue 20261123T034359Z-i-58d0e0): a demo mode for the laptop emulator, so the bar shows the recorded sessions without a Claude. Nothing else was done this cycle.
+
+Dispatched: area-lead-core (Opus, two Sonnet builders), topic `demo-mode`: 3 commits, 11 files, about +1001 -8, `tools/check` untouched, no new dependency. Sonnet reviewer: approve, no blocking finding; 6 runs of the new unit tests (3 under CPU load) all passed. It made no mutations and did not run the Playwright spec itself (`tools/check` did).
+
+Not proven: anything on a real laptop or WSL2 (bench L3-L4, untested); speech in demo mode; the player's unit tests were written after the player (not seen failing first). Left out: no compaction scene, keys 8 and 9 do nothing. Reviewer's non-blocking notes, not fixed: Digit8/9 dead zone; no retry of the key stream after a 503; the player's `--url` is not restricted to loopback.
+
+Process notes:
+- Cycle cost about $3.6 of $40 (the estimate was $6).
+
+Gate: `demo-mode` MERGED first try on 2026-11-23 (49fc200, 1361 tests, was 1336). Notes submitted after the verdict. Publish requested.

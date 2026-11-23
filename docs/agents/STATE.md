@@ -1,6 +1,6 @@
 # STATE
 
-Updated 2026-11-23 (one-shot cycle 18: owner job 20261123T034350Z-o-d958cf "Emulator on your laptop 1", ONE topic `laptop-emu`, MERGED at about 04:25Z as 86a5f21, 1336 tests, was 1299). Before it: cycle 17 (QA round 7b, `qa7b-fixes`, 86bdaa3). Milestone 1 CLOSED; stages 2, 3 and 4 BUILT; milestone 2 complete in the repository; all of it unproven on the Pi. What is left is the owner's bench.
+Updated 2026-11-23 (one-shot cycle 19: owner job 20261123T043808Z-o-6f7dfb "Emulator on your laptop 2: demo mode", ONE topic `demo-mode`, MERGED as 49fc200, 1361 tests, was 1336). Before it: cycle 18 (`laptop-emu`, 86a5f21) and cycle 17 (QA round 7b, `qa7b-fixes`, 86bdaa3). Milestone 1 CLOSED; stages 2, 3 and 4 BUILT; milestone 2 complete in the repository; all of it unproven on the Pi. What is left is the owner's bench.
 
 ## Roadmap (the charter's four stages)
 
@@ -29,15 +29,17 @@ Updated 2026-11-23 (one-shot cycle 18: owner job 20261123T034350Z-o-d958cf "Emul
 
 ## In flight
 
-- Nothing. `laptop-emu` MERGED as 86a5f21 (3 commits, 14 files, about +1030 -15; `tools/check` untouched, no new dependency). Ready and work branches and the cycle's worktrees deleted. Owner message answered `done`, owner issue 20261123T034348Z-i-820960 set done, publish requested.
-- `ready/lead-notes-18` (these notes, on top of 86a5f21): delete it and `work/lead-notes-18` once merged. `ready/lead-notes-17` / `work/lead-notes-17` (merged as 193b7ae) were left alone by the one-shot cycle: delete them in the next normal cycle.
+- Nothing. `demo-mode` MERGED as 49fc200 (3 commits, 11 files, about +1001 -8; `tools/check` untouched, no new dependency). Ready and work branches and the cycle's worktrees deleted. Owner message answered `done`, owner issue 20261123T034359Z-i-58d0e0 set done, publish requested.
+- `ready/lead-notes-19` (these notes, on top of 49fc200): delete it and `work/lead-notes-19` once merged. `ready/lead-notes-17` / `work/lead-notes-17` (merged as 193b7ae) are still left alone: delete them in the next normal cycle.
 - No worktree left. No held change.
 
 ## Emulator on the owner's laptop (owner backlog, three items)
 
 - Item 1 DONE (one-shot job 20261123T034350Z-o-d958cf, merged 86a5f21; DECISIONS.md "Emulator on your laptop 1", `emulator/README.md`, bench L1-L2 untested). Built: `config/buttons.laptop.json` (arrows, Enter = press, Backspace = back / hold home, Space = push-to-talk, R = read aloud / hold stop, Esc = cancel / long hold Ctrl+C, N = deny, M = menu; `config/buttons.json` untouched); the key-name parser also takes Up/Down/Left/Right/Enter/Backspace/Space/Esc and A-Z; server option `--dev-keys <file>` (exit 2 without `--dev-bridge`) and `GET /dev/keys` (only with the bridge), `src/view/devkeys.js` blocks the browser default of mapped keys (not with Ctrl/Alt/Meta); `emulator/run.sh` (`--port`, `--no-browser`, `--scale`, `--keys`, `--help`; `REVVIEW_BROWSER`; server on port 0, the real port read from its `view:` line; `--scale S` = `--force-device-scale-factor=S` with `--window-size=1280,400`; browser in its own process group via `setsid`, own throw-away profile; watches the server and exits 1 if it dies; a browser that returns within 3 s = keep serving until Ctrl+C; exit codes 0 / 1 / 2). Tests: `tests/unit/input-laptop-keymap.test.js`, `tests/unit/emulator-run.test.js` (stand-in browser), `emulator/tests/laptop-keys.spec.js`. Sonnet review: one blocking bug (stderr lost after the port probe), fixed with three smaller findings in one fix round; the fix round was not re-reviewed.
 - NOT PROVEN: nothing ran on a real desktop, laptop or WSL2. WSL2 detection, the Windows browser paths and the `%TEMP%` profile are from memory. The `--app` title bar may take part of the 400 px. Enter on the empty bar opens the SESSIONS list with "No sessions".
-- Items 2 (demo content) and 3 (the documents) are the owner's to start (`owner-backlog list`); do not start them unasked.
+- Item 2 DONE (one-shot job 20261123T043808Z-o-6f7dfb, merged 49fc200; DECISIONS.md "Emulator on your laptop 2", `emulator/README.md`, bench L3-L4 untested). Built: `bash emulator/run.sh` plays the demo by default; `--live` asks for a real session (no player; `--demo --live` exits 2). Player `emulator/demo/player.js` + `emulator/demo/scenes.js` runs as its own process and posts the recordings as three sessions side by side (revview, garden, notes), looping with fresh session ids and an injected clock. Server flag `--dev-demo` (needs `--dev-bridge`): demo keys typed in the page go to `GET /dev/demo` (the player listens), never to the bar; without the flag the server is unchanged, reducer and view untouched. Scenes: 1 working, 2 permission, 3 done, 4 waiting, 5 offline, 6 insert-key, 7 ended; P pause, `[` slower, `]` faster (0.25x-4x); `--keys` lists them under their own heading. The player stops with the server; run.sh's trap kills it. Tests: `tests/unit/emulator-demo.test.js` (14), 10 new in `tests/unit/emulator-run.test.js`, `emulator/tests/demo-keys.spec.js`. Sonnet review: approve, no blocking finding.
+- NOT PROVEN (item 2): nothing ran on a real laptop or WSL2; speech in demo mode untested (needs espeak-ng or Piper installed by the user); nothing is sent to a Claude in demo mode. No compaction scene (the bar has no compaction view, it shows WORKING), so keys 8 and 9 are swallowed and do nothing. The player's unit tests were written after the player. Reviewer's non-blocking notes, not fixed: the Digit8/9 dead zone; the player does not retry the key stream after a 503; the player's `--url` is not restricted to loopback (hand-run only).
+- Item 3 (the documents) is the owner's to start (`owner-backlog list`); do not start it unasked.
 
 ## Milestone 2: the Pi appliance (charter stage 4)
 
