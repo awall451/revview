@@ -1537,6 +1537,7 @@ Tested in the unit suite only (fakes, injected timers); nothing run on a Pi.
 
 ## 2026-11-23: Emulator on your laptop 3: review round 2 (`--stop`, wording)
 
+- **Three stand-in browsers outlived every unit-test run (a test leak, not a run.sh bug):** the first three `emulator-run` tests end with run.sh still up and their cleanup SIGKILLed only run.sh's process group, but run.sh starts the browser with `setsid`; `finish()` now also kills what has the run's private dir on its command line, and an `after` guard fails the file if any process with one of those dirs is left.
 - **`--stop` scans every place a run can have written to,** not only the ones its own environment names: a run started in
   a desktop shell (`XDG_RUNTIME_DIR=/run/user/<uid>`) was "not running" for a `--stop` from an ssh or WSL shell where it
   is unset, and the reverse, and likewise for a different `TMPDIR`. Now: `$XDG_RUNTIME_DIR/revview-emu` (if set),

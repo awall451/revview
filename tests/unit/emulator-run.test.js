@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -53,8 +53,29 @@ const portOpen = (port) => new Promise((resolve) => {
 // Start run.sh; resolves with helpers. Always clean up with run.finish().
 // Every run gets a private XDG_RUNTIME_DIR (dir/xdg) and private stand-ins for /tmp (dir/fallback) and /run/user/<uid> (dir/runuser), so a
 // test never sees or stops anybody else's run.sh and leaves nothing outside its own dir. An env value of null unsets.
+const runDirs = [];
+// pids (not this process) whose command line contains one of the given private directories
+function procsInDirs(...dirs) {
+  const found = [];
+  for (const p of fs.readdirSync('/proc').filter((x) => /^\d+$/.test(x) && Number(x) !== process.pid)) {
+    try {
+      const cmd = fs.readFileSync(`/proc/${p}/cmdline`, 'utf8');
+      if (dirs.some((d) => cmd.includes(d))) found.push(Number(p));
+    } catch { /* gone */ }
+  }
+  return found;
+}
+
+// The guard: after the file's last test, nothing started by these tests is left running.
+after(() => {
+  const left = procsInDirs(...runDirs);
+  for (const p of left) { try { process.kill(p, 'SIGKILL'); } catch { /* gone */ } }
+  assert.deepEqual(left, [], 'processes left behind by emulator/run.sh tests');
+});
+
 function start(args, { env = {}, browser = true, standOpts, cwd, script = RUN, setup } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emu-run-test-'));
+  runDirs.push(dir);
   const tmp = path.join(dir, 'tmp');
   const xdg = path.join(dir, 'xdg');
   fs.mkdirSync(tmp);
@@ -95,6 +116,9 @@ function start(args, { env = {}, browser = true, standOpts, cwd, script = RUN, s
   };
   run.finish = () => {
     try { process.kill(-child.pid, 'SIGKILL'); } catch { /* already gone */ }
+    // run.sh starts the browser in its own session (setsid), so the group kill above does not reach it: when a test ends
+    // with run.sh still up, the stand-in would outlive it. Kill whatever still has this run's private dir on its command line.
+    for (const p of procsInDirs(dir)) { try { process.kill(p, 'SIGKILL'); } catch { /* gone */ } }
     fs.rmSync(dir, { recursive: true, force: true });
   };
   return run;
