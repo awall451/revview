@@ -1,6 +1,6 @@
 # STATE
 
-Updated 2026-11-23 (cycle 17, a short cycle: QA round 7b and its fixes, ONE topic `qa7b-fixes`, head 86bdaa3, 1299 tests, was 1293; submitted, verdict not yet seen). Milestone 1 CLOSED; stages 2, 3 and 4 BUILT; milestone 2 complete in the repository; all of it unproven on the Pi. What is left is the owner's bench.
+Updated 2026-11-23 (cycle 17, a short cycle: QA round 7b and its fixes, ONE topic `qa7b-fixes`, head 86bdaa3, 1299 tests, was 1293; MERGED at 02:16Z as 86bdaa3). Milestone 1 CLOSED; stages 2, 3 and 4 BUILT; milestone 2 complete in the repository; all of it unproven on the Pi. What is left is the owner's bench.
 
 ## Roadmap (the charter's four stages)
 
@@ -29,7 +29,7 @@ Updated 2026-11-23 (cycle 17, a short cycle: QA round 7b and its fixes, ONE topi
 
 ## In flight
 
-- `ready/qa7b-fixes` (86bdaa3, 4 commits on e33cbfa, 12 files, +154 -15; `tools/check` untouched, no new dependency): submitted in cycle 17. Next cycle: read the verdict; merged -> delete `ready/qa7b-fixes` and `work/qa7b-fixes`; failed -> give the log to area-lead-core (Sonnet).
+- Nothing. `qa7b-fixes` MERGED at 02:16Z on 2026-11-23 as 86bdaa3 (4 commits, 12 files, +154 -15; `tools/check` untouched). Ready and work branches deleted. A publish was requested.
 - `ready/lead-notes-17` (these notes, on top of 86bdaa3): next cycle delete it and `work/lead-notes-17` once merged.
 - No worktree left. No held change.
 
@@ -69,7 +69,7 @@ Design: `docs/BUTTONS.md`; recordings `fixtures/buttons/`. Phases:
 
 ## Next
 
-1. Handle the verdicts of `qa7b-fixes` and `lead-notes-17`; when both are merged, `owner-publish request` (not yet requested for them if the verdict was not seen in cycle 17: check `owner-publish status`).
+1. Handle the verdict of `lead-notes-17` (`qa7b-fixes` is merged, publish requested in cycle 17).
 2. The software for all four charter stages is built. QA round 7b (cycle 17) re-ran r7-01..08 as the owner reading the documents: ALL EIGHT HELD; 3 small new findings (r7b-01 minor, r7b-02 and r7b-03 polish) fixed in `qa7b-fixes` (not re-run by QA, not reviewed by a reviewer: the lead read the core diff and sent it back once). The owner's path: top-level README "On the Pi" -> `pi/README.md` (ends with "First drive (parked)") -> `docs/BENCH-TEST.md` "First afternoon" (18 ordered steps; since r7b-01 none of them starts a server by hand, all use the running service) -> the rest as reference; `docs/REVOKE.md`.
 3. Do not invent features beyond the charter. NO planned work is left. From now on IDLE cycles: sync, verdicts, inbox, stop (a cycle with nothing to do should cost well under $1: do not start QA or leads without a reason). Work starts again with an owner message or a bench report.
 4. Leftovers (none blocking): `pi/data.mjs` exits 1 for both refusal and crash; the key-on Claude's exit REASON is not logged (needs tmux `remain-on-exit`); no script installs Piper (checksum unknown here); hold-mode push-to-talk not built (tap is the charter's mode); locking the data when the stick is pulled is not built (DESIGN: later, maybe); when the shipped key map changes, the owner merges it into `/etc/revview/buttons.json` by hand (the installer prints a `note:` with the `diff` command); the package name `sox` on Raspberry Pi OS is taken from Claude Code's own hint, unverified (bench P21); no gallery shot of the ENDED screen with the next-step note (an emulator fit test covers it); no test pins the bench ids in BENCH-TEST.md (QA checked them by hand in rounds 7 and 7b).

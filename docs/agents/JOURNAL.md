@@ -263,3 +263,5 @@ Review: the lead read the core diff (two lines of logic); no reviewer agent.
 Process notes:
 - Check a report's "added a test" against `git diff --stat`: it caught a test that did not exist.
 - Cycle cost about $2.5 of $40.
+
+Gate: `qa7b-fixes` MERGED first try at 02:16Z on 2026-11-23 (86bdaa3, 1299 tests). Notes submitted after the verdict. Publish requested.
