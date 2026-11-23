@@ -204,3 +204,29 @@ Process notes:
 - Cycle cost about $12 of $40.
 
 Gate: `stage4a-core14` MERGED first try at 22:32Z (8bd4a39, 1064 tests). The notes branch was based on the work commit and submitted after the verdict. Publish requested.
+
+## 2026-11-22/23: cycle 15 (normal cycle: stage 4 part B, QA rounds 6 and 6b, part D)
+
+No owner message, no gate verdict to handle, no leftover worktree. Local `main` was one notes commit behind the gate and was reset.
+
+Dispatched in parallel: area-lead-platform (Opus, 27 minutes, six Sonnet builders, its own Opus review and a fix round; 1209 tests) for milestone 2 part B on `work/stage4b`; qa (round 6 on main, 12 minutes). QA: all seven issues closed in cycle 14 held; one new major, r6-01: with `--boot` and no key-on session (the installed default) the bar stayed on STARTING for good and dropped every press. Plus installer findings (a symlinked folder was followed; a crash still printed "done").
+
+Then, on top of `work/stage4b` so that `src/server/index.js` had one owner at a time (lesson of cycle 14): area-lead-core (Opus, 20 minutes, its own reviewer inside; 1262 tests) fixed r6-01..07 and built part D (`work/qa6-fixes`). Its reviewer found that a posted `RevviewStarting` could still trap the bar; the rule now hangs on a flag only the server sets.
+
+Checks of the two un-reviewed fix rounds, in parallel: qa round 6b on the branch (9 minutes: all r6 held, no major, 8 small) and a Sonnet reviewer limited to the two fix commits with a budget of 10 mutations (2 minutes of tool time; 9 caught, 1 survived: the boot-only press-drop rule was not pinned; no test weakened). A Sonnet area-lead-core round (7 minutes, 1271 tests) fixed all of it: the pin, 403 for posted `RevviewStarting` / `RevviewDataLock` outside the dev bridge, r6b-01..08.
+
+Decisions made by the agents (DECISIONS.md "stage 4B", "QA round 6", "QA round 6b"): raspi-config overlay as a separate last step; key stick by file-system UUID, key file on the stick only; the server trusts only the kernel's mount table for "unlocked"; pulling the stick does not lock; STARTING limits 60 s (boot) and 30 s (a started session); push-to-talk not sent to a session that is still starting; relative `REVVIEW_START` refused; installer exit codes.
+
+Publish hygiene: a new test used `10.0.0.1`. The publisher refuses private addresses, so the submission was withdrawn for two minutes (before the gate picked it up) and the address replaced by `192.0.2.1`. Brief agents: documentation ranges only (192.0.2.0/24, 2001:db8::/32) in tests and docs.
+
+Submitted as ONE topic `stage4b-qa6` (7f5d5c3, 18 commits), because the fixes sit on top of part B.
+
+Not proven: anything on the Pi. Most of part B's knowledge of raspi-config, cryptsetup, udev and lsblk is from memory and marked so; bench S4B-1..19 and P15-P20 are new and untested. The r6b fixes were not re-run by QA.
+
+Process notes:
+- Running the second lead on top of the first lead's branch avoided the integration run of cycle 14.
+- A reviewer scoped to the fix commits with a mutation budget took 2 minutes and still found the one unpinned rule.
+- QA on main + QA on the fix branch again found the cycle's only major.
+- Cycle cost about $21 of $40 (part B alone about $10).
+
+Gate: `stage4b-qa6` MERGED first try at 00:07Z on 2026-11-23 (7f5d5c3, 1271 tests). Notes branch based on that commit, submitted after the verdict. Publish requested.

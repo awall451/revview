@@ -1,6 +1,6 @@
 # STATE
 
-Updated 2026-11-22 (cycle 14, a normal cycle: stage 4 part A (Pi set-up) and a small core run, MERGED together as ONE topic `stage4a-core14`, gate main 8bd4a39, 1064 tests, was 974). Milestone 1 CLOSED; stage 2 BUILT; stage 4 part A BUILT; all of it unproven on the Pi. Current milestone: 2 (the Pi appliance).
+Updated 2026-11-23 (cycle 15, a normal cycle: milestone 2 parts B, C and D built and MERGED together as ONE topic `stage4b-qa6`, gate main 7f5d5c3, 1271 tests, was 1064). Milestone 1 CLOSED; stages 2, 3 and 4 BUILT; all of it unproven on the Pi. Milestone 2 is complete in the repository: what is left is the owner's bench.
 
 ## Roadmap (the charter's four stages)
 
@@ -29,17 +29,17 @@ Updated 2026-11-22 (cycle 14, a normal cycle: stage 4 part A (Pi set-up) and a s
 
 ## In flight
 
-- Nothing. `stage4a-core14` MERGED at 22:32Z as 8bd4a39 (7 commits, 47 files, +2652 -156; `tools/check` untouched, no new dependency). Ready and work branches deleted. A publish was requested.
-- `ready/lead-notes-14` (these notes): next cycle delete it once merged.
+- Nothing. `stage4b-qa6` MERGED at 00:07Z on 2026-11-23 as 7f5d5c3 (18 commits, 64 files, about +4900 -200; `tools/check` untouched, no new dependency). Ready and work branches deleted. A publish was requested.
+- `ready/lead-notes-15` (these notes): next cycle delete it and `work/lead-notes-15` once merged.
 - No worktree left. No held change.
 
 ## Milestone 2: the Pi appliance (charter stage 4)
 
 Checkable outcomes:
 - A (BUILT, cycle 14): `sudo bash pi/install.sh --user NAME [--rotate 90|270] [--output HDMI-A-1] [--dry-run] [--root DIR] /opt/revview` takes a fresh Trixie to "boots into the bar": packages, one login user for kiosk + server + Claude sessions, server as a systemd USER unit with linger (`--input --sessions --boot --netmon`), kiosk (`pi/kiosk.sh`, respawn with back-off, pause markers), rotation (cmdline, wlr-randr, touch udev), quiet boot, lightdm autologin, hooks install. All file edits are in `pi/setup.mjs`, tested against a fake root. `pi/README.md` is the owner's step list; bench P1-P14 untested.
-- B (NEXT): read-only root (overlay) and power-cut behaviour; LUKS data partition unlocked from a key stick (`~/.claude`, `~/.claude.json`, repos, push credentials ONLY: `~/.config/labwc` and `~/.config/revview` stay on the root so the bar shows while locked); the unlock step sends `RevviewDataLock` and only then the key-on session may start (today `--boot` starts the `REVVIEW_START` session at server start: move it behind the unlock); `docs/REVOKE.md`; Piper install; installer files must be written with the overlay off.
-- C: QA round 6 on main (the core changes of cycle 14, `--boot`, `--netmon`, the installer against a fake root as the owner would use it, README walk-through), fixes.
-- D: the bar says STARTING, not UNKNOWN "No events from this session yet", between the key-on session's window appearing and its first hook (needs a guard so a lost first hook cannot stick); bench items D1, D3, R14, H4 rewritten for the user unit (today only a note above P1).
+- B (BUILT, cycle 15; DECISIONS.md "stage 4B"): read-only root = raspi-config's overlay + read-only boot partition, a separate last step `pi/readonly.sh status|enable|disable` (`install.sh` and `data-setup.sh` refuse under the overlay; "Updating" in `pi/README.md`). Encrypted data: `pi/data-setup.sh` (LUKS2 Adiantum on a partition the owner names and types again; `--format`, `--dry-run`; key = 4096 random bytes at `revview/data.key` on the stick, stick known by its file-system UUID, optional recovery passphrase), mounted on `/srv/revview-data`; `~/.claude`, `~/.ssh`, `~/repos` are symlinks into it, `~/.claude.json` lives inside `~/.claude` through `CLAUDE_CONFIG_DIR` (checked here with Claude Code 2.1.330). `pi/unlock.sh` as root from `revview-unlock.service` (boot) and `revview-unlock-stick.service` (udev, stick plugged in later; flock between them); the path to the script must be root-owned all the way. Pulling the stick while running does nothing; locked again at power-off. Server `--data-lock [DIR]` (`src/server/datalock.js`): unlocked ONLY when `/proc/self/mountinfo` shows ext4 from `/dev/mapper/revview-data` on the directory; a posted `RevviewDataLock` is only a poke to re-read it; locked = INSERT KEY, bar/buttons/menu/read-aloud work, no session starts. `docs/REVOKE.md`. Piper: written steps only, no script. Bench S4B-1..19 untested. Biggest single risk for the bench: the mount table may name `/dev/dm-N` instead of `/dev/mapper/revview-data` (then the bar stays INSERT KEY; fix noted in DECISIONS).
+- C (DONE, cycle 15): QA round 6 on main (1 major, 4 minor, 2 cosmetic; all seven issues re-tested from cycle 14 held) and round 6b on the branch (no major; 5 minor, 3 polish). All 15 fixed on the branch (r6-01..07, r6b-01..08), r6 re-run by QA and held; r6b fixes NOT re-run by QA.
+- D (BUILT, cycle 15; DECISIONS.md "QA round 6" and "QA round 6b"): the boot STARTING always ends (internal `RevviewBootBegin`/`RevviewBootDone`, 60 s limit, notes such as "No session yet: open the menu for New session", "Key-on session not started: start folder missing"); presses are dropped only during the server's own boot hold (`board.booting`), never because of a posted event; a session revview starts shows STARTING until its first hook, at most 30 s, then UNKNOWN; push-to-talk to it is not sent meanwhile (note); `RevviewStarting` and `RevviewDataLock` over HTTP get 403 outside `--dev-bridge` (with `--data-lock` the poke is answered 204); relative `REVVIEW_START` refused; bad `REVVIEW_NETMON_HOST` falls back; installer refuses a symlink at any path component, exit codes `setup.mjs` 0/4 refused/2/3 crash, `install.sh` 0/1 refused/2; README: clone from the public repository, no `npm ci`; bench D1, D3, R14, H4 rewritten for the user unit, P15-P20 new.
 - Done when the owner's step list from flash to bar is complete, with every hardware step a bench item.
 
 What `stage4a-core14` contains (DECISIONS.md "stage 4A" with "Review fixes (stage 4A)", and "core small run (cycle 14)"):
@@ -69,15 +69,14 @@ Design: `docs/BUTTONS.md`; recordings `fixtures/buttons/`. Phases:
 
 ## Next
 
-1. (done in cycle 14: `stage4a-core14` merged, publish requested.) Start with items 2 and 3 in parallel.
-2. Milestone 2 part B (area-lead-platform, Opus): see the milestone. Two or three decisions to write first: overlay root by raspi-config's overlayfs or own initramfs hook; how the key stick is recognised (label / UUID, key file path); what the bar shows and what works while locked.
-3. QA round 6 on main (milestone 2 part C), in parallel with part B. It is due: last QA was cycle 13.
-4. Milestone 2 part D (area-lead-core, Sonnet): STARTING until the first hook of the key-on session; bench items rewritten for the user unit; reviewer leftovers of cycle 14 if QA confirms them. Hold-mode push-to-talk is still not built (tap mode is the charter's and the default).
+1. (done in cycle 15: `stage4b-qa6` merged, publish requested.) Handle the verdict of `lead-notes-15`.
+2. The software for all four charter stages is built; nothing is proven on a Pi. The team's remaining work is small. Candidates, in order: (a) QA round 7 on main: re-run r6b-01..08, the whole owner walk-through `pi/README.md` + `docs/REVOKE.md` + `docs/BENCH-TEST.md` as one document set (is the bench list in a sensible order for one afternoon at the bench? duplicates, stale items); (b) one bench guide: an ordered "first afternoon" path through the bench items (platform, Sonnet); (c) leftovers below.
+3. Leftovers (none blocking): `pi/data.mjs` exits 1 for both refusal and crash; the key-on Claude's exit REASON is not logged (needs tmux `remain-on-exit`); no script installs Piper (checksum unknown here); hold-mode push-to-talk not built (tap is the charter's mode); locking the data when the stick is pulled is not built (DESIGN: later, maybe); `linkedComponent` checks then writes (a race in principle, installer runs once as root); "<repo> ended" now also shows when the only session ends (wanted, check in QA 7).
+4. Do not invent features beyond the charter. If QA round 7 is clean, cycles should be short: answer owner messages and bench reports, fix what the bench finds.
 
 ## QA issues
 
-No open QA issue after `stage4a-core14` (closed there, not yet re-run by QA: r5-06, r5-07, r5b-02, r5-03, r4-05, r4-07, r4-10). Closed earlier: r5-01..05, r5b-01, r5b-03, r3-05, r3-07, r3-08.
-
+No open QA issue after `stage4b-qa6`: r6-01..07 and r6b-01..08 closed there (r6b not yet re-run by QA; r6b-02 closed with a caveat: the log says Claude exited, not why).
 Known limits: a prompt tied to a call whose PostToolUse was lost still shows NEEDS PERMISSION until Stop/idle_prompt/a driver prompt; a late hook from a really dead owned Claude shows its session again; a posted SessionEnd hides a live owned window for up to one 5 s poll; a duplicate Post whose Pre was never seen is not caught; sessions not started by revview that die without SessionEnd stay on the bar; QA noted, unproven: if `/clear` changes the session id inside the same tmux window, the buttons may lose that window.
 
 ## Small follow-ups
