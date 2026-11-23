@@ -197,7 +197,7 @@ test('r6-04: netmonTarget falls back (and logs) on bad values, accepts good ones
   assert.deepEqual(netmonTarget(undefined, quiet), FALLBACK);
   assert.deepEqual(netmonTarget('', quiet), FALLBACK);
   assert.deepEqual(netmonTarget('example.com', quiet), { host: 'example.com', port: 443 });
-  assert.deepEqual(netmonTarget('10.0.0.1:8080', quiet), { host: '10.0.0.1', port: 8080 });
+  assert.deepEqual(netmonTarget('192.0.2.1:8080', quiet), { host: '192.0.2.1', port: 8080 });
 });
 
 test('r6-04: the server with --netmon and a bad REVVIEW_NETMON_HOST starts anyway', async () => {
