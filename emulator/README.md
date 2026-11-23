@@ -112,13 +112,15 @@ posts the recorded sessions in `fixtures/sessions/*.jsonl` (re-addressed as thre
 the server at a watchable pace and loops until the window closes. Scenes: 1 working, 2 permission, 3 done, 4 waiting,
 5 offline, 6 insert-key, 7 ended. Demo keys, handled by the player and not by the bar (the server sends them to the
 player over `GET /dev/demo`, present only with `--dev-bridge --dev-demo`): 1-7 jump to a scene, P pause/continue, `[`
-slower, `]` faster; `--keys` lists them under their own heading. `--live` means a real session is asked for: no player,
-the server waits for real Claude Code hook events on its port.
+slower, `]` faster; `--keys` lists them under their own heading. `--live [DIR]` starts a real Claude Code session in DIR
+instead (no player): see `docs/EMULATOR-LAPTOP.md`, "Live: a real Claude Code session". It needs `tmux` and `claude`, runs
+Claude in a private tmux server of the run with a per-run `--settings` file, and prints the `attach:` line. Tested only with
+a stand-in claude, never with a real one.
 
 **What demo mode cannot show:** nothing is sent to a Claude, and no real session is behind the demo. Left/Right (switch
 session), Up/Down (list), M (menu) and a held Backspace (home) change the screen; Enter, N, Esc (held: Ctrl+C), Space and R
-on the permission and done scenes only log the gesture (`GET /buttons`) and leave the screen unchanged: they need `--live`
-and a real session. Read aloud (R) speaks only after a session was chosen with Left/Right (before that the server says "no
+on the permission and done scenes only log the gesture (`GET /buttons`) and leave the screen unchanged: with `--live` they
+are sent to the run's own Claude session. Read aloud (R) speaks only after a session was chosen with Left/Right (before that the server says "no
 session selected"), and only with espeak-ng or Piper installed as `config/speech.json` says (no setting; the server reads
 that file by default); `run.sh` installs nothing. Compaction is not a scene: the bar has no compaction view
 (a compacting session shows WORKING). Tested only against a server on the build VM with an injected clock

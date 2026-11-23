@@ -52,8 +52,9 @@ export async function buildSheet({ mapPath = DEFAULT_MAP, scenesPath = DEFAULT_S
   out.push('  P  pause / continue          [  slower          ]  faster');
   out.push('In the demo these change the screen: Left, Right, Up, Down, M, Backspace held');
   out.push('(go to the session that needs you most). Enter picks a row in a list or menu.');
-  out.push('Enter, N, Esc, Space on a permission or done screen only log the gesture: no');
-  out.push('real session is behind them (needs --live). Nothing is sent to a Claude.');
+  out.push('Enter, N, Esc, Space on a permission or done screen only log the gesture');
+  out.push('in the demo: nothing is sent to a Claude. With --live they go to the run\'s');
+  out.push('own Claude: Enter allows a shown permission, N denies, Esc and Space are sent.');
   out.push('R reads aloud only after Left/Right has chosen a session, and only with');
   out.push('espeak-ng, or Piper installed as config/speech.json says.');
   return `${out.join('\n')}\n`;

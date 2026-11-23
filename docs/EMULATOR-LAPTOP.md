@@ -47,7 +47,7 @@ running until you close the window or press Ctrl+C in the terminal.
 | `--no-browser` | Only serve: print the address and keep serving until Ctrl+C. Open the address yourself. |
 | `--scale S` | Make the window S times bigger on screen (a positive number, e.g. `1.5`). The page keeps its 1280x400 layout. |
 | `--demo` | The default. Play a looping demo of the bar's states (see below). |
-| `--live` | No demo. The server waits for real Claude Code hook events posted to its port (the `view:` line shows it). Not together with `--demo`. |
+| `--live [DIR]` | No demo. Starts a real Claude Code session in DIR (default: the current directory), in a private tmux server of this run, and the keys act on it. Needs `tmux` and `claude` on your `PATH`. See "Live: a real Claude Code session" below. Not together with `--demo`. |
 | `--keys` | Print the key cheatsheet (below) and exit. |
 | `--print-aliases` | Print a block of shell aliases for your `~/.bashrc` (below) and exit. It only prints. |
 | `--stop` | Stop EVERY `run.sh` of yours that is running, from another terminal. Prints `stopped (pid N)` for each, or `not running`; exits 0 either way (1 if one did not stop within 5 seconds). |
@@ -86,8 +86,8 @@ What each scene puts on the screen (the big state word of the bar):
 
 The digit keys jump to a scene; P pauses; `[` and `]` slow down and speed up (the cheatsheet lists them).
 
-With `--live` there is no demo. The bar stays on its empty state until real hook events arrive at the port.
-Nothing sets those up for you on a laptop.
+With `--live` there is no demo. `run.sh` starts a real Claude Code session and the bar shows that session (see
+"Live: a real Claude Code session" below). Until its first hook arrives the bar is on its empty state.
 
 **Nothing is sent to a Claude, ever, in demo mode.** No real session is behind the demo, so only some keys do
 anything you can see:
@@ -99,8 +99,8 @@ anything you can see:
   plain bar it does nothing.
 - **They do nothing you can see:** on the permission scene Enter (allow), N (deny) and Esc (cancel, Esc held = Ctrl+C),
   and on the done scene Space (talk) and R (read aloud). The bar logs the gesture (the server's `GET /buttons` lists
-  them), but nothing on the screen changes. To see them take effect you need a real Claude Code session: `--live`,
-  and hook events from it, which this guide does not set up.
+  them), but nothing on the screen changes. To see them take effect you need a real Claude Code session: run with
+  `--live` (below), where they are sent to it.
 - **In the menu** of the demo, "New session" shows "No projects: add paths to the projects file", and Projects and
   Settings lead nowhere useful: there are no projects configured and nothing to start. Enter picks a row in the
   session list, which is useful.
@@ -135,8 +135,9 @@ Demo keys (demo mode only; the demo player takes them, not the bar):
   P  pause / continue          [  slower          ]  faster
 In the demo these change the screen: Left, Right, Up, Down, M, Backspace held
 (go to the session that needs you most). Enter picks a row in a list or menu.
-Enter, N, Esc, Space on a permission or done screen only log the gesture: no
-real session is behind them (needs --live). Nothing is sent to a Claude.
+Enter, N, Esc, Space on a permission or done screen only log the gesture
+in the demo: nothing is sent to a Claude. With --live they go to the run's
+own Claude: Enter allows a shown permission, N denies, Esc and Space are sent.
 R reads aloud only after Left/Right has chosen a session, and only with
 espeak-ng, or Piper installed as config/speech.json says.
 ```
@@ -174,6 +175,57 @@ the browser, the demo player and the server and removes its temp files; `--stop`
 the end.
 It works from any directory, however `run.sh` was started.
 
+## Live: a real Claude Code session
+
+**None of this has been run with a real, signed-in Claude Code.** It is tested only with a stand-in `claude` (a small
+script) on the build VM. Treat it as untested until the bench items in `docs/BENCH-TEST.md` ("Emulator on your laptop 4")
+are done.
+
+What you need, besides the list at the top: `tmux`, and Claude Code (`claude`) installed and signed in. `run.sh --live`
+checks both are on your `PATH` before it starts anything; if one is missing it says which and exits 1.
+
+```
+bash emulator/run.sh --live              # a session in the current directory
+bash emulator/run.sh --live ~/some/project
+```
+
+What it does:
+
+- Picks a free loopback port (or your `--port`) before anything starts, so the hooks know where to post.
+- Writes a settings file with revview's hooks (made by `hooks/install.mjs --settings <file>`) in the run's own private
+  temp directory (mode 700, removed when the run ends).
+- Starts the server with the sessions runner, which runs plain interactive `claude --settings <that file> --session-id
+  <uuid>` in DIR, inside a private tmux server whose socket is `<temp dir>/tmux.sock`. It is not your default tmux
+  server and not the Pi's `-L revview` one. `REVVIEW_PORT` is set for the server, so tmux, Claude and the hooks inherit it.
+- Prints the line to look at and type in the session:
+
+```
+attach: tmux -S <socket> attach -t revview
+```
+
+Run that in another terminal and you are in the Claude session: type to it as usual, detach with Ctrl-b d (that leaves
+it running). If you are already inside tmux, run it outside tmux, or prefix it with `TMUX=`.
+
+**The keys act on that session.** Enter (a tap) answers a shown permission prompt with allow, N denies it, Esc sends
+Escape to Claude (held long: Ctrl+C), and Space (push-to-talk) sends its key to Claude. Whether voice input works
+depends on Claude Code and a microphone; this is unproven. Up, Down, Left, Right, M, Backspace and R work as on the
+Pi. In demo mode nothing is sent to a Claude.
+
+**Stopping.** Closing the window, Ctrl+C, TERM or HUP on `run.sh`, or `run.sh --stop` from another terminal stop the
+server and kill exactly that private tmux server, so the Claude in it ends. Nothing else is touched (your own tmux
+sessions stay).
+
+**Isolation, and what it does not do.**
+
+- `run.sh` does not write `$HOME/.claude`, `~/.claude.json` or any project's `.claude/settings*.json`. The hooks come
+  only from the per-run settings file passed with `--settings`.
+- `--settings` ADDS to your own settings: your user and project settings, and their hooks, still load. If you once
+  installed revview's hooks globally with `hooks/install.mjs`, each hook would post twice (once from there, once from
+  the run's file). Remove the global ones, or expect doubled events.
+- Claude Code itself still keeps its usual files (session history, `~/.claude.json`) as in any `claude` run. `run.sh`
+  only guarantees it does not write them itself.
+- The Claude session runs with your account and can use tools in DIR like any Claude session: pick DIR with that in mind.
+
 ## How it differs from the Pi
 
 - **Keys instead of wheel buttons.** The Pi reads real buttons from a device (`config/buttons.json`). The laptop
@@ -184,10 +236,10 @@ It works from any directory, however `run.sh` was started.
   looks, its brightness or daylight; those are Pi bench tests. The 1280x400 window is not the panel's physical
   size either (`emulator/README.md`, "Developer page", shows that).
 - **It is a browser window, not the kiosk.** There is no autostart, no rotation, no read-only root, no data lock
-  that is real, and no Claude Code session that revview started. Offline and insert-key are scenes of the demo,
+  that is real, and (in demo mode) no Claude Code session that revview started. Offline and insert-key are scenes of the demo,
   not real network or key-stick checks.
-- **Demo data is recorded data.** In `--live` mode the hooks of a real Claude Code can post to the port; setting
-  that up is not covered here.
+- **Demo data is recorded data.** In `--live` mode the bar shows a real Claude Code session that `run.sh` started
+  (below); the Pi's own services and its tmux server are not involved.
 - **Speech** needs espeak-ng, or Piper installed as `config/speech.json` says, installed by you (no setting).
 
 ## Troubleshooting
@@ -198,6 +250,14 @@ player keep running, and `--stop` has no pid file for them any more. List them w
 `pgrep -u "$(id -u)" -af 'src/server/index.js.*--dev-bridge|emulator/demo/player.js'` and stop the ones shown
 (`kill <pid> <pid>`; if no other emulator of yours is running, `pkill -u "$(id -u)" -f` with the same pattern does it).
 The temp directory `revview-emu.XXXXXX` in your `TMPDIR` (or `/tmp`) was not removed either; delete it by hand.
+
+**`--live` says `tmux` or `claude` was not found.** Install it, or put its folder on the `PATH` of the shell you run
+`run.sh` from. Nothing was started; the exit code is 1.
+
+**A tmux server is left after `kill -9` of `run.sh`.** Like the case above, a KILL gives `run.sh` no chance to clean
+up: the private tmux server (and the Claude in it) and the server can stay. Use the socket path that was printed in
+the `attach:` line: `tmux -S <socket> kill-server`. Or find them with `ps -u "$(id -u)" -o pid,args | grep -E
+'tmux -S|src/server/index.js'` and stop them. The run's temp directory (it holds the socket) is left too; delete it by hand.
 
 **Port busy.** Without `--port` a free port is chosen, so this should not happen. With `--port N` and N in use,
 the server cannot start: `run.sh` prints `the server stopped while starting` with the last lines of the server log
@@ -243,4 +303,4 @@ Bench item L6 in `docs/BENCH-TEST.md` asks someone to run this and write down wh
 ## More
 
 `emulator/README.md` (the panel emulator, the developer page at physical size), `docs/DECISIONS.md` ("Emulator on your
-laptop 1, 2 and 3"), `docs/BENCH-TEST.md` (L1-L6).
+laptop 1, 2, 3 and 4"), `docs/BENCH-TEST.md` (L1-L6, and the live items of "Emulator on your laptop 4").

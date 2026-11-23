@@ -1559,3 +1559,28 @@ Tested in the unit suite only (fakes, injected timers); nothing run on a Pi.
   espeak-ng or Piper". Truth: R reads aloud only after a session was chosen with Left/Right (else "no session selected"),
   and Piper counts only when installed as `config/speech.json` says (`/opt/piper/piper`, the lessac voice, `aplay`). The sheet
   is 23 lines now; the limit is 24 lines of 80 columns (was 22).
+
+## 2026-11-23: Emulator on your laptop 4 (`--live`: real sessions)
+
+- **Decision:** `bash emulator/run.sh --live [DIR]` now starts a real Claude Code session and the laptop keys act on it.
+  The old `--live` (no demo, server only waits for hook posts that nothing set up) is replaced. It reuses the Pi's sessions
+  runner (`--sessions --start DIR`) with two new server flags, `--tmux-socket <path>` and `--claude-settings <file>`.
+- **Per-run settings file, not an install:** the hooks come from a file made by `hooks/install.mjs --settings <file>` in
+  run.sh's private temp directory and given to `claude --settings`. So `run.sh` never writes `$HOME/.claude`,
+  `~/.claude.json` or a project's `.claude/settings*.json`, and removing the temp directory removes every trace.
+- **Private tmux socket per run:** `<work dir>/tmux.sock`, so stopping kills exactly that tmux server (and its Claude)
+  and cannot touch the user's own tmux or the Pi's `-L revview` server. The `attach:` line prints the exact command.
+- **Port chosen before start:** the hooks must know where to post, so run.sh picks the port first and sets
+  `REVVIEW_PORT`; the server, tmux, Claude and the hooks inherit it.
+- **Why:** the demo cannot show what Enter, N, Esc and Space really do; a real session on the owner's laptop can,
+  without a Pi, and with the same code path as the bar uses.
+- **Risks:** `--settings` ADDS to the user's own settings, so their hooks still load, and revview's hooks installed
+  globally would post twice (documented). Claude Code still keeps its usual files; run.sh only does not write them.
+  A `kill -9` of run.sh leaves the private tmux server behind (the guide gives `tmux -S <socket> kill-server`). The
+  session has the user's account and runs tools in DIR. `tmux` and `claude` are checked first (exit 1 if missing).
+- **Unproven:** all of it with a real signed-in Claude Code (hooks firing from `--settings`, permission prompts, the key
+  presses landing, Space as push-to-talk and voice input with a microphone, WSL2). Tested only with a stand-in claude:
+  start, Enter allows and N denies through the dev bridge's `POST /dev/key`, every stop path leaves no tmux server,
+  server or stand-in, an unrelated tmux server survives, `HOME/.claude` untouched. Bench items L7-L13.
+- **Key sheet:** the footer now says nothing is sent to a Claude in the demo, and with `--live` Enter allows, N denies, Esc and Space are sent
+  (24 lines, the limit).
