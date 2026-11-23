@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-23, work/qa7b-fixes: see DECISIONS "QA round 7b"; not yet re-run by QA)
 id: qa-20261123-r7b-00
 title: QA round 7b report: re-test of r7-01..08 on gate/main e33cbfa
 severity: n/a (report)

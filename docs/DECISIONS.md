@@ -1421,3 +1421,17 @@ Tested in the unit suite only (fakes, injected timers); nothing run on a Pi.
   marked "superseded by X"; P13, P17, V3, V10 and HW7 say what the software does today; user-unit commands in the
   items; a "stop the service first" note for hand-started servers; script paths `/opt/revview/pi/...`. No item was
   deleted (149 rows before, 151 now, P21 and D13 new); all stay `untested`.
+
+## QA round 7b
+
+- **r7b-01:** the First afternoon list never starts a server by hand. S1 and S3 now use a session of the running
+  service (key-on from `REVVIEW_START`, or New session; attach with `tmux -L revview attach`), so port 8138 and the
+  dongle are never contested and the service is not stopped. S3's hook install is dropped: HW1 did it (the path there
+  is `/opt/revview/hooks/install.mjs`). The "stop the service first" note stays for the reference items that do start
+  one by hand. All ids stay unique and present.
+- **r7b-02:** the normal end of a drive (the last session ends after hooks) gets the same note as r7-01:
+  "`<repo>` ended: open the menu for New session". It replaces "Voice input goes nowhere" on the ENDED screen (note2),
+  and the same push-to-talk tap clears it. Only the board's note condition changed (the "quiet" requirement is gone);
+  the allow rule and the others-left wording are unchanged. Locked and offline show their own views, not ENDED.
+- **r7b-03:** `pi/README.md` says P1-P21. Older "P1-P14" texts in DECISIONS, JOURNAL, STATE and old issues are history
+  and stay.

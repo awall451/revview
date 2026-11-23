@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-23, work/qa7b-fixes: see DECISIONS "QA round 7b"; not yet re-run by QA)
 id: qa-20261123-r7b-01
 title: First afternoon mixes two ways to run the server: S1 and S3 want a hand-started server with the service stopped, HW1/P13 and README 'First drive' use the service; S3 still says 'node hooks/install.mjs' (relative) and 'writes hooks/settings.json'
 severity: minor

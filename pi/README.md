@@ -3,7 +3,7 @@
 Stage 4, parts A and B: a fresh Raspberry Pi OS Trixie arm64 (desktop, labwc / Wayland) on a Pi 4B with the 7.9" 1280x400
 panel becomes the appliance: power on, straight into the bar, Claude sessions feeding it. NOTHING HERE WAS RUN ON A
 PI (part B too: it is written, not run). The file edits were tested only against a fake root in a temp dir (`tests/unit/pi-*.test.js`); everything else is
-in `docs/BENCH-TEST.md` (P1-P14 for part A, S4B-1 to S4B-19 for part B, and the D, W, R, HW (Stage 2 hooks) and H (honest states) items), all `untested`. Commands and names marked *(from memory)* could
+in `docs/BENCH-TEST.md` (P1-P21 for part A, S4B-1 to S4B-19 for part B, and the D, W, R, HW (Stage 2 hooks) and H (honest states) items), all `untested`. Commands and names marked *(from memory)* could
 not be checked here (documentation sites are not reachable from the team's VM). Decisions: `docs/DECISIONS.md`
 "stage 4A". Part B (read-only root, encrypted data partition with the key stick, Piper) is described below; decisions in "stage 4B". If the Pi or the stick is lost: `docs/REVOKE.md`.
 

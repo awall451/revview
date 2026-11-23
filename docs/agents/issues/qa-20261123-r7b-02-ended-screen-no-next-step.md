@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-23, work/qa7b-fixes: see DECISIONS "QA round 7b"; not yet re-run by QA)
 id: qa-20261123-r7b-02
 title: The CLAUDE EXITED screen (a real session that sent hooks and then ended) gives no next step; only the rarer quiet-session end says 'open the menu for New session'
 severity: polish

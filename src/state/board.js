@@ -202,9 +202,9 @@ export function reduceBoard(board, event) {
   }
   // the selected session ended and others remain: the selection falls to another one, and the bar says so
   const wasSel = selectedOf(b);
-  // (a quiet placeholder revview started that vanishes says so even when it was the only one: the key-on Claude that
-  // exited at once, QA r6b-02)
-  if (wasSel !== null && next !== b && !has(next.sessions, wasSel) && (Object.keys(next.sessions).length > 0 || b.sessions[wasSel].quiet === true)
+  // (the last session ending says so too, quiet or not: the key-on Claude that exited at once, QA r6b-02; the normal
+  // end of a drive, QA r7b-02)
+  if (wasSel !== null && next !== b && !has(next.sessions, wasSel)
     && (event.hook_event_name === 'SessionEnd' || event.hook_event_name === 'RevviewOwned')) {
     const label = b.sessions[wasSel].state.repo;
     const last = Object.keys(next.sessions).length === 0;

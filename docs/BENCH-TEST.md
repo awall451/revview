@@ -6,8 +6,8 @@ these are the first ones.
 
 **Service and hand-started servers.** On the installed Pi the revview service already listens on port 8138 (and, with
 `--input`, holds the dongle exclusively). Items that start `npm start` or `node src/server/index.js` by hand (20, 21,
-28, 32, S1, W3, W5) need: stop the service first, `systemctl --user stop revview` as the kiosk user, and
-`systemctl --user start revview` afterwards. Or use another port, e.g. `node /opt/revview/src/server/index.js 8139`
+28, 32, W3, W5) need: stop the service first, `systemctl --user stop revview` as the kiosk user, and
+`systemctl --user start revview` afterwards. Every First afternoon item uses the running service; none starts a server by hand, so the service stays up for the whole list. Or use another port, e.g. `node /opt/revview/src/server/index.js 8139`
 (not with `--input`: the service's grab of the dongle would conflict).
 
 All ids are unique. The Stage 2 hook series is `HW1`-`HW7`; `H1`-`H10` are the Honest states. Every item stays
@@ -31,10 +31,10 @@ below is reference, to do later**, in any order. The owner's dongle ids and key 
 10. **W1** and **27** the dongle block and the key map in `/etc/revview/buttons.json`. Needs: D5, D6.
 11. **P14** audio and groups: the USB mic from inside the service's tmux session. Needs: D1.
 12. **P21** SoX present (`rec`) and `/voice tap` works. Needs: P1, P14.
-13. **S1** voice tap by the push-to-talk button. Needs: D1, D6, W1/27, P14, P21.
-14. **HW1** hook install, a small task shown on the bar. Needs: P1, D1.
+13. **S1** voice tap by the push-to-talk button, in the service's own session (service running). Needs: D1, D6, W1/27, P14, P21.
+14. **HW1** hook install (service running; this also installs the hooks S3 needs), a small task shown on the bar. Needs: P1, D1.
 15. **P13** key-on session and hooks from a real task. Needs: HW1, D1, S1.
-16. **S3** allow and deny by button. Needs: HW1, D6, W1/27, P13.
+16. **S3** allow and deny by button, in the key-on session of P13 (service running; hooks already installed by HW1). Needs: HW1, D6, W1/27, P13.
 17. **S4B-1** the read-only overlay, last: every later test then runs under it. Needs: all the above done; the data set-up (S4B-9) first if it is used.
 18. **26** the in-car glance at the sizes. Needs: P4, P5, P13.
 
@@ -103,9 +103,9 @@ subagent prompt, Esc and one Ctrl+C (`fixtures/buttons/README.md`, WB3). Ids `S1
 
 | # | Try | Should happen | State |
 |---|---|---|---|
-| S1 | Voice tap mode in a revview session: `node src/server/index.js --input --start <repo>` (stop the service first, see the note at the top: with `--input` the service's exclusive grab of the dongle would conflict too), then `tmux -L revview attach` once to run `/voice tap` in it (and set up the microphone), detach; tap push-to-talk, speak, tap again | First tap starts recording (the pane shows it), second stops and submits the transcript, only in the chosen session. Push-to-talk sends one Space by `send-keys`; voice inside tmux was never tried | untested |
+| S1 | Voice tap mode in a revview session: a revview session of the running service (the key-on one from `REVVIEW_START`, or New session from the menu; no hand-started server needed, so no stop of the service; if you do start one by hand with `--input`, stop the service first, see the note at the top), then `tmux -L revview attach` once to run `/voice tap` in it (and set up the microphone), detach; tap push-to-talk, speak, tap again | First tap starts recording (the pane shows it), second stops and submits the transcript, only in the chosen session. Push-to-talk sends one Space by `send-keys`; voice inside tmux was never tried | untested |
 | S2 | Voice hold mode (`/voice hold`) with the push-to-talk button held | NOT BUILT: revview sends one Space per tap only, so hold mode will not record (it needs imitated key repeat). Note what the pane shows | untested |
-| S3 | On the Pi, install the hooks (`node hooks/install.mjs`, which writes `hooks/settings.json` with `$REVVIEW_DIR` replaced; PermissionRequest `timeout` 600) and run a session started by `--start`; let Claude ask for a Bash permission; wait 2 s, press allow; next prompt: deny | Allow runs the command ("Allowed by PermissionRequest hook"); deny shows "Reason: Denied with the wheel button."; a press within 1.5 s of the prompt appearing does nothing | untested |
+| S3 | On the Pi, with the hooks installed (done in HW1: `node /opt/revview/hooks/install.mjs`; PermissionRequest `timeout` 600) run a session of the running service (the key-on one of P13); let Claude ask for a Bash permission; wait 2 s, press allow; next prompt: deny | Allow runs the command ("Allowed by PermissionRequest hook"); deny shows "Reason: Denied with the wheel button."; a press within 1.5 s of the prompt appearing does nothing | untested |
 | S4 | Same, stop the revview server while the dialog is shown, then answer in the terminal | The dialog stays and the terminal answer works (the hook prints nothing when the server is down) | untested |
 | S5 | Cancel by pod while a long command runs: tap; another run: hold over 1 s, then hold again within 5 s | Tap: Claude shows "Interrupted" and the bar leaves WORKING at once. Hold: one Ctrl+C (Interrupted, Claude does not exit); the second hold within 5 s does nothing | untested |
 | S6 | A subagent's permission prompt (ask Claude to use a subagent for a command that needs permission) | The bar shows NEEDS PERMISSION; the main pane may show no dialog at all (recorded here); allow by button works. Note what happens if nobody answers for 10 minutes (not recorded) | untested |
