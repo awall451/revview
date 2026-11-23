@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import http from 'node:http';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -328,3 +329,145 @@ for (const sig of ['SIGINT', 'SIGTERM']) {
     } finally { run.finish(); }
   });
 }
+
+// ---- demo mode (the default) and --live ----
+// The player is told its server by --url http://127.0.0.1:PORT, so that string finds its process.
+function procsWith(needle) {
+  return fs.readdirSync('/proc').filter((p) => /^\d+$/.test(p)).filter((p) => {
+    try { return fs.readFileSync(`/proc/${p}/cmdline`, 'utf8').replaceAll('\0', ' ').includes(needle); } catch { return false; }
+  }).map(Number);
+}
+const playerPids = (port) => procsWith(`emulator/demo/player.js --url http://127.0.0.1:${port}`);
+const onePlayer = (port) => until(() => { const l = playerPids(port); return l.length === 1 && l; }, 'the player process');
+
+test('default is demo mode: the server has --dev-demo, GET /dev/demo is routed, the player runs and plays', async () => {
+  const run = start(['--no-browser']);
+  try {
+    const url = await run.url();
+    const port = portOf(url);
+    assert.match(run.out, /demo mode: 1-7 scenes, P pause, \[ \] slower\/faster; see --keys/);
+    await until(() => /^demo: 1 working/m.test(run.out), 'first demo scene line');
+    const spid = await until(() => run.serverPid(), 'server pid');
+    assert.ok(fs.readFileSync(`/proc/${spid}/cmdline`, 'utf8').split('\0').includes('--dev-demo'));
+    assert.equal((await onePlayer(port)).length, 1);
+    // an event stream: look at the status line, then hang up
+    const status = await new Promise((resolve, reject) => {
+      const req = http.get(`http://127.0.0.1:${port}/dev/demo`, { agent: false }, (res) => { resolve(res.statusCode); req.destroy(); });
+      req.on('error', (e) => (e.code === 'ECONNRESET' ? undefined : reject(e)));
+    });
+    assert.equal(status, 200);
+  } finally { run.finish(); }
+});
+
+test('--live: no player, no --dev-demo, GET /dev/demo is not routed', async () => {
+  const run = start(['--live', '--no-browser']);
+  try {
+    const url = await run.url();
+    const port = portOf(url);
+    assert.match(run.out, /live mode: no demo; .*real Claude Code hook events/);
+    assert.doesNotMatch(run.out, /demo mode/);
+    const spid = await until(() => run.serverPid(), 'server pid');
+    assert.ok(!fs.readFileSync(`/proc/${spid}/cmdline`, 'utf8').split('\0').includes('--dev-demo'));
+    assert.equal((await fetch(`http://127.0.0.1:${port}/dev/demo`)).status, 404);
+    assert.deepEqual(playerPids(port), []);
+    assert.doesNotMatch(run.out, /^demo:/m);
+    process.kill(run.child.pid, 'SIGTERM');
+    assert.equal((await run.exit()).code, 0);
+  } finally { run.finish(); }
+});
+
+test('--demo and --live together exit 2 with usage, in either order', async () => {
+  for (const args of [['--demo', '--live'], ['--live', '--demo']]) {
+    const run = start(args, { browser: false });
+    try {
+      assert.equal((await run.exit()).code, 2);
+      assert.match(run.err, /--demo and --live/);
+      assert.match(run.err, /usage: bash emulator\/run\.sh/);
+      assert.deepEqual(leftovers(run), []);
+    } finally { run.finish(); }
+  }
+});
+
+test('--demo alone (the default spelled out) is accepted', async () => {
+  const run = start(['--demo', '--no-browser']);
+  try {
+    const port = portOf(await run.url());
+    await onePlayer(port);
+    process.kill(run.child.pid, 'SIGTERM');
+    assert.equal((await run.exit()).code, 0);
+  } finally { run.finish(); }
+});
+
+test('the window closing leaves no player process', async () => {
+  const run = start([], { env: { REVVIEW_QUICK_EXIT_SECS: '0' } });
+  try {
+    const port = portOf(await run.url());
+    await run.stand();
+    const [pp] = await onePlayer(port);
+    fs.writeFileSync(path.join(run.dir, 'close'), '');
+    assert.equal((await run.exit()).code, 0);
+    await until(() => !alive(pp), 'player gone');
+    assert.deepEqual(playerPids(port), []);
+    assert.deepEqual(leftovers(run), []);
+  } finally { run.finish(); }
+});
+
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  test(`${sig} to run.sh leaves no player process`, async () => {
+    const run = start([]);
+    try {
+      const port = portOf(await run.url());
+      await run.stand();
+      const [pp] = await onePlayer(port);
+      process.kill(run.child.pid, sig);
+      assert.equal((await run.exit()).code, 0);
+      await until(() => !alive(pp), 'player gone');
+      assert.deepEqual(playerPids(port), []);
+      assert.deepEqual(leftovers(run), []);
+    } finally { run.finish(); }
+  });
+}
+
+test('the player dying alone: one note, the server keeps serving', async () => {
+  const run = start(['--no-browser']);
+  try {
+    const url = await run.url();
+    const port = portOf(url);
+    const [pp] = await onePlayer(port);
+    process.kill(pp, 'SIGKILL');
+    await until(() => /the demo player stopped/.test(run.out), 'player note');
+    assert.equal(run.out.match(/the demo player stopped/g).length, 1);
+    assert.equal(run.exited, null);
+    assert.equal((await fetch(url)).status, 200);
+    process.kill(run.child.pid, 'SIGTERM');
+    assert.equal((await run.exit()).code, 0);
+  } finally { run.finish(); }
+});
+
+test('--keys lists the demo keys, every scene name and the no-Claude note', async () => {
+  const run = start(['--keys'], { browser: false });
+  try {
+    assert.equal((await run.exit()).code, 0);
+    assert.match(run.out, /^Demo keys \(demo mode only, handled by the demo player, not the bar\):$/m);
+    const { buildLoop } = await import('../../emulator/demo/scenes.js');
+    const names = buildLoop(1).map((s) => s.name);
+    assert.equal(names.length, 7);
+    for (const n of names) assert.ok(run.out.includes(n), `scene ${n}`);
+    assert.match(run.out, /^ {2}1-7 .*jump to a scene/m);
+    assert.match(run.out, /^ {2}P +pause/m);
+    assert.match(run.out, /^ {2}\[ +slower/m);
+    assert.match(run.out, /^ {2}\] +faster/m);
+    assert.match(run.out, /nothing is sent to a Claude/);
+    assert.match(run.out, /REVVIEW_SPEECH=config\/speech\.json/);
+    assert.equal(run.out.split('\n').filter((l) => /tap:/.test(l)).length, 11);
+  } finally { run.finish(); }
+});
+
+test('--help describes --demo and --live', async () => {
+  const run = start(['--help'], { browser: false });
+  try {
+    assert.equal((await run.exit()).code, 0);
+    assert.match(run.out, /--demo /);
+    assert.match(run.out, /--live [\s\S]*real Claude Code hook events/);
+  } finally { run.finish(); }
+});

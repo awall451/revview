@@ -9,7 +9,7 @@ set -u
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 root=$(dirname "$here")
-usage_line='usage: bash emulator/run.sh [--port N] [--no-browser] [--scale S] [--keys] [--help]'
+usage_line='usage: bash emulator/run.sh [--port N] [--no-browser] [--scale S] [--demo | --live] [--keys] [--help]'
 
 usage() {
   cat <<USAGE
@@ -19,7 +19,11 @@ $usage_line
   --no-browser   only serve: print the URL and keep serving until Ctrl+C
   --scale S      make the window S times bigger on screen (positive number, e.g. 1.5);
                  the page keeps its 1280x400 viewport
-  --keys         print the key cheatsheet and exit
+  --demo         (default) play a looping demo of the bar's states: a demo player posts the recorded
+                 Claude Code sessions (fixtures/sessions) to the server; nothing is sent to a Claude
+  --live         a real session is asked for: no demo player; the server waits for
+                 real Claude Code hook events posted to its port (the one in the view: line). Not with --demo
+  --keys         print the key cheatsheet (and the demo keys) and exit
   --help         this text
 
 Environment:
@@ -43,12 +47,17 @@ bad() {
 port=
 no_browser=
 scale=
+mode=
 want_keys=
 while [ $# -gt 0 ]; do
   case "$1" in
     --help | -h) usage; exit 0 ;;
     --keys) want_keys=1 ;;
     --no-browser) no_browser=1 ;;
+    --demo | --live)
+      [ -z "$mode" ] || [ "$mode" = "${1#--}" ] || bad "--demo and --live cannot be used together"
+      mode=${1#--}
+      ;;
     --port)
       [ $# -ge 2 ] || bad "--port needs a value"
       port=$2; shift
@@ -94,11 +103,26 @@ if [ -n "$want_keys" ]; then
       console.log(`  ${String(b.key).padEnd(12)} tap: ${b.button}${extra}`);
     }
   ' "$keymap" || exit 1
+  # shellcheck disable=SC2016  # the JS has its own template strings
+  node --input-type=module -e '
+    const { pathToFileURL } = await import("node:url");
+    const { buildLoop } = await import(pathToFileURL(process.argv[1]).href);
+    const names = buildLoop(1).map((s, i) => `${i + 1} ${s.name}`).join(", ");
+    console.log("");
+    console.log("Demo keys (demo mode only, handled by the demo player, not the bar):");
+    console.log(`  1-${names.split(", ").length}          jump to a scene (${names})`);
+    console.log("  P            pause / continue");
+    console.log("  [            slower");
+    console.log("  ]            faster");
+    console.log("");
+    console.log("In demo mode nothing is sent to a Claude: allow, deny, cancel and push-to-talk show what the bar would show, with nothing real behind them. Read aloud speaks only with REVVIEW_SPEECH=config/speech.json and espeak-ng (or Piper) installed on the laptop; run.sh installs nothing.");
+  ' "$root/emulator/demo/scenes.js" || exit 1
   exit 0
 fi
 
 work=
 spid=
+dpid=
 bpid=
 bgrp=
 winprofile=
@@ -114,6 +138,10 @@ cleanup() {
     kill "$bpid" 2> /dev/null
   fi
   if [ -n "$bpid" ]; then wait "$bpid" 2> /dev/null; fi
+  if [ -n "$dpid" ]; then
+    kill "$dpid" 2> /dev/null
+    wait "$dpid" 2> /dev/null
+  fi
   if [ -n "$spid" ]; then
     kill "$spid" 2> /dev/null
     wait "$spid" 2> /dev/null
@@ -127,7 +155,9 @@ trap 'exit 0' INT TERM HUP
 work=$(mktemp -d "${TMPDIR:-/tmp}/revview-emu.XXXXXX") || { echo "run.sh: cannot make a temp dir" >&2; exit 1; }
 log="$work/server.log"
 
-node "$root/src/server/index.js" "${port:-0}" --dev-bridge --dev-keys "$keymap" > "$log" 2>&1 &
+server_args=(--dev-bridge --dev-keys "$keymap")
+[ "$mode" = live ] || server_args+=(--dev-demo)
+node "$root/src/server/index.js" "${port:-0}" "${server_args[@]}" > "$log" 2>&1 &
 spid=$!
 
 fail() {
@@ -158,6 +188,21 @@ while :; do
   sleep 0.1
 done
 
+if [ "$mode" = live ]; then
+  echo "live mode: no demo; the server waits for real Claude Code hook events posted to 127.0.0.1:$actual"
+else
+  node "$root/emulator/demo/player.js" --url "http://127.0.0.1:$actual" &
+  dpid=$!
+  echo "demo mode: 1-7 scenes, P pause, [ ] slower/faster; see --keys"
+fi
+player_noted=
+note_player() { # the demo player stopped by itself while the server is up: the bar still works
+  if [ -n "$dpid" ] && [ -z "$player_noted" ] && ! kill -0 "$dpid" 2> /dev/null; then
+    player_noted=1
+    echo "run.sh: the demo player stopped; the bar keeps serving without the demo."
+  fi
+}
+
 # Browser choice. WSL2 detection and the Windows paths are from memory, untested on a real WSL2.
 is_wsl=
 if [ -n "${WSL_DISTRO_NAME:-}" ] || grep -qiE 'microsoft|wsl' /proc/sys/kernel/osrelease /proc/version 2> /dev/null; then
@@ -186,6 +231,7 @@ page="http://$host:$actual/?devkeys=1"
 serve_on() {
   echo "Serving until Ctrl+C."
   while kill -0 "$spid" 2> /dev/null; do
+    note_player
     sleep 0.2 &
     wait $!
   done
@@ -222,6 +268,7 @@ fi
 bpid=$!
 # watch the server as well as the browser
 while kill -0 "$bpid" 2> /dev/null && kill -0 "$spid" 2> /dev/null; do
+  note_player
   sleep 0.2 &
   wait $!
 done
