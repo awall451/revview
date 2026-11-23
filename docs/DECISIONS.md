@@ -1584,3 +1584,27 @@ Tested in the unit suite only (fakes, injected timers); nothing run on a Pi.
   server or stand-in, an unrelated tmux server survives, `HOME/.claude` untouched. Bench items L7-L13.
 - **Key sheet:** the footer now says nothing is sent to a Claude in the demo, and with `--live` Enter allows, N denies, Esc and Space are sent
   (24 lines, the limit).
+
+## 2026-11-23: QA round 9 (--live: r9-01 .. r9-06)
+
+Tested with the stand-in claude only; nothing here ran with a real Claude Code.
+
+- **r9-01:** `run.sh --live` gives the server a projects list so menu -> New session works: the owner's
+  `REVVIEW_PROJECTS` if set (the server already reads it; no new flag), else `--projects <work>/projects.json`
+  written by run.sh with just DIR. The second session uses the same tmux socket and settings file. Documented in the
+  guide and `emulator/README.md`. New session needs a row, so with a custom list DIR is only there if the owner puts it in.
+- **r9-02:** the leftover-process pattern is `tmux .*revview-emu\.|src/server/index.js` (the private tmux server's argv is
+  `tmux -f /dev/null -S <sock> ...`); a test reads the pattern out of the guide, checks it is in BENCH L11 and matches the
+  real command lines of a run.
+- **r9-03:** if the server dies while starting and its log shows the tmux failure, run.sh says "Claude exited at once"
+  and how to see claude's own message (run it in a normal terminal; the tmux window closes with it, so there is nothing
+  cheap to capture). Exit 1 stays. Guide entry added.
+- **r9-04:** a DIR (given or the current directory) with `#` or a control character is refused in run.sh, exit 2.
+- **r9-05:** the guide explains "Too early: press again" (1.5 s, `MIN_SHOWN_MS`). Not on the `--keys` sheet: it is at
+  its 24-line limit. UNKNOWN, not STARTING: the --live first session is started by `--start` without `--boot`, a path
+  that never marks `RevviewLaunching`, so it shows UNKNOWN until its first hook. That differs from the QA round 6 part D
+  rule (which covers key-on and New session); not changed (the fix is in the server start order, not small, and `--boot`
+  would change failure behaviour); the guide now says UNKNOWN. A session started with New session does show STARTING.
+- **r9-06:** `--stop` keeps its search places and its pid + start-time check; it does NOT look under other TMPDIRs
+  (scanning for them cannot be proven safe). When nothing is found it says so on stderr: it looked only under this
+  shell's TMPDIR. The pid directory is removed on exit when it is empty (`rmdir`).

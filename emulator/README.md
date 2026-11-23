@@ -114,8 +114,10 @@ the server at a watchable pace and loops until the window closes. Scenes: 1 work
 player over `GET /dev/demo`, present only with `--dev-bridge --dev-demo`): 1-7 jump to a scene, P pause/continue, `[`
 slower, `]` faster; `--keys` lists them under their own heading. `--live [DIR]` starts a real Claude Code session in DIR
 instead (no player): see `docs/EMULATOR-LAPTOP.md`, "Live: a real Claude Code session". It needs `tmux` and `claude`, runs
-Claude in a private tmux server of the run with a per-run `--settings` file, and prints the `attach:` line. Tested only with
-a stand-in claude, never with a real one.
+Claude in a private tmux server of the run with a per-run `--settings` file, and prints the `attach:` line. Menu -> New
+session starts a further session from a projects file: `run.sh` writes one with just DIR in the run's temp dir, unless
+`REVVIEW_PROJECTS=<file>` is set (`{"projects": ["/abs/dir", ...]}`), which is used instead. DIR must not contain `#`
+(exit 2). `--stop` only finds runs that used the same `TMPDIR`. Tested only with a stand-in claude, never with a real one.
 
 **What demo mode cannot show:** nothing is sent to a Claude, and no real session is behind the demo. Left/Right (switch
 session), Up/Down (list), M (menu) and a held Backspace (home) change the screen; Enter, N, Esc (held: Ctrl+C), Space and R

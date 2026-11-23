@@ -622,7 +622,7 @@ test('without XDG_RUNTIME_DIR the directory is TMPDIR/revview-emu-<uid>, mode 70
     assert.deepEqual(fs.readdirSync(run.xdg), [], 'nothing under the unused XDG dir');
     process.kill(run.child.pid, 'SIGTERM');
     assert.equal((await run.exit()).code, 0);
-    assert.deepEqual(fs.readdirSync(dir), []);
+    assert.equal(fs.existsSync(dir), false, 'the empty pid directory is removed on exit (r9-06)');
   } finally { run.finish(); }
 });
 

@@ -87,7 +87,8 @@ What each scene puts on the screen (the big state word of the bar):
 The digit keys jump to a scene; P pauses; `[` and `]` slow down and speed up (the cheatsheet lists them).
 
 With `--live` there is no demo. `run.sh` starts a real Claude Code session and the bar shows that session (see
-"Live: a real Claude Code session" below). Until its first hook arrives the bar is on its empty state.
+"Live: a real Claude Code session" below). Until its first hook arrives the bar is on its empty state (UNKNOWN, "No
+events from this session yet"; it is not STARTING, which only a session started from the menu shows).
 
 **Nothing is sent to a Claude, ever, in demo mode.** No real session is behind the demo, so only some keys do
 anything you can see:
@@ -211,9 +212,29 @@ Escape to Claude (held long: Ctrl+C), and Space (push-to-talk) sends its key to 
 depends on Claude Code and a microphone; this is unproven. Up, Down, Left, Right, M, Backspace and R work as on the
 Pi. In demo mode nothing is sent to a Claude.
 
+**"Too early: press again".** A button answers a permission prompt only after the bar has shown it for 1.5 seconds
+(and 1.5 seconds after Left or Right switched to it), so a tap that comes sooner does nothing to Claude and the bar says
+`Too early: press again`. It is not a lost key: wait a moment and press again.
+
+**New session.** Menu (M), Enter on New session, Enter on a row starts a second real Claude session in that folder, in
+the same private tmux server and with the same settings file; Left and Right then switch between the sessions. The
+rows come from a projects file: `run.sh --live` writes one in the run's temp directory that holds just DIR. To offer
+other folders, make your own file and give it as `REVVIEW_PROJECTS=<file>`; it is then used instead:
+
+```
+{ "projects": ["/home/me/one", "/home/me/two"] }
+```
+
+(absolute paths, no `#`, up to 32). Example: `REVVIEW_PROJECTS=~/projects.json bash emulator/run.sh --live ~/one`.
+If you set your own list and want DIR in it, put DIR in the file too.
+DIR itself must not contain `#` or a control character (the server refuses such a folder): `run.sh` says so and exits 2
+before it starts anything.
+
 **Stopping.** Closing the window, Ctrl+C, TERM or HUP on `run.sh`, or `run.sh --stop` from another terminal stop the
 server and kill exactly that private tmux server, so the Claude in it ends. Nothing else is touched (your own tmux
-sessions stay).
+sessions stay). `--stop` only looks under the `TMPDIR` (and `XDG_RUNTIME_DIR`) of the shell you run it from: if the run
+was started with another `TMPDIR`, it says `not running` (and, on stderr, where it looked) while the run, its tmux server
+and your Claude are still alive. Run `--stop` with the same `TMPDIR` as the run.
 
 **Isolation, and what it does not do.**
 
@@ -254,12 +275,22 @@ The temp directory `revview-emu.XXXXXX` in your `TMPDIR` (or `/tmp`) was not rem
 **`--live` says `tmux` or `claude` was not found.** Install it, or put its folder on the `PATH` of the shell you run
 `run.sh` from. Nothing was started; the exit code is 1.
 
+**`--live` says `Claude exited at once`.** `claude` started and ended within a moment, so no session could be made (exit
+1). The usual cause is that it is not signed in or needs a first-run answer. Its own message is gone with the tmux
+window, so run `claude` once in a normal terminal, answer whatever it asks (sign in), leave it, and run `run.sh --live`
+again.
+
+**`--live` says DIR must not contain `#`.** The server refuses a folder with `#` or a control character in its path
+(exit 2, nothing started). Use another folder, or a link to it without those characters (the current directory counts
+too).
+
 **`--live` says the tmux socket path is too long.** A unix socket path is limited to about 107 bytes; use a shorter `TMPDIR` (for example `TMPDIR=/tmp`). Nothing was started.
 
 **A tmux server is left after `kill -9` of `run.sh`.** Like the case above, a KILL gives `run.sh` no chance to clean
 up: the private tmux server (and the Claude in it) and the server can stay. Use the socket path that was printed in
 the `attach:` line: `tmux -S <socket> kill-server`. Or find them with `ps -u "$(id -u)" -o pid,args | grep -E
-'tmux -S|src/server/index.js'` and stop them. The run's temp directory (it holds the socket) is left too; delete it by hand.
+'tmux .*revview-emu\.|src/server/index.js'` and stop them (the private tmux server's command line is
+`tmux -f /dev/null -S <socket> ...`, so `tmux -S` alone would not match). The run's temp directory (it holds the socket) is left too; delete it by hand.
 
 **Port busy.** Without `--port` a free port is chosen, so this should not happen. With `--port N` and N in use,
 the server cannot start: `run.sh` prints `the server stopped while starting` with the last lines of the server log

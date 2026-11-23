@@ -30,7 +30,8 @@ $usage_line
   --keys         print the key cheatsheet (and the demo keys) and exit
   --print-aliases  print a block of shell aliases (revview, revview-keys, revview-stop) with this
                  clone's path filled in, ready to paste into ~/.bashrc, and exit. Only prints
-  --stop         stop EVERY run.sh of this user that is running (from another terminal): prints
+  --stop         stop EVERY run.sh of this user that is running (from another terminal; run it with the same
+                 TMPDIR as the run, see below): prints
                  "stopped (pid N)" for each, or "not running", and exits 0; exits 1 if one did not
                  stop within 5 s
   --help, -h     this text
@@ -40,15 +41,19 @@ Environment:
   REVVIEW_QUICK_EXIT_SECS   a browser that exits sooner than this (default 3) is taken to have
                             handed the URL to an already running instance; the server keeps going
   TMPDIR                    where the profile and log are made (removed on exit)
+  REVVIEW_PROJECTS          with --live: a projects file (JSON {"projects": ["/abs/dir", ...]}) for menu -> New
+                            session. Without it run.sh writes one that holds just DIR
 
 The script stops when the browser window closes, or on Ctrl+C / TERM / HUP. Exit codes: 0 after the
 window closed or after Ctrl+C / TERM / HUP; 1 on a start failure (Node too old, server did not start)
 or when the server stops while running, or with --live when tmux or claude is not on PATH; 2 on a bad option
-(also a --live DIR that is not a directory).
+(also a --live DIR that is not a directory, or whose path holds "#" or a control character).
 A running script writes its pid and start time to <pid>.pid in a private directory (mode 700, yours):
 \$XDG_RUNTIME_DIR/revview-emu, else \${TMPDIR:-/tmp}/revview-emu-<uid>, else /tmp/revview-emu-<uid>. It is
 removed on exit. --stop reads those files in ALL of: \$XDG_RUNTIME_DIR/revview-emu, /run/user/<uid>/revview-emu,
-\${TMPDIR:-/tmp}/revview-emu-<uid> and /tmp/revview-emu-<uid>, so it finds a run started from another shell.
+\${TMPDIR:-/tmp}/revview-emu-<uid> and /tmp/revview-emu-<uid>, so it finds a run started from another shell, but
+only one that used the same TMPDIR (or XDG_RUNTIME_DIR) as this shell: a run started with another TMPDIR is not found
+(--stop then says so).
 USAGE
 }
 
@@ -56,6 +61,13 @@ bad() {
   echo "run.sh: $1" >&2
   echo "$usage_line" >&2
   exit 2
+}
+
+# the server refuses a cwd with "#" or a control character (tmux would read it as a format); say so before anything starts
+live_dir_ok() {
+  case "$1" in *'#'*) bad "--live: DIR must not contain '#': $1" ;; esac
+  [[ "$1" =~ [[:cntrl:]] ]] && bad "--live: DIR must not contain a control character"
+  return 0
 }
 
 port=
@@ -79,6 +91,7 @@ while [ $# -gt 0 ]; do
       if [ "$mode" = live ] && [ $# -ge 2 ] && [[ "$2" != -* ]]; then
         [ -d "$2" ] || bad "--live: not a directory: $2"
         live_dir=$(cd -- "$2" && pwd -P) || bad "--live: cannot enter: $2"
+        live_dir_ok "$live_dir"
         shift
       fi
       ;;
@@ -184,7 +197,10 @@ if [ -n "$want_stop" ]; then
       rm -f -- "$f"
     done
   done < <(stop_dir_candidates)
-  [ "$found" = 1 ] || [ "$failed" = 1 ] || echo "not running"
+  if [ "$found" != 1 ] && [ "$failed" != 1 ]; then
+    echo "not running"
+    echo "(looked only under this shell's TMPDIR=${TMPDIR:-/tmp} and the other places in --help; a run started with another TMPDIR is not found from here)" >&2
+  fi
   exit "$failed"
 fi
 
@@ -214,7 +230,7 @@ fi
 if [ "$mode" = live ]; then
   command -v tmux > /dev/null 2>&1 || { echo "run.sh: --live needs tmux on PATH (not found); install tmux" >&2; exit 1; }
   command -v claude > /dev/null 2>&1 || { echo "run.sh: --live needs Claude Code (claude) on PATH (not found); install Claude Code" >&2; exit 1; }
-  [ -n "$live_dir" ] || live_dir=$(pwd -P)
+  [ -n "$live_dir" ] || { live_dir=$(pwd -P); live_dir_ok "$live_dir"; }
 fi
 
 work=
@@ -257,7 +273,7 @@ cleanup() {
   fi
   if [ -n "$winprofile" ]; then rm -rf "$winprofile"; fi
   if [ -n "$work" ]; then rm -rf "$work"; fi
-  if [ -n "$pidfile" ]; then rm -f "$pidfile"; fi
+  if [ -n "$pidfile" ]; then rm -f "$pidfile"; rmdir -- "${pidfile%/*}" 2> /dev/null; fi # the directory only when it is empty
 }
 trap cleanup EXIT
 trap 'exit 0' INT TERM HUP
@@ -293,6 +309,12 @@ if [ "$mode" = live ]; then
     sock=
     fail "the tmux socket path is too long (${len} bytes, the limit is about 107): $work/tmux.sock; use a shorter TMPDIR, e.g. TMPDIR=/tmp"
   fi
+  # menu -> New session needs a projects list: the owner's own (REVVIEW_PROJECTS, read by the server) or one made here with DIR
+  if [ -z "${REVVIEW_PROJECTS:-}" ]; then
+    node -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({ projects: [process.argv[2]] }) + "\n")' "$work/projects.json" "$live_dir" \
+      || fail "could not write the projects file"
+    server_args+=(--projects "$work/projects.json")
+  fi
   server_args+=(--tmux-socket "$sock" --claude-settings "$work/claude-settings.json" --start "$live_dir")
   REVVIEW_PORT=$port node "$root/src/server/index.js" "$port" "${server_args[@]}" > "$log" 2>&1 &
 else
@@ -314,7 +336,14 @@ answers() { # a bare HTTP GET over /dev/tcp, no curl needed
 actual=
 deadline=$((SECONDS + 15))
 while :; do
-  kill -0 "$spid" 2> /dev/null || fail "the server stopped while starting"
+  if ! kill -0 "$spid" 2> /dev/null; then
+    # claude ended at once: its tmux window closed with it, so the server's own tmux error follows
+    if [ "$mode" = live ] && grep -qE 'sessions: Command failed: tmux|no server running' "$log" 2> /dev/null; then
+      echo "run.sh: Claude exited at once, so no session could start. Run \`claude\` once in a normal terminal to see why (is it signed in?)." >&2
+      exit 1
+    fi
+    fail "the server stopped while starting"
+  fi
   if [ -z "$actual" ]; then
     url_line=$(grep -m1 '^view:' "$log" 2> /dev/null)
     if [[ "$url_line" =~ :([0-9]+)/?$ ]]; then actual=${BASH_REMATCH[1]}; fi

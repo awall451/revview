@@ -350,3 +350,146 @@ test('another tmux server on its own socket is not touched by a run or its stop'
     run.finish();
   }
 });
+
+// ---- f. QA round 9 ----
+const REPO_DOC = (f) => fs.readFileSync(path.join(REPO, f), 'utf8');
+const pressKey = async (origin, code) => {
+  for (const type of ['down', 'up']) {
+    const r = await fetch(`${origin}/dev/key`, { method: 'POST', body: JSON.stringify({ code, type }) });
+    assert.equal(r.status, 204);
+  }
+};
+const stateOf = async (origin) => (await (await fetch(`${origin}/state`)).json()).state;
+const windowsOf = (sock) => tmux(sock, 'list-windows', '-t', 'revview', '-F', '#{pane_current_path}').stdout.trim().split('\n').filter(Boolean);
+
+// menu -> New session -> the (only) row. The bar may show a permission prompt: Enter only moves in the menu and the list.
+async function newSession(origin) {
+  await pressKey(origin, 'KeyM');
+  await sleep(300);
+  await pressKey(origin, 'Enter'); // the menu row "New session"
+  await until(async () => (await stateOf(origin)).nav?.kind === 'new', 'the New session list');
+  await sleep(300);
+  await pressKey(origin, 'Enter'); // the row
+}
+
+test('r9-01: menu -> New session starts a second real session in DIR (the projects file run.sh made); the bar counts 2', async () => {
+  const run = startLive(['--live', '--no-browser']);
+  try {
+    const up = await run.up();
+    const origin = await run.origin();
+    await until(async () => (await stateOf(origin)).position?.count === 1, 'the first session on the bar');
+    const argv = fs.readFileSync(`/proc/${up.spid}/cmdline`, 'utf8').split('\0');
+    const pf = argv[argv.indexOf('--projects') + 1];
+    assert.ok(pf.startsWith(run.tmp), 'the projects file is in the run\'s own temp dir');
+    assert.deepEqual(JSON.parse(fs.readFileSync(pf, 'utf8')), { projects: [run.fx.proj] });
+    await newSession(origin);
+    await until(() => windowsOf(up.sock).length === 2, 'a second window');
+    assert.deepEqual(windowsOf(up.sock), [run.fx.proj, run.fx.proj]);
+    await until(async () => (await stateOf(origin)).position?.count === 2, 'the bar shows 2 sessions');
+    process.kill(run.child.pid, 'SIGTERM');
+    assert.equal((await run.exit()).code, 0);
+    await run.stopped(up);
+  } finally { run.finish(); }
+});
+
+test('r9-01: REVVIEW_PROJECTS set by the owner is honoured and no projects file is made', async () => {
+  const fx = liveFixture();
+  const other = path.join(fx.dir, 'other');
+  fs.mkdirSync(other);
+  const file = path.join(fx.dir, 'mine.json');
+  fs.writeFileSync(file, JSON.stringify({ projects: [other] }));
+  const run = startLive(['--live', '--no-browser'], { fx, env: { REVVIEW_PROJECTS: file } });
+  try {
+    const up = await run.up();
+    const origin = await run.origin();
+    assert.equal(fs.readFileSync(`/proc/${up.spid}/cmdline`, 'utf8').includes('--projects'), false);
+    await until(async () => (await stateOf(origin)).position?.count === 1, 'the first session on the bar');
+    await newSession(origin);
+    await until(() => windowsOf(up.sock).length === 2, 'a second window');
+    assert.deepEqual(windowsOf(up.sock).sort(), [fx.proj, other].sort());
+    process.kill(run.child.pid, 'SIGTERM');
+    assert.equal((await run.exit()).code, 0);
+    await run.stopped(up);
+  } finally { run.finish(); }
+});
+
+test('r9-02: the pattern the guide and the bench item give for leftover processes matches the real command lines of a run', async () => {
+  const guide = REPO_DOC('docs/EMULATOR-LAPTOP.md');
+  const bench = REPO_DOC('docs/BENCH-TEST.md');
+  const g = /grep -E\s+'([^']*src\/server\/index\.js)'/.exec(guide);
+  assert.ok(g, 'the guide has the grep -E pattern');
+  const l11 = bench.slice(bench.indexOf('| L11 |'), bench.indexOf('| L12 |'));
+  assert.ok(l11.includes(g[1].replace(/\|/g, '\\|')), 'the bench item L11 has the same pattern');
+  const pattern = new RegExp(g[1]);
+  const run = startLive(['--live', '--no-browser']);
+  try {
+    const up = await run.up();
+    const mine = fs.readdirSync('/proc').filter((x) => /^\d+$/.test(x)).map((p) => {
+      try { return fs.readFileSync(`/proc/${p}/cmdline`, 'utf8').replace(/\0/g, ' '); } catch { return ''; }
+    }).filter((c) => c.includes(run.tmp));
+    assert.ok(mine.some((c) => pattern.test(c) && c.includes('src/server/index.js')), 'finds the node server');
+    assert.ok(mine.some((c) => /^tmux /.test(c) && pattern.test(c)), `finds the private tmux server (${mine.join(' | ')})`);
+    process.kill(run.child.pid, 'SIGTERM');
+    assert.equal((await run.exit()).code, 0);
+    await run.stopped(up);
+  } finally { run.finish(); }
+});
+
+test('r9-03: a claude that exits at once gives a plain message, exit 1, nothing left', async () => {
+  const fx = liveFixture();
+  fs.writeFileSync(path.join(fx.shim, 'claude'), '#!/bin/bash\necho "not signed in" >&2\nexit 1\n', { mode: 0o755 });
+  const run = startLive(['--live', '--no-browser'], { fx });
+  try {
+    assert.equal((await run.exit()).code, 1);
+    assert.match(run.err, /Claude exited at once/);
+    assert.match(run.err, /Run `claude` once in a normal terminal/);
+    assert.doesNotMatch(run.err, /server stopped while starting/);
+    assert.doesNotMatch(run.err, /Command failed/);
+    assert.deepEqual(procsInDirs(run.tmp), []);
+    assert.deepEqual(fs.readdirSync(run.tmp), []);
+  } finally { run.finish(); }
+});
+
+test('r9-04: a DIR with "#" or a control character is refused before anything starts, exit 2', async () => {
+  for (const name of ['d#h', 'd\u0001x', 'd\nx']) {
+    for (const viaArg of [true, false]) {
+      const fx = liveFixture(); // run.finish() removes it
+      const bad = path.join(fx.dir, name);
+      fs.mkdirSync(bad);
+      const [args, cwd] = viaArg ? [['--live', bad, '--no-browser'], undefined] : [['--live', '--no-browser'], bad];
+      const run = startLive(args, { fx, cwd });
+      try {
+        assert.equal((await run.exit()).code, 2, JSON.stringify(name));
+        assert.match(run.err, /--live: DIR must not contain/);
+        assert.equal(fx.stand(), null);
+        assert.deepEqual(fs.readdirSync(run.tmp), []);
+      } finally { run.finish(); }
+    }
+  }
+  assert.match(REPO_DOC('docs/EMULATOR-LAPTOP.md'), /DIR[^.]*`#`/);
+});
+
+test('r9-06: the pid directory under TMPDIR is removed when empty after the run; --stop with another TMPDIR says where it looked', async () => {
+  const run = startLive(['--live', '--no-browser'], { env: { XDG_RUNTIME_DIR: null } });
+  try {
+    const up = await run.up();
+    const dir = path.join(run.tmp, `revview-emu-${process.getuid()}`);
+    await until(() => fs.existsSync(dir), 'the pid dir under TMPDIR');
+    const other = fs.mkdtempSync(path.join(run.dir, 'othertmp-'));
+    const env = { ...run.env, TMPDIR: other };
+    delete env.XDG_RUNTIME_DIR;
+    const s = spawnSync(BASH, [RUN, '--stop'], { env, encoding: 'utf8' });
+    assert.equal(s.status, 0);
+    assert.equal(s.stdout.trim(), 'not running');
+    assert.match(s.stderr, /looked only under this shell's TMPDIR=.*another TMPDIR is not found/);
+    assert.equal(alive(run.child.pid), true, 'the run was not touched');
+    process.kill(run.child.pid, 'SIGTERM');
+    assert.equal((await run.exit()).code, 0);
+    await run.stopped(up);
+    assert.deepEqual(fs.readdirSync(run.tmp), [], 'no empty revview-emu-<uid> left');
+  } finally { run.finish(); }
+});
+
+test('r9-05: the guide says what "Too early: press again" means', () => {
+  assert.match(REPO_DOC('docs/EMULATOR-LAPTOP.md'), /Too early: press again/);
+});
