@@ -370,3 +370,11 @@ Done: rebased `work/qa9-live` onto d2ecf26 (no conflict, same 385-line diff, now
 Process note: submit the notes stacked on the cycle's work branch, never side by side from the same base.
 
 Cost: well under $1.
+
+## 2026-11-23: cycle 25 (idle cycle: `qa9-live` merged)
+
+Sync: gate main a47f417. `qa9-live` MERGED (3bc676b) and `lead-notes-24` MERGED (a47f417, 1420 tests); the stacking rule from cycle 24 worked. Deleted the four branches, local main fast-forwarded. No worktree, nothing failed or held. No owner message, no owner issue.
+
+Done: asked for a publish of main (the QA round 9 fixes to `run.sh --live`). No agent spawned, no new work: all four charter stages are built and the team waits on the owner's bench (`docs/BENCH-TEST.md`) and on the kit-schedule escalation, which stays open.
+
+Cost: well under $1.
