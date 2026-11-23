@@ -48,7 +48,7 @@ test('same button on two keys is allowed', () => {
 test('errors name source and field path', () => {
   const o = base();
   o.buttons = [{ key: 'F13', button: 'a' }, { key: 'F14', button: 'b' }, { key: 'F15', button: 'c' }, { key: 'F25', button: 'd' }];
-  bad(o, /buttons\[3\]\.key: unknown key "F25" \(use F1-F24, optionally with Ctrl\+, Shift\+, Alt\+, Meta\+\)/);
+  bad(o, /buttons\[3\]\.key: unknown key "F25" \(use F1-F24, Up, Down, Left, Right, Enter, Backspace, Space, Esc or a letter A-Z, optionally with Ctrl\+, Shift\+, Alt\+, Meta\+\)/);
 });
 
 test('rejections', () => {

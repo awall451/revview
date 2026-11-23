@@ -11,12 +11,18 @@ const send = (body) => {
 
 export function startDevKeys() {
   const isF = (code) => /^F(1[3-9]|2[0-4])$/.test(code);
+  let bound = new Set();
+  // the bridge's bound keys (laptop keys): no default action (no scrolling on Space), but browser shortcuts keep working
+  fetch('/dev/keys').then((r) => r.json()).then((j) => { bound = new Set(j.codes); }).catch(() => {});
+  const swallow = (e) => {
+    if (isF(e.code) || (bound.has(e.code) && !e.ctrlKey && !e.altKey && !e.metaKey)) e.preventDefault();
+  };
   window.addEventListener('keydown', (e) => {
-    if (isF(e.code)) e.preventDefault();
+    swallow(e);
     send({ code: e.code, type: 'down', repeat: e.repeat });
   });
   window.addEventListener('keyup', (e) => {
-    if (isF(e.code)) e.preventDefault();
+    swallow(e);
     send({ code: e.code, type: 'up' });
   });
   window.addEventListener('blur', () => send({ type: 'lost' }));

@@ -1,7 +1,7 @@
 // Live server: hook scripts POST raw Claude Code hook JSON to /event, the state core
 // (src/state) reduces it, and the new state is pushed to the page over Server-Sent Events.
 // It also serves the view. Binds to 127.0.0.1 only; see src/server/README.md.
-//   node src/server/index.js [port] [--input [path]] [--dev-bridge] [--sessions] [--start dir]... [--projects file] [--speech file] [--boot] [--netmon] [--data-lock [dir]]   (port default 8138, or REVVIEW_PORT)
+//   node src/server/index.js [port] [--input [path]] [--dev-bridge [--dev-keys file]] [--sessions] [--start dir]... [--projects file] [--speech file] [--boot] [--netmon] [--data-lock [dir]]   (port default 8138, or REVVIEW_PORT)
 //   --boot: key-on start: show STARTING until the first session is on the board; with no tmux windows, start one session in $REVVIEW_START (or each --start dir)
 //   --data-lock [dir]: the data is locked until the topmost mount on dir (default /srv/revview-data, or $REVVIEW_DATA_MOUNT) is ext4 from /dev/mapper/revview-data;
 //     locked shows INSERT KEY, no session starts (key-on and New session wait); a posted RevviewDataLock is only a poke to re-read the mount table
@@ -16,7 +16,7 @@ import { createNetMonitor, createDefaultProbe } from './netmon.js';
 import { createSessionRunner, createActions, createPermissionRegistry, loadProjects } from '../sessions/index.js';
 import { startInput, createInputPipeline } from '../input/index.js';
 import { loadConfig, ConfigError, DEFAULT_CONFIG_PATH } from '../input/keymap.js';
-import { BROWSER_CODES } from '../input/keys.js';
+import { BROWSER_CODES, MODIFIER_KIND } from '../input/keys.js';
 import {
   createSpeaker, createClosingMemo, createReadAloud, loadSpeechConfig, pickEngine, describeChoice, SpeechConfigError,
   DEFAULT_SPEECH_CONFIG_PATH,
@@ -81,7 +81,7 @@ function serveStatic(req, res, root) {
 
 export async function startLiveServer({
   port = 0, viewDir = DEFAULT_VIEW_DIR, reduce: reduceEvent = reduceBoard,
-  input = null, devBridge = false, inputDeps, inputRetryMs, onGesture,
+  input = null, devBridge = false, devKeys = null, inputDeps, inputRetryMs, onGesture,
   sessions = null, clock, permissionWaitMs, minShownMs, projects = [], timers, navTimeoutMs, ownedPollMs = 5000, speech = null, launchLimitMs = LAUNCH_LIMIT_MS,
   boot = false, netmon = null, dataLock = null,
 } = {}) {
@@ -234,8 +234,16 @@ export async function startLiveServer({
   }
   let bridge = null;
   if (devBridge) {
-    bridge = inputHandle ?? createInputPipeline({ config: loadConfig(DEFAULT_CONFIG_PATH), onGesture: gestureFromDetector });
+    bridge = devKeys
+      ? createInputPipeline({ config: devKeys, onGesture: gestureFromDetector })
+      : inputHandle ?? createInputPipeline({ config: loadConfig(DEFAULT_CONFIG_PATH), onGesture: gestureFromDetector });
   }
+  // browser codes of the bridge's bound non-modifier keys (the page prevents their default action)
+  const bridgeCodes = () => {
+    const cfg = devKeys ?? input ?? loadConfig(DEFAULT_CONFIG_PATH);
+    const bound = new Set(cfg.bindings.map((b) => b.key));
+    return Object.keys(BROWSER_CODES).filter((c) => bound.has(BROWSER_CODES[c]) && !(BROWSER_CODES[c] in MODIFIER_KIND));
+  };
 
   // A body over the limit that still looks like a hook event means an event was lost (QA issue 11).
   function noteDropped(prefix) {
@@ -468,7 +476,10 @@ export async function startLiveServer({
     '/state': { GET: (req, res) => res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify({ seq, state: boardView(board) })) },
   };
 
-  if (devBridge) ROUTES['/dev/key'] = { POST: devKey };
+  if (devBridge) {
+    ROUTES['/dev/key'] = { POST: devKey };
+    ROUTES['/dev/keys'] = { GET: (req, res) => res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify({ codes: bridgeCodes() })) };
+  }
 
   const server = http.createServer((req, res) => {
     req.on('error', () => {});
@@ -610,6 +621,11 @@ export function parseArgs(argv) {
       if (next === undefined || next.startsWith('--')) throw new Error('--speech needs a file');
       out.speech = next;
       i++;
+    } else if (a === '--dev-keys') {
+      const next = argv[i + 1];
+      if (next === undefined || next.startsWith('--')) throw new Error('--dev-keys needs a file');
+      out.devKeysPath = next;
+      i++;
     } else if (a === '--input') {
       const next = argv[i + 1];
       if (next !== undefined && !next.startsWith('--')) { out.inputPath = next; i++; } else out.inputPath = DEFAULT_CONFIG_PATH;
@@ -617,6 +633,7 @@ export function parseArgs(argv) {
     else if (out.port === null && /^\d+$/.test(a)) out.port = Number(a);
     else throw new Error(`unexpected argument ${a}`);
   }
+  if (out.devKeysPath && !out.devBridge) throw new Error('--dev-keys needs --dev-bridge');
   if (out.port === null) out.port = Number(process.env.REVVIEW_PORT || DEFAULT_PORT);
   if (out.boot && out.start.length === 0 && process.env.REVVIEW_START) out.start = [process.env.REVVIEW_START];
   if (out.dataLock === undefined && process.env.REVVIEW_DATA_MOUNT) out.dataLock = process.env.REVVIEW_DATA_MOUNT;
@@ -714,9 +731,11 @@ export function installShutdown(server, proc = process) {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   let args;
   let input = null;
+  let devKeys = null;
   try {
     args = parseArgs(process.argv.slice(2));
     if (args.inputPath) input = loadConfig(args.inputPath);
+    if (args.devKeysPath) devKeys = loadConfig(args.devKeysPath);
   } catch (e) {
     console.error(e instanceof ConfigError || e instanceof Error ? e.message : String(e));
     process.exit(2);
@@ -758,7 +777,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     console.error(e.message);
     speechLine = 'speech: off (bad speech config, see the log)';
   }
-  const live = await startLiveServer({ port: args.port, input, devBridge: args.devBridge, sessions: runner, projects, speech, boot: args.boot, netmon, dataLock: args.dataLock ? { mountPoint: args.dataLock } : null });
+  const live = await startLiveServer({ port: args.port, input, devBridge: args.devBridge, devKeys, sessions: runner, projects, speech, boot: args.boot, netmon, dataLock: args.dataLock ? { mountPoint: args.dataLock } : null });
   if (args.boot && runner && args.dataLock) {
     const log = (m) => console.error(m);
     bootAfterUnlock({ live, runner, dirs: args.start, log }).then(() => log('boot: key-on session step done'));
@@ -778,5 +797,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   if (args.boot) console.log('boot: STARTING until the first session is on the board');
   if (args.boot && runner && args.dataLock) console.log(`boot: the key-on session waits for the data unlock (${args.dataLock})`);
   if (args.projects) console.log(`projects: ${projects.length} from ${args.projects}`);
+  if (args.devKeysPath) console.log(`dev keys: ${args.devKeysPath}`);
   if (args.devBridge) console.log('dev bridge ON (POST /dev/key): never use this on the car');
 }

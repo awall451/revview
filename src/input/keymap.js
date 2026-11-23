@@ -16,6 +16,7 @@ export const DEFAULT_TIMING = Object.freeze({ debounceMs: 30, holdMs: 400, longH
 
 const MODS = ['Ctrl', 'Shift', 'Alt', 'Meta'];
 const BUTTON_RE = /^[a-z][a-z0-9-]{0,31}$/;
+const KEY_NAME_RE = /^(F([1-9]|1[0-9]|2[0-4])|Up|Down|Left|Right|Enter|Backspace|Space|Esc|[A-Z])$/;
 const HEX4 = /^[0-9a-fA-F]{4}$/;
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -96,9 +97,9 @@ export function parseConfig(obj, source = 'config') {
       if (mods.includes(m)) fail(`${p}.key`, `modifier "${m}" repeated in "${b.key}"`);
       mods.push(m);
     }
-    if (!/^F([1-9]|1[0-9]|2[0-4])$/.test(keyPart)) {
-      const hint = MODS.includes(keyPart) ? ' (a key string needs one F key last, not only modifiers)' : '';
-      fail(`${p}.key`, `unknown key "${keyPart}" (use F1-F24, optionally with Ctrl+, Shift+, Alt+, Meta+)${hint}`);
+    if (!KEY_NAME_RE.test(keyPart)) {
+      const hint = MODS.includes(keyPart) ? ' (a key string needs one key last, not only modifiers)' : '';
+      fail(`${p}.key`, `unknown key "${keyPart}" (use F1-F24, Up, Down, Left, Right, Enter, Backspace, Space, Esc or a letter A-Z, optionally with Ctrl+, Shift+, Alt+, Meta+)${hint}`);
     }
     if (typeof b.button !== 'string' || !BUTTON_RE.test(b.button)) {
       fail(`${p}.button`, 'must match /^[a-z][a-z0-9-]{0,31}$/ (lowercase letters, digits, dashes)');

@@ -1,0 +1,18 @@
+{
+  "note": "The laptop map for the dev bridge only (emulator/run.sh): ordinary laptop keys driven through --dev-keys. Never read from a device.",
+  "device": { "name": "laptop keyboard (dev bridge only, never opened)", "grab": false },
+  "timing": { "debounceMs": 30, "holdMs": 400, "longHoldMs": 1000 },
+  "buttons": [
+    { "key": "Up", "button": "up" },
+    { "key": "Down", "button": "down" },
+    { "key": "Left", "button": "left" },
+    { "key": "Right", "button": "right" },
+    { "key": "Enter", "button": "press" },
+    { "key": "Backspace", "button": "back", "hold": true },
+    { "key": "Space", "button": "push-to-talk" },
+    { "key": "R", "button": "read-aloud", "hold": true },
+    { "key": "Esc", "button": "cancel", "longHold": true },
+    { "key": "N", "button": "deny" },
+    { "key": "M", "button": "menu" }
+  ]
+}

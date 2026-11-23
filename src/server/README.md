@@ -7,7 +7,7 @@ session, see `src/state/README.md`), reduces every event with `reduceBoard` and 
 No persistence: a fresh or restarted server shows `unknown` (a restored state could not be trusted, and hooks
 posted while the server was down are lost).
 
-Run: `npm start` or `node src/server/index.js [port] [--input [path]] [--dev-bridge] [--sessions] [--start dir]... [--projects file] [--speech file] [--boot] [--netmon] [--data-lock [dir]]` (port default **8138**, or env `REVVIEW_PORT`).
+Run: `npm start` or `node src/server/index.js [port] [--input [path]] [--dev-bridge [--dev-keys file]] [--sessions] [--start dir]... [--projects file] [--speech file] [--boot] [--netmon] [--data-lock [dir]]` (port default **8138**, or env `REVVIEW_PORT`).
 `--input` reads the wheel buttons in this process (config `config/buttons.json`, or the path given); a bad config or
 unknown flag prints the message to stderr and exits with code 2 before listening. `--dev-bridge` (or `npm run start:dev`) turns on `POST /dev/key`. SIGTERM and SIGINT close the server (stopping the grab helper) and exit 0.
 It binds to **127.0.0.1 only**; there is deliberately no way to change the host from the CLI.
@@ -142,6 +142,7 @@ for each (a throwing callback is caught and logged).
   allow when NEEDS PERMISSION is shown (it never opens the list then), else opens the list; deny tap = deny. Without a runner keys and
   answers are refused (`no sessions`) and `owned` stays `null`.
 - With `--input` and `--dev-bridge` together the bridge shares the device's detector (dev only; sources are told apart per key event).
+- `--dev-keys <file>` (needs `--dev-bridge`, else exit 2): the bridge gets its own key map from that file (e.g. `config/buttons.laptop.json`, ordinary laptop keys) instead of sharing the device's. `GET /dev/keys` (dev only, same gating) returns `{codes: [...]}`, the browser codes of the bridge's bound keys; the page prevents their default action (not with Ctrl/Alt/Meta held).
 - `POST /dev/key` (**dev only**): body `{code, type: 'down'|'up'|'lost', repeat?}` (`code` is a `KeyboardEvent.code`; `lost` = the
   page lost focus, like a vanished device). It feeds the same detector as the device (the one from `--input` when given,
   else one built from `config/buttons.json`). 204; unmapped code: 204 and ignored; bad body 400; over 1 KiB 413.
