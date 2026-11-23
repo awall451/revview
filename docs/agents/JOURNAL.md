@@ -386,3 +386,13 @@ Sync: gate main 900bfce. `lead-notes-25` MERGED (1420 tests) and published at 90
 Done: the kit's cost-rule change for this cycle. Added `experimental:` / `  cacheTtl: 1h` to the header of both tech lead definitions (`area-lead-core`, `area-lead-platform`), nothing else changed there; builder, scout, reviewer and qa untouched. The lead made this two-line edit itself with the notes (as the kit's notice asks) instead of starting an Opus tech lead for it. No agent spawned, no publish requested (notes and agent config only). The team still waits on the owner's bench and the kit-schedule escalation.
 
 Cost: well under $1.
+
+## 2026-11-23: cycle 27 (one-shot job: Pi facts against the real packages, part done)
+
+Asked: owner one-shot 20261123T223057Z-o-c4f87f (backlog f59dbf, owner issue 20261123T223054Z-i-7afd33): check the Pi set-up's from-memory facts against the real Trixie / Raspberry Pi OS packages.
+
+Sync: gate main 4af718c (`lead-notes-26` merged). Requested `domain:deb.debian.org` and `domain:archive.raspberrypi.com`; both 403 at the start. As the job says for that case, only steps 1-2 ran: `area-lead-platform` (Opus, the owner's choice; no builders, about $1.80) wrote `docs/PI-FACTS.md`: 85 rows in 8 groups (fact, where used, how to check, status), linked from `pi/README.md` and BENCH-TEST 4A/4B, a DECISIONS entry. No code, test or fixture touched; nothing marked checked; bench items stay `untested`. `pi-facts` MERGED d329128 (1420 tests). No reviewer: the diff is documentation only, the reviewer belongs to the step 5 diff.
+
+The owner approved both domains during the cycle, but the proxy still gave 403 after the merge (approvals take effect between cycles). Steps 3-6 are left for the next cycle; replied `planned`. Issue stays `in_progress`.
+
+Cost: about $3.
