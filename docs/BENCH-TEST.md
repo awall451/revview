@@ -228,7 +228,8 @@ Install: `node $REVVIEW_DIR/hooks/install.mjs` as the user that runs Claude (see
 
 Set-up: `pi/README.md` (owner's steps), `sudo bash /opt/revview/pi/install.sh --user NAME /opt/revview`. Written without a Pi; the
 file edits were tested only against a fake root (`tests/unit/pi-*.test.js`). Chromium flags, package names, the lightdm
-key, the labwc autostart behaviour and the systemd user-unit layout are from memory. DECISIONS "stage 4A".
+key, the labwc autostart behaviour and the systemd user-unit layout are from memory. DECISIONS "stage 4A". The
+full list of from-memory facts, with the bench item that checks each, is `docs/PI-FACTS.md`.
 
 Since stage 4A the server is a systemd USER unit of the kiosk user, not a system unit of user `revview`: every item
 uses `systemctl --user ... revview` and `journalctl --user -u revview`, run as the kiosk user (the log is in that user's
@@ -263,7 +264,7 @@ Ids `P1`... are new.
 
 Set-up: `pi/README.md` ("Encrypted data and the key stick", "Read-only root", "Updating", "Piper"). Written without a
 Pi; the scripts were tested only against a fake root and stub commands. Everything about raspi-config, cryptsetup,
-udev, systemd, Piper and Adiantum speed is from memory. DECISIONS "stage 4B". Try the data set-up on a spare
+udev, systemd, Piper and Adiantum speed is from memory (listed in `docs/PI-FACTS.md`). DECISIONS "stage 4B". Try the data set-up on a spare
 partition and a spare stick first, not on data you need.
 
 | # | Try | Should happen | State |

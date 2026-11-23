@@ -1608,3 +1608,24 @@ Tested with the stand-in claude only; nothing here ran with a real Claude Code.
 - **r9-06:** `--stop` keeps its search places and its pid + start-time check; it does NOT look under other TMPDIRs
   (scanning for them cannot be proven safe). When nothing is found it says so on stderr: it looked only under this
   shell's TMPDIR. The pid directory is removed on exit when it is empty (`rmdir`).
+
+## 2026-11-23: Pi facts inventory (backlog f59dbf), part A only
+
+The owner asked for the Pi set-up's from-memory facts to be checked against the real Raspberry Pi OS packages before
+the bench. Both archives were unreachable from the VM this cycle: `deb.debian.org/debian/dists/trixie/Release` and
+`archive.raspberrypi.com/debian/dists/trixie/Release` gave 403 from the proxy. No other route was tried (charter).
+So nothing was checked and nothing in `pi/` changed.
+
+- **One table, `docs/PI-FACTS.md`.** Every package name, path, config key, raspi-config function, Chromium flag,
+  systemd/udev/logind detail and cryptsetup/lsblk option the set-up relies on, with where it is used (file:line, test,
+  fixture), how to check it (which index, which `.deb` and which file inside it, or "only on the Pi" with the bench
+  item) and a status. Every status is `from memory`. Facts nobody had flagged are in it too: package names other than
+  the installer's six, the `/boot/firmware` path, the stock `cmdline.txt`/`config.txt`/`lightdm.conf` fixture content,
+  udev rule ordering, user-unit and linger layout, group names, `/etc/profile.d` for desktop terminals.
+- **Things to look at first when the archives open** (suspicions, not findings): whether `raspi-config nonint
+  do_overlayfs` installs the `overlayroot` package or rebuilds the initramfs (it would then need a network at
+  `readonly.sh enable` time; PI-FACTS O05); whether Pi OS's labwc session reads `~/.config/labwc/autostart` at all and
+  whether it replaces the system one (L06); whether the Chromium package/binary is `chromium` or `chromium-browser`
+  on Trixie (P01, P02); which package ships the `cryptsetup` command (P08).
+- **Stale text left as it was:** DECISIONS "stage 4A" lists the packages without `sox` (added later, see QA round 7)
+  and the WB5 espeak-ng pinning names Debian 12, not Trixie. Both are history; PI-FACTS has the current list.
