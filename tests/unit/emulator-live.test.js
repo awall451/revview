@@ -333,7 +333,7 @@ test('another tmux server on its own socket is not touched by a run or its stop'
     setup: ({ dir }) => {
       other.sock = path.join(dir, 'other.sock');
       sockets.push(other.sock);
-      const r = tmux(other.sock, 'new-session', '-d', '-s', 'mine', 'sleep 300');
+      const r = tmux(other.sock, 'new-session', '-d', '-s', 'mine', '--', 'sleep', '300'); // argv form: exec'd directly, no shell (the gate user's SHELL may be nologin)
       assert.equal(r.status, 0, r.stderr);
     },
   });
