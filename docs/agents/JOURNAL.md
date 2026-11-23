@@ -265,3 +265,18 @@ Process notes:
 - Cycle cost about $2.5 of $40.
 
 Gate: `qa7b-fixes` MERGED first try at 02:16Z on 2026-11-23 (86bdaa3, 1299 tests). Notes submitted after the verdict. Publish requested.
+
+## 2026-11-23: cycle 18 (one-shot job: "Emulator on your laptop 1")
+
+Asked: owner message 20261123T034350Z-o-d958cf (backlog item 20261123T033738Z-b-ce8ef5, estimate 70 minutes / $9): a laptop key map for the dev bridge and `emulator/run.sh` that opens the bar in a 1280x400 window, with tests. Nothing else was done this cycle.
+
+Dispatched: area-lead-core (Opus, two Sonnet builders in parallel), topic `laptop-emu`: 2 commits, 1330 tests. Sonnet reviewer (6 mutations, 4 caught, 1 missed, 1 inconclusive): changes needed. Blocking: `exec 3<> ... 2> /dev/null` in the port probe silenced stderr for the rest of the script. Smaller: the script did not notice a dead server; the trap came after `mktemp`; the browser's children were not covered by a test. One fix round (area-lead-core on Sonnet): all four fixed, each new test seen failing first; the browser now runs in its own process group (the old `pkill -P` orphaned the child after a normal window close). 1336 tests. The fix round was not re-reviewed.
+
+Not proven: anything on a real laptop or WSL2 (bench L1-L2, untested); the WSL2 code is from memory.
+
+Process notes:
+- An agent cannot enter another agent's worktree: a fix round by a new agent needs its own branch cut from the work branch's head (`git checkout -b work/<topic>-fix <sha>`). The first fix agent returned at once for that reason (about $0.2 lost).
+- Each agent leaves a `worktree-agent-*` branch besides its worktree: delete both.
+- Cycle cost about $3.5 of $40 (the estimate was $9).
+
+Gate: `laptop-emu` MERGED first try on 2026-11-23 (86a5f21, 1336 tests). Notes submitted after the verdict. Publish requested.

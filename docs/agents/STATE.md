@@ -1,6 +1,6 @@
 # STATE
 
-Updated 2026-11-23 (cycle 17, a short cycle: QA round 7b and its fixes, ONE topic `qa7b-fixes`, head 86bdaa3, 1299 tests, was 1293; MERGED at 02:16Z as 86bdaa3). Milestone 1 CLOSED; stages 2, 3 and 4 BUILT; milestone 2 complete in the repository; all of it unproven on the Pi. What is left is the owner's bench.
+Updated 2026-11-23 (one-shot cycle 18: owner job 20261123T034350Z-o-d958cf "Emulator on your laptop 1", ONE topic `laptop-emu`, MERGED at about 04:25Z as 86a5f21, 1336 tests, was 1299). Before it: cycle 17 (QA round 7b, `qa7b-fixes`, 86bdaa3). Milestone 1 CLOSED; stages 2, 3 and 4 BUILT; milestone 2 complete in the repository; all of it unproven on the Pi. What is left is the owner's bench.
 
 ## Roadmap (the charter's four stages)
 
@@ -29,9 +29,15 @@ Updated 2026-11-23 (cycle 17, a short cycle: QA round 7b and its fixes, ONE topi
 
 ## In flight
 
-- Nothing. `qa7b-fixes` MERGED at 02:16Z on 2026-11-23 as 86bdaa3 (4 commits, 12 files, +154 -15; `tools/check` untouched). Ready and work branches deleted. A publish was requested.
-- `ready/lead-notes-17` (these notes, on top of 86bdaa3): next cycle delete it and `work/lead-notes-17` once merged.
+- Nothing. `laptop-emu` MERGED as 86a5f21 (3 commits, 14 files, about +1030 -15; `tools/check` untouched, no new dependency). Ready and work branches and the cycle's worktrees deleted. Owner message answered `done`, owner issue 20261123T034348Z-i-820960 set done, publish requested.
+- `ready/lead-notes-18` (these notes, on top of 86a5f21): delete it and `work/lead-notes-18` once merged. `ready/lead-notes-17` / `work/lead-notes-17` (merged as 193b7ae) were left alone by the one-shot cycle: delete them in the next normal cycle.
 - No worktree left. No held change.
+
+## Emulator on the owner's laptop (owner backlog, three items)
+
+- Item 1 DONE (one-shot job 20261123T034350Z-o-d958cf, merged 86a5f21; DECISIONS.md "Emulator on your laptop 1", `emulator/README.md`, bench L1-L2 untested). Built: `config/buttons.laptop.json` (arrows, Enter = press, Backspace = back / hold home, Space = push-to-talk, R = read aloud / hold stop, Esc = cancel / long hold Ctrl+C, N = deny, M = menu; `config/buttons.json` untouched); the key-name parser also takes Up/Down/Left/Right/Enter/Backspace/Space/Esc and A-Z; server option `--dev-keys <file>` (exit 2 without `--dev-bridge`) and `GET /dev/keys` (only with the bridge), `src/view/devkeys.js` blocks the browser default of mapped keys (not with Ctrl/Alt/Meta); `emulator/run.sh` (`--port`, `--no-browser`, `--scale`, `--keys`, `--help`; `REVVIEW_BROWSER`; server on port 0, the real port read from its `view:` line; `--scale S` = `--force-device-scale-factor=S` with `--window-size=1280,400`; browser in its own process group via `setsid`, own throw-away profile; watches the server and exits 1 if it dies; a browser that returns within 3 s = keep serving until Ctrl+C; exit codes 0 / 1 / 2). Tests: `tests/unit/input-laptop-keymap.test.js`, `tests/unit/emulator-run.test.js` (stand-in browser), `emulator/tests/laptop-keys.spec.js`. Sonnet review: one blocking bug (stderr lost after the port probe), fixed with three smaller findings in one fix round; the fix round was not re-reviewed.
+- NOT PROVEN: nothing ran on a real desktop, laptop or WSL2. WSL2 detection, the Windows browser paths and the `%TEMP%` profile are from memory. The `--app` title bar may take part of the 400 px. Enter on the empty bar opens the SESSIONS list with "No sessions".
+- Items 2 (demo content) and 3 (the documents) are the owner's to start (`owner-backlog list`); do not start them unasked.
 
 ## Milestone 2: the Pi appliance (charter stage 4)
 
@@ -69,7 +75,7 @@ Design: `docs/BUTTONS.md`; recordings `fixtures/buttons/`. Phases:
 
 ## Next
 
-1. Handle the verdict of `lead-notes-17` (`qa7b-fixes` is merged, publish requested in cycle 17).
+1. Handle the verdict of `lead-notes-18` and delete the leftover notes branches (17 and 18). If the owner reports on the first real run of `emulator/run.sh` (bench L1-L2), fix what it finds.
 2. The software for all four charter stages is built. QA round 7b (cycle 17) re-ran r7-01..08 as the owner reading the documents: ALL EIGHT HELD; 3 small new findings (r7b-01 minor, r7b-02 and r7b-03 polish) fixed in `qa7b-fixes` (not re-run by QA, not reviewed by a reviewer: the lead read the core diff and sent it back once). The owner's path: top-level README "On the Pi" -> `pi/README.md` (ends with "First drive (parked)") -> `docs/BENCH-TEST.md` "First afternoon" (18 ordered steps; since r7b-01 none of them starts a server by hand, all use the running service) -> the rest as reference; `docs/REVOKE.md`.
 3. Do not invent features beyond the charter. NO planned work is left. From now on IDLE cycles: sync, verdicts, inbox, stop (a cycle with nothing to do should cost well under $1: do not start QA or leads without a reason). Work starts again with an owner message or a bench report.
 4. Leftovers (none blocking): `pi/data.mjs` exits 1 for both refusal and crash; the key-on Claude's exit REASON is not logged (needs tmux `remain-on-exit`); no script installs Piper (checksum unknown here); hold-mode push-to-talk not built (tap is the charter's mode); locking the data when the stick is pulled is not built (DESIGN: later, maybe); when the shipped key map changes, the owner merges it into `/etc/revview/buttons.json` by hand (the installer prints a `note:` with the `diff` command); the package name `sox` on Raspberry Pi OS is taken from Claude Code's own hint, unverified (bench P21); no gallery shot of the ENDED screen with the next-step note (an emulator fit test covers it); no test pins the bench ids in BENCH-TEST.md (QA checked them by hand in rounds 7 and 7b).
