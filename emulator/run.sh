@@ -246,7 +246,15 @@ cleanup() {
     wait "$spid" 2> /dev/null
   fi
   # the private tmux server of a --live run (ONLY that socket) ends the Claude session in it
-  if [ -n "$sock" ]; then tmux -S "$sock" kill-server 2> /dev/null; fi
+  if [ -n "$sock" ]; then
+    tmux -S "$sock" kill-server 2> /dev/null
+    # the server may have been killed mid-spawn of its tmux: a server that comes up late is killed again (about 1 s at most)
+    for _ in 1 2 3 4 5; do
+      tmux -S "$sock" list-sessions > /dev/null 2>&1 || break
+      tmux -S "$sock" kill-server 2> /dev/null
+      sleep 0.2
+    done
+  fi
   if [ -n "$winprofile" ]; then rm -rf "$winprofile"; fi
   if [ -n "$work" ]; then rm -rf "$work"; fi
   if [ -n "$pidfile" ]; then rm -f "$pidfile"; fi
@@ -280,6 +288,11 @@ if [ "$mode" = live ]; then
   fi
   node "$root/hooks/install.mjs" --settings "$work/claude-settings.json" > "$log" 2>&1 || fail "could not write the Claude Code settings file"
   sock="$work/tmux.sock"
+  if [ "${#sock}" -gt 100 ]; then # a unix socket path is limited to about 107 bytes
+    len=${#sock}
+    sock=
+    fail "the tmux socket path is too long (${len} bytes, the limit is about 107): $work/tmux.sock; use a shorter TMPDIR, e.g. TMPDIR=/tmp"
+  fi
   server_args+=(--tmux-socket "$sock" --claude-settings "$work/claude-settings.json" --start "$live_dir")
   REVVIEW_PORT=$port node "$root/src/server/index.js" "$port" "${server_args[@]}" > "$log" 2>&1 &
 else

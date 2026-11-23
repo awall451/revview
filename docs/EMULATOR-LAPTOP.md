@@ -254,6 +254,8 @@ The temp directory `revview-emu.XXXXXX` in your `TMPDIR` (or `/tmp`) was not rem
 **`--live` says `tmux` or `claude` was not found.** Install it, or put its folder on the `PATH` of the shell you run
 `run.sh` from. Nothing was started; the exit code is 1.
 
+**`--live` says the tmux socket path is too long.** A unix socket path is limited to about 107 bytes; use a shorter `TMPDIR` (for example `TMPDIR=/tmp`). Nothing was started.
+
 **A tmux server is left after `kill -9` of `run.sh`.** Like the case above, a KILL gives `run.sh` no chance to clean
 up: the private tmux server (and the Claude in it) and the server can stay. Use the socket path that was printed in
 the `attach:` line: `tmux -S <socket> kill-server`. Or find them with `ps -u "$(id -u)" -o pid,args | grep -E

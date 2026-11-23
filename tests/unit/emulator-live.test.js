@@ -116,6 +116,9 @@ function startLive(args, { fx = liveFixture(), env = {}, browser = false, setup,
     await until(() => !alive(spid), 'node server gone');
     await until(() => !alive(info.pid), 'stand-in claude gone');
     assert.equal(fs.existsSync(path.dirname(sock)), false, 'the work dir is removed');
+    // before finish() kills anything: no process of this run is left, and no tmux server answers on its socket
+    await until(() => procsInDirs(run.tmp).length === 0, `no process left in the run's work directory (${procsInDirs(run.tmp)})`);
+    assert.notEqual(tmux(sock, 'list-sessions').status, 0, 'no tmux server answers on the socket');
   };
   run.finish = () => {
     try { process.kill(-child.pid, 'SIGKILL'); } catch { /* already gone */ }
@@ -303,6 +306,23 @@ test('the window closing ends the Claude session and the private tmux server', a
     assert.equal((await run.exit()).code, 0);
     await run.stopped(up);
     assert.deepEqual(fs.readdirSync(run.tmp), []);
+  } finally { run.finish(); }
+});
+
+test('a socket path over 100 bytes fails before anything starts', async () => {
+  const long = fs.mkdtempSync(path.join(os.tmpdir(), 'emu-long-'));
+  runDirs.push(long);
+  const deep = path.join(long, 'x'.repeat(90));
+  fs.mkdirSync(deep);
+  const run = startLive(['--live', '--no-browser'], { env: { TMPDIR: deep } });
+  try {
+    assert.equal((await run.exit()).code, 1);
+    assert.match(run.err, /tmux socket path is too long \(\d+ bytes/);
+    assert.ok(run.err.includes(deep), 'names the path');
+    assert.match(run.err, /shorter TMPDIR/);
+    assert.equal(run.fx.stand(), null, 'the stand-in claude was not started');
+    assert.deepEqual(procsInDirs(run.dir, long), []);
+    assert.equal(run.serverPid(), null);
   } finally { run.finish(); }
 });
 
