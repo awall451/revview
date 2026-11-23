@@ -1534,3 +1534,27 @@ Tested in the unit suite only (fakes, injected timers); nothing run on a Pi.
 - **Untested:** nothing has run on a real laptop (bench L5) or on WSL2 (bench L6); the guide's WSL2 section and the
   tiling window manager advice are from knowledge and marked so. The guide's cheatsheet and alias block are checked
   against the real output by a test, but the text around them is not.
+
+## 2026-11-23: Emulator on your laptop 3: review round 2 (`--stop`, wording)
+
+- **`--stop` scans every place a run can have written to,** not only the ones its own environment names: a run started in
+  a desktop shell (`XDG_RUNTIME_DIR=/run/user/<uid>`) was "not running" for a `--stop` from an ssh or WSL shell where it
+  is unset, and the reverse, and likewise for a different `TMPDIR`. Now: `$XDG_RUNTIME_DIR/revview-emu` (if set),
+  `/run/user/<uid>/revview-emu`, `${TMPDIR:-/tmp}/revview-emu-<uid>` and `/tmp/revview-emu-<uid>`, deduplicated, each
+  only after the same `pid_dir_safe` checks. The writer's order is unchanged (it never writes to `/run/user/<uid>`
+  unless that is `XDG_RUNTIME_DIR`).
+- **Pid files:** a pid that is not `[1-9][0-9]{0,9}` or is <= 1 (0, 1, negative, leading zero, junk) is never signalled;
+  the file is removed like a stale one (so it cannot sit there). The start time needs the same shape.
+- **`--stop` goes through all files:** one run that does not stop within 5 s (its file stays, it is live) no longer ends
+  the loop; the message is printed, the others are stopped, exit 1 at the end. `REVVIEW_EMU_STOP_WAIT_SECS` (test only)
+  shortens the 5 s; a test uses a stand-in that traps TERM.
+- **`REVVIEW_EMU_FALLBACK_TMP`** (test only) is kept for the real `/tmp`, and `REVVIEW_EMU_FALLBACK_RUN` (test only) now
+  stands in for the real `/run/user/<uid>`, so every test of `run.sh` and `--stop` uses private directories only and can
+  never see or stop another agent's run. **Untested:** the two real hard-coded paths themselves (`/run/user/<uid>` and
+  `/tmp` as written in the script, without the test variables), and the foreign-owner checks (`-O` on the directory and
+  on the file), which need a second user. Left as is: a run whose `run.sh` was killed with `kill -9` leaves the server
+  and demo player running and `--stop` says "not running" (no pid of theirs is recorded); the guide says how to find them.
+- **Wording:** the sheet footer and the guide said both "R only logs the gesture" and "R speaks on any machine with
+  espeak-ng or Piper". Truth: R reads aloud only after a session was chosen with Left/Right (else "no session selected"),
+  and Piper counts only when installed as `config/speech.json` says (`/opt/piper/piper`, the lessac voice, `aplay`). The sheet
+  is 23 lines now; the limit is 24 lines of 80 columns (was 22).

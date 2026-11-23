@@ -42,7 +42,8 @@ window closed or after Ctrl+C / TERM / HUP; 1 on a start failure (Node too old, 
 or when the server stops while running; 2 on a bad option.
 A running script writes its pid and start time to <pid>.pid in a private directory (mode 700, yours):
 \$XDG_RUNTIME_DIR/revview-emu, else \${TMPDIR:-/tmp}/revview-emu-<uid>, else /tmp/revview-emu-<uid>. It is
-removed on exit; --stop reads those files.
+removed on exit. --stop reads those files in ALL of: \$XDG_RUNTIME_DIR/revview-emu, /run/user/<uid>/revview-emu,
+\${TMPDIR:-/tmp}/revview-emu-<uid> and /tmp/revview-emu-<uid>, so it finds a run started from another shell.
 USAGE
 }
 
@@ -98,6 +99,17 @@ pid_dir_candidates() {
     echo "${REVVIEW_EMU_FALLBACK_TMP:-/tmp}/revview-emu-$uid"
   } | awk '!seen[$0]++'
 }
+# where --stop looks: every place a run of this user may have written to, whatever THIS shell's environment says
+# (a run from a desktop shell has XDG_RUNTIME_DIR, one from ssh or WSL may not, TMPDIR may differ).
+# REVVIEW_EMU_FALLBACK_RUN and _TMP (test only) replace the real /run/user/<uid> and /tmp.
+stop_dir_candidates() {
+  {
+    if [ -n "${XDG_RUNTIME_DIR:-}" ]; then echo "$XDG_RUNTIME_DIR/revview-emu"; fi
+    echo "${REVVIEW_EMU_FALLBACK_RUN:-/run/user/$uid}/revview-emu"
+    echo "${TMPDIR:-/tmp}/revview-emu-$uid"
+    echo "${REVVIEW_EMU_FALLBACK_TMP:-/tmp}/revview-emu-$uid"
+  } | awk '!seen[$0]++'
+}
 # a real directory (not a symlink) that is the user's own and closed to group and others; with $2 = make, an absent
 # one is made (mode 700)
 pid_dir_safe() {
@@ -134,6 +146,9 @@ if [ -n "$want_stop" ]; then
   # regular file of ours in a safe directory, and the pid is signalled only when that process still has that start
   # time (a reused pid has another). A stale file is removed; the file of a live run.sh never is (it removes its own).
   found=0
+  failed=0
+  wait_secs=${REVVIEW_EMU_STOP_WAIT_SECS:-5} # test only: shortens the 5 s
+  [[ "$wait_secs" =~ ^[0-9]{1,3}$ ]] || wait_secs=5
   while IFS= read -r d; do
     pid_dir_safe "$d" || continue
     for f in "$d"/*.pid; do
@@ -141,19 +156,25 @@ if [ -n "$want_stop" ]; then
       p=
       st=
       read -r p st < "$f" 2> /dev/null
-      if [[ "$p" =~ ^[0-9]+$ ]] && [[ "$st" =~ ^[0-9]+$ ]] && [ "$(start_time "$p")" = "$st" ]; then
+      # no leading zero (octal in bash arithmetic) and never pid 0, 1 or a negative one (kill would hit a group or
+      # everything): such a file is junk and is removed like a stale one
+      if [[ "$p" =~ ^[1-9][0-9]{0,9}$ ]] && [ "$p" -gt 1 ] && [[ "$st" =~ ^[1-9][0-9]{0,19}$ ]] && [ "$(start_time "$p")" = "$st" ]; then
         kill -TERM "$p" 2> /dev/null
         n=0
-        while kill -0 "$p" 2> /dev/null && [ "$(start_time "$p")" = "$st" ] && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n + 1)); done
-        if kill -0 "$p" 2> /dev/null && [ "$(start_time "$p")" = "$st" ]; then echo "run.sh: pid $p did not stop within 5 s" >&2; exit 1; fi
+        while kill -0 "$p" 2> /dev/null && [ "$(start_time "$p")" = "$st" ] && [ "$n" -lt $((wait_secs * 10)) ]; do sleep 0.1; n=$((n + 1)); done
+        if kill -0 "$p" 2> /dev/null && [ "$(start_time "$p")" = "$st" ]; then
+          echo "run.sh: pid $p did not stop within $wait_secs s" >&2
+          failed=1
+          continue # its file stays (it is a live run); go on with the others
+        fi
         echo "stopped (pid $p)"
         found=1
       fi
       rm -f -- "$f"
     done
-  done < <(pid_dir_candidates)
-  [ "$found" = 1 ] || echo "not running"
-  exit 0
+  done < <(stop_dir_candidates)
+  [ "$found" = 1 ] || [ "$failed" = 1 ] || echo "not running"
+  exit "$failed"
 fi
 
 quick=${REVVIEW_QUICK_EXIT_SECS:-3}

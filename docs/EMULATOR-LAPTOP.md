@@ -104,8 +104,10 @@ anything you can see:
 - **In the menu** of the demo, "New session" shows "No projects: add paths to the projects file", and Projects and
   Settings lead nowhere useful: there are no projects configured and nothing to start. Enter picks a row in the
   session list, which is useful.
-- **Read aloud** (R) speaks on any machine that has espeak-ng or Piper installed, with no setting: the server reads
-  `config/speech.json` by default. Without either, it does nothing. `run.sh` installs nothing.
+- **Read aloud** (R) needs two things. A session must have been chosen first with Left/Right: before that the server
+  says "no session selected" and nothing is spoken. And a speech engine must be installed by you, with no setting:
+  the server reads `config/speech.json` by default, which uses Piper only when it is at `/opt/piper/piper` with the
+  lessac voice and `aplay` exists, else espeak-ng. Without an engine it does nothing. `run.sh` installs nothing.
 
 ## The keys
 
@@ -133,9 +135,10 @@ Demo keys (demo mode only; the demo player takes them, not the bar):
   P  pause / continue          [  slower          ]  faster
 In the demo these change the screen: Left, Right, Up, Down, M, Backspace held
 (go to the session that needs you most). Enter picks a row in a list or menu.
-Enter, N, Esc, Space, R on a permission or done screen only log the gesture: no
+Enter, N, Esc, Space on a permission or done screen only log the gesture: no
 real session is behind them (needs --live). Nothing is sent to a Claude.
-R speaks on any machine that has espeak-ng or Piper installed.
+R reads aloud only after Left/Right has chosen a session, and only with
+espeak-ng, or Piper installed as config/speech.json says.
 ```
 
 ## Shortcuts for your shell
@@ -160,10 +163,15 @@ directory of yours (mode 700): `$XDG_RUNTIME_DIR/revview-emu` when that variable
 to others is not used. If none can be had, `run.sh` says `run.sh: no pid file; --stop will not find this run` and
 keeps running (stop it with Ctrl+C in its terminal). The file is removed when the script ends.
 
-`--stop` stops EVERY `run.sh` of yours that is running (they may have different ports): it reads only plain files of
-yours in those directories, and sends TERM to a pid only when that process still has the start time in the file, so
+`--stop` stops EVERY `run.sh` of yours that is running (they may have different ports). It looks in ALL of
+`$XDG_RUNTIME_DIR/revview-emu` (when set), `/run/user/<uid>/revview-emu`, `${TMPDIR:-/tmp}/revview-emu-<uid>` and
+`/tmp/revview-emu-<uid>`, so it finds a run started in another shell (a desktop terminal and an ssh or WSL shell
+differ in `XDG_RUNTIME_DIR` and maybe `TMPDIR`). It reads only plain files of yours in those directories (each
+directory under the same checks as above), skips a file with a nonsense pid (0, 1, negative, a leading zero) and
+removes it, and sends TERM to a pid only when that process still has the start time in the file, so
 a pid that was reused by something else is never signalled (the stale file is just removed). The script then stops
-the browser, the demo player and the server and removes its temp files; `--stop` waits up to 5 seconds for each.
+the browser, the demo player and the server and removes its temp files; `--stop` waits up to 5 seconds for each. If one does not stop it says so, goes on with the others and exits 1 at
+the end.
 It works from any directory, however `run.sh` was started.
 
 ## How it differs from the Pi
@@ -180,9 +188,16 @@ It works from any directory, however `run.sh` was started.
   not real network or key-stick checks.
 - **Demo data is recorded data.** In `--live` mode the hooks of a real Claude Code can post to the port; setting
   that up is not covered here.
-- **Speech** needs espeak-ng or Piper installed by you (no setting; the server reads `config/speech.json`).
+- **Speech** needs espeak-ng, or Piper installed as `config/speech.json` says, installed by you (no setting).
 
 ## Troubleshooting
+
+**`--stop` says "not running" but the bar is still being served.** If `run.sh` itself was killed with `kill -9` (or
+its terminal was closed in a way that sends KILL), it could not stop what it started: the server and the demo
+player keep running, and `--stop` has no pid file for them any more. List them with
+`pgrep -u "$(id -u)" -af 'src/server/index.js.*--dev-bridge|emulator/demo/player.js'` and stop the ones shown
+(`kill <pid> <pid>`; if no other emulator of yours is running, `pkill -u "$(id -u)" -f` with the same pattern does it).
+The temp directory `revview-emu.XXXXXX` in your `TMPDIR` (or `/tmp`) was not removed either; delete it by hand.
 
 **Port busy.** Without `--port` a free port is chosen, so this should not happen. With `--port N` and N in use,
 the server cannot start: `run.sh` prints `the server stopped while starting` with the last lines of the server log

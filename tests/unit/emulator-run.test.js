@@ -51,7 +51,7 @@ const portOpen = (port) => new Promise((resolve) => {
 });
 
 // Start run.sh; resolves with helpers. Always clean up with run.finish().
-// Every run gets a private XDG_RUNTIME_DIR (dir/xdg) and a private stand-in for the /tmp fallback (dir/fallback), so a
+// Every run gets a private XDG_RUNTIME_DIR (dir/xdg) and private stand-ins for /tmp (dir/fallback) and /run/user/<uid> (dir/runuser), so a
 // test never sees or stops anybody else's run.sh and leaves nothing outside its own dir. An env value of null unsets.
 function start(args, { env = {}, browser = true, standOpts, cwd, script = RUN, setup } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emu-run-test-'));
@@ -62,7 +62,9 @@ function start(args, { env = {}, browser = true, standOpts, cwd, script = RUN, s
   const fallback = path.join(dir, 'fallback');
   fs.mkdirSync(fallback);
   if (setup) setup({ dir, tmp, xdg, fallback });
-  const e = { ...process.env, TMPDIR: tmp, XDG_RUNTIME_DIR: xdg, REVVIEW_EMU_FALLBACK_TMP: fallback, ...env };
+  const runUser = path.join(dir, 'runuser');
+  fs.mkdirSync(runUser);
+  const e = { ...process.env, TMPDIR: tmp, XDG_RUNTIME_DIR: xdg, REVVIEW_EMU_FALLBACK_TMP: fallback, REVVIEW_EMU_FALLBACK_RUN: runUser, ...env };
   for (const k of Object.keys(e)) if (e[k] === null) delete e[k];
   if (browser) e.REVVIEW_BROWSER = standIn(dir, standOpts);
   const child = spawn('bash', [script, ...args], { env: e, cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -655,7 +657,9 @@ test('no safe directory at all: one clear line, no raw bash error, the run keeps
 // ---- --stop ----
 // Async, never spawnSync, when the run.sh to stop is a child of this process: this process must reap it.
 function stop(env, opts = {}) {
-  const c = spawn('bash', [RUN, '--stop'], { env: { ...process.env, ...env }, cwd: opts.cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+  const e = { ...process.env, ...env };
+  for (const k of Object.keys(e)) if (e[k] === null) delete e[k]; // null unsets
+  const c = spawn('bash', [RUN, '--stop'], { env: e, cwd: opts.cwd, stdio: ['ignore', 'pipe', 'pipe'] });
   let out = '';
   let err = '';
   c.stdout.on('data', (d) => { out += d; });
@@ -663,7 +667,7 @@ function stop(env, opts = {}) {
   const timer = setTimeout(() => c.kill('SIGKILL'), 20000);
   return new Promise((resolve) => c.on('exit', (status, sig) => { clearTimeout(timer); resolve({ status, sig, out, err }); }));
 }
-const envOf = (run) => ({ TMPDIR: run.tmp, XDG_RUNTIME_DIR: run.xdg, REVVIEW_EMU_FALLBACK_TMP: run.fallback });
+const envOf = (run) => ({ TMPDIR: run.tmp, XDG_RUNTIME_DIR: run.xdg, REVVIEW_EMU_FALLBACK_TMP: run.fallback, REVVIEW_EMU_FALLBACK_RUN: path.join(run.dir, 'runuser') });
 // a stop with nothing else in the way: private dirs of its own
 function lone(fn) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emu-stop-'));
@@ -778,6 +782,102 @@ test('--stop stops every run.sh of the user that is running (three started toget
     assert.deepEqual(pidFiles(a), []);
   } finally { for (const x of all) x.finish(); }
 });
+
+// --stop scans every place a run may have written to, not only the ones its own environment names. All private dirs.
+test('--stop finds a run started with XDG_RUNTIME_DIR set when it has XDG unset, if that directory is /run/user/<uid>', async () => {
+  // the run's dir is a fixed private one standing in for /run/user/<uid>: the helper makes it before start()
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'emu-cross-'));
+  const ru = path.join(base, 'ru');
+  fs.mkdirSync(ru, { mode: 0o700 });
+  const run = start(['--no-browser'], { env: { XDG_RUNTIME_DIR: ru } });
+  try {
+    await run.url();
+    await until(() => fs.existsSync(path.join(ru, 'revview-emu', `${run.child.pid}.pid`)), 'pid file');
+    const r = await stop({ ...envOf(run), XDG_RUNTIME_DIR: null, REVVIEW_EMU_FALLBACK_RUN: ru });
+    assert.match(r.out, /^stopped \(pid \d+\)$/m, r.out);
+    assert.equal((await run.exit()).code, 0);
+  } finally { run.finish(); fs.rmSync(base, { recursive: true, force: true }); }
+});
+
+test('--stop finds a run started without XDG_RUNTIME_DIR when it has another XDG_RUNTIME_DIR (same TMPDIR)', async () => {
+  const run = start(['--no-browser'], { env: { XDG_RUNTIME_DIR: null } });
+  try {
+    await run.url();
+    await until(() => fs.existsSync(path.join(run.tmp, `revview-emu-${uid}`, `${run.child.pid}.pid`)), 'pid file');
+    const other = path.join(run.dir, 'other-xdg');
+    fs.mkdirSync(other, { mode: 0o700 });
+    const r = await stop({ ...envOf(run), XDG_RUNTIME_DIR: other });
+    assert.match(r.out, /^stopped \(pid \d+\)$/m, r.out);
+    assert.equal((await run.exit()).code, 0);
+  } finally { run.finish(); }
+});
+
+test('--stop finds a run that wrote to another TMPDIR, when that is /tmp for the stop (private stand-in)', async () => {
+  const run = start(['--no-browser'], { env: { XDG_RUNTIME_DIR: null } });
+  try {
+    await run.url();
+    await until(() => fs.existsSync(path.join(run.tmp, `revview-emu-${uid}`, `${run.child.pid}.pid`)), 'pid file');
+    const otherTmp = path.join(run.dir, 'other-tmp');
+    fs.mkdirSync(otherTmp);
+    const r = await stop({ ...envOf(run), XDG_RUNTIME_DIR: null, TMPDIR: otherTmp, REVVIEW_EMU_FALLBACK_TMP: run.tmp });
+    assert.match(r.out, /^stopped \(pid \d+\)$/m, r.out);
+    assert.equal((await run.exit()).code, 0);
+  } finally { run.finish(); }
+});
+
+test('--stop does NOT find a run in a directory that is none of the scanned ones', async () => {
+  const run = start(['--no-browser'], { env: { XDG_RUNTIME_DIR: null } });
+  try {
+    await run.url();
+    await until(() => fs.existsSync(path.join(run.tmp, `revview-emu-${uid}`, `${run.child.pid}.pid`)), 'pid file');
+    const otherTmp = path.join(run.dir, 'other-tmp');
+    fs.mkdirSync(otherTmp);
+    const r = await stop({ ...envOf(run), XDG_RUNTIME_DIR: null, TMPDIR: otherTmp });
+    assert.equal(r.out.trim(), 'not running');
+    assert.equal(run.exited, null);
+  } finally { run.finish(); }
+});
+
+test('--stop never signals pid 0, 1, a negative pid, a leading-zero pid or junk; such files are removed', () => lone(async (x) => {
+  const other = spawn('sleep', ['30']);
+  const st = startTime(other.pid);
+  const files = {
+    'a0.pid': `0 ${st}\n`,
+    'a1.pid': `1 ${startTime(1)}\n`,
+    'a2.pid': `-1 ${st}\n`,
+    'a3.pid': `-${other.pid} ${st}\n`,
+    'a4.pid': `0${other.pid} ${st}\n`, // leading zero: not the pid it looks like
+    'a5.pid': `${other.pid} 0${st}\n`,
+    'a6.pid': '1e3 5\n',
+    'a7.pid': '\n',
+    'a8.pid': `${other.pid}\n`,
+  };
+  for (const [n, c] of Object.entries(files)) fs.writeFileSync(path.join(x.pidDir, n), c);
+  try {
+    const r = await stop(envOf(x));
+    assert.equal(r.status, 0);
+    assert.equal(r.out.trim(), 'not running');
+    assert.ok(alive(other.pid), 'a bad pid file made --stop signal the process');
+    assert.deepEqual(fs.readdirSync(x.pidDir), [], 'junk files are removed like stale ones');
+  } finally { other.kill(); }
+}));
+
+test('--stop goes through all pid files when one run does not stop: exit 1 at the end, that file stays', () => lone(async (x) => {
+  const ready = path.join(x.dir, 'ready');
+  const stubborn = spawn('bash', ['-c', `trap '' TERM; : > '${ready}'; while :; do sleep 0.1; done`]);
+  const normal = spawn('sleep', ['30']);
+  try {
+    await until(() => fs.existsSync(ready), 'trap set');
+    fs.writeFileSync(path.join(x.pidDir, '1-stubborn.pid'), `${stubborn.pid} ${startTime(stubborn.pid)}\n`);
+    fs.writeFileSync(path.join(x.pidDir, '2-normal.pid'), `${normal.pid} ${startTime(normal.pid)}\n`);
+    const r = await stop({ ...envOf(x), REVVIEW_EMU_STOP_WAIT_SECS: '1' });
+    assert.equal(r.status, 1);
+    assert.match(r.err, new RegExp(`pid ${stubborn.pid} did not stop within 1 s`));
+    assert.match(r.out, new RegExp(`^stopped \\(pid ${normal.pid}\\)$`, 'm'), 'the later run was still stopped');
+    assert.ok(alive(stubborn.pid));
+    assert.deepEqual(fs.readdirSync(x.pidDir), ['1-stubborn.pid']);
+  } finally { stubborn.kill('SIGKILL'); normal.kill('SIGKILL'); }
+}));
 
 test('--print-aliases: the comment line does not carry the path (a newline in it cannot break out of the comment)', () => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'emu-alias-'));

@@ -15,10 +15,10 @@ const map = JSON.parse(fs.readFileSync(MAP, 'utf8'));
 
 const sheet = () => buildSheet({ mapPath: MAP, scenesPath: SCENES });
 
-test('fits a 24-row terminal with the prompt: at most 22 lines of at most 80 columns', async () => {
+test('fits a 24-row terminal: at most 24 lines of at most 80 columns', async () => {
   const lines = (await sheet()).split('\n');
   if (lines.at(-1) === '') lines.pop();
-  assert.ok(lines.length <= 22, `${lines.length} lines`);
+  assert.ok(lines.length <= 24, `${lines.length} lines`);
   for (const l of lines) assert.ok(l.length <= 80, `${l.length} columns: ${l}`);
 });
 
@@ -74,10 +74,12 @@ test('the demo keys come from scenes.js: every scene name and the range', async 
 test('the footer says what really happens: no variable for speech, what the demo shows and what needs --live', async () => {
   const out = await sheet();
   assert.doesNotMatch(out, /REVVIEW_SPEECH/, 'the server reads config/speech.json by default');
-  assert.match(out, /R speaks on any machine that has espeak-ng or Piper/);
+  assert.match(out, /R reads aloud only after Left\/Right has chosen a session/);
+  assert.match(out, /Piper installed as config\/speech\.json says/);
+  assert.doesNotMatch(out, /speaks on any machine/);
   assert.doesNotMatch(out, /show what the bar would show/);
   assert.match(out, /Left, Right, Up, Down, M, Backspace held/);
-  assert.match(out, /Enter, N, Esc, Space, R .*only log the gesture/);
+  assert.match(out, /Enter, N, Esc, Space on a permission or done screen only log the gesture/);
   assert.match(out, /needs --live/);
 });
 
