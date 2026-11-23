@@ -3,7 +3,7 @@
 Stage 4, parts A and B: a fresh Raspberry Pi OS Trixie arm64 (desktop, labwc / Wayland) on a Pi 4B with the 7.9" 1280x400
 panel becomes the appliance: power on, straight into the bar, Claude sessions feeding it. NOTHING HERE WAS RUN ON A
 PI (part B too: it is written, not run). The file edits were tested only against a fake root in a temp dir (`tests/unit/pi-*.test.js`); everything else is
-in `docs/BENCH-TEST.md` (P1-P14 for part A, B1-B17 for part B, and D/W/R/H items), all `untested`. Commands and names marked *(from memory)* could
+in `docs/BENCH-TEST.md` (P1-P14 for part A, S4B-1 to S4B-19 for part B, and D/W/R/H items), all `untested`. Commands and names marked *(from memory)* could
 not be checked here (documentation sites are not reachable from the team's VM). Decisions: `docs/DECISIONS.md`
 "stage 4A". Part B (read-only root, encrypted data partition with the key stick, Piper) is described below; decisions in "stage 4B". If the Pi or the stick is lost: `docs/REVOKE.md`.
 
@@ -47,7 +47,7 @@ and `audio`. The older set-up's `revview` system user is no longer used.
 5. **The repository**: put it in `/opt/revview` (outside the home: part B will encrypt the home's data, and the bar
    must run while that is locked), owned by root and readable by everyone. The Pi does not need Ethernet for this.
    - With the Pi on Wi-Fi (home Wi-Fi or the phone's hotspot): `sudo apt install git` if `git` is missing, then
-     `sudo git clone https://github.com/awall451/revview /opt/revview`. Cloned with `sudo`, it is already owned by root.
+     `sudo git clone https://github.com/awall451/revview /opt/revview`. Cloned with `sudo`, it is already owned by root. The repository is public at github.com/awall451/revview and can be cloned without a sign-in (not checked from the team's VM).
    - With no network on the Pi: copy the repository from a laptop (a USB stick, or `scp`/`rsync` over Wi-Fi into your
      home, then `sudo mv` it to `/opt/revview`) and make it root-owned and not writable by others:
      `sudo chown -R root:root /opt/revview && sudo chmod -R a+rX,go-w /opt/revview`.
@@ -210,9 +210,17 @@ makes no sense under the overlay)*. Run this step LAST, after the install, the d
    and `data-setup.sh` refuses a path your user could change. Never `chown` it to your user.
 5. `claude update`, as the kiosk user, with the data unlocked (the stick in). Claude's own auto-updater is off
    (`DISABLE_AUTOUPDATER=1` in the unit): under the overlay it would write to memory and the update would vanish.
-6. Run `install.sh` again (step 7). It refuses (exit 2, nothing written) under the overlay, and when `/boot/firmware`
+6. If the `git pull` changed the data set-up's templates in `pi/data.mjs` (the unlock unit, the stick's udev rule,
+   `/etc/revview/data.env`, `data.conf`, `/etc/profile.d/revview-claude.sh`), `install.sh` does NOT refresh them;
+   only `data-setup.sh` does. Re-run it WITHOUT `--format` (add `--dry-run` first). It refuses while the data is
+   open, and step 5 needs the data open, so the order is: steps 1-5 with the stick in; reboot WITHOUT the stick
+   (the data stays locked); `sudo bash /opt/revview/pi/data-setup.sh --user NAME --device /dev/X --key-device
+   /dev/STICK` (see "Encrypted data and the key stick"); then reboot WITH the stick in (the overlay is still off, so this is safe), and
+   carry on with step 7: `install.sh` writes the hooks into the unlocked data. If only `pi/unlock.sh` changed, skip this: it runs from `/opt/revview` and takes effect at once.
+   Not tried on a Pi.
+7. Run `install.sh` again (step 7). It refuses (exit 2, nothing written) under the overlay, and when `/boot/firmware`
    is read-only: that is the sign that step 1 or 2 is missing.
-7. `sudo bash /opt/revview/pi/readonly.sh enable`, then reboot.
+8. `sudo bash /opt/revview/pi/readonly.sh enable`, then reboot (with the stick in).
 
 ## Piper (better voice for read aloud)
 
@@ -279,6 +287,6 @@ need changing. The paths in that file are the ones above.
 
 ## Not done here
 
-Nothing of part B was run on a Pi (bench items B1-B17). No script installs Piper. No shutdown HAT or ignition wiring
+Nothing of part B was run on a Pi (bench items S4B-1 to S4B-19). No script installs Piper. No shutdown HAT or ignition wiring
 (not needed with the read-only root). Clevis/Tang unlock and a password prompt at boot are not done (DESIGN: later,
 maybe). See DECISIONS "stage 4B".

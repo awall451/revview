@@ -176,16 +176,17 @@ esac
 # Claude Code hooks for that user. ~/.claude may be a symlink into the locked data partition (pi/data-setup.sh):
 # while the target is missing, writing through it would fail (or make a stray directory), so skip and say so.
 hooks_locked=0
+dangling=""
 claude_link="$root$home/.claude"
 if [ -L "$claude_link" ]; then
   target="$(readlink "$claude_link")"
   case "$target" in
-    /*) [ -d "$root$target" ] || hooks_locked=1 ;;
-    *) [ -d "$claude_link" ] || hooks_locked=1 ;;
+    /*) [ -d "$root$target" ] || { hooks_locked=1; dangling="$target"; } ;;
+    *) [ -d "$claude_link" ] || { hooks_locked=1; dangling="$target"; } ;;
   esac
 fi
 if [ "$hooks_locked" -eq 1 ]; then
-  echo "skipped hooks: ~/.claude points to the locked data partition; insert the key stick (or run pi/unlock.sh) and run this again"
+  echo "skipped hooks: ~/.claude is a link to $dangling, which does not exist; if that is the locked data partition, insert the key stick (or run pi/unlock.sh) and run this again"
   setup_rc=1
 elif [ "$dry" -eq 1 ]; then
   echo "would install the Claude Code hooks for $user"
@@ -201,6 +202,11 @@ if [ "$real" -eq 1 ] && [ "$dry" -eq 0 ]; then
   systemctl daemon-reload
 fi
 
+if [ "$setup_rc" -ne 0 ]; then
+  echo "not done: some files were refused (a skipped line above says which and why); fix that and run install.sh again. Do not reboot for this yet." >&2
+  exit "$setup_rc"
+fi
+
 cat << EOF
 done. Next:
   - reboot to start everything (kiosk, server, boot screen);
@@ -208,4 +214,4 @@ done. Next:
   - logs, as $user: journalctl --user -u revview
   - fill in the dongle's real USB ids in /etc/udev/rules.d/70-revview-dongle.rules and config/buttons.json.
 EOF
-exit "$setup_rc"
+exit 0

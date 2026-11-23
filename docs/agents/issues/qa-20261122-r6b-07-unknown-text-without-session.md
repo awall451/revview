@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-23, work/qa6-fixes: see DECISIONS "QA round 6b"; not yet re-run by QA)
 id: qa-20261122-r6b-07
 title: With no session at all the bar says UNKNOWN "Not known until Claude's next step" above the boot note
 severity: polish

@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-23, work/qa6-fixes: see DECISIONS "QA round 6b"; clone access not checked from the VM; not yet re-run by QA)
 id: qa-20261122-r6b-05
 title: pi/README and BENCH gaps for the owner: Updating never refreshes the data set-up's files; BENCH-TEST uses B1-B7 twice; the clone URL's access is not stated
 severity: minor

@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-23, work/qa6-fixes: see DECISIONS "QA round 6b"; not yet re-run by QA)
 id: qa-20261122-r6b-03
 title: New session while the data is locked says "New session not started: see the server log", although the reason (data locked: insert the key) is known
 severity: minor

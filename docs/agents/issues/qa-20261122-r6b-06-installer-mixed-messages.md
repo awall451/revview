@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-23, work/qa6-fixes: see DECISIONS "QA round 6b"; not yet re-run by QA)
 id: qa-20261122-r6b-06
 title: install.sh prints "fix them and run it again" and then "done. Next: reboot"; a dangling ~/.claude link is always called "the locked data partition"
 severity: polish

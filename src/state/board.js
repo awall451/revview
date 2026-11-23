@@ -176,6 +176,9 @@ function withContext(board, patch) {
   return context.repo === board.context.repo && context.branch === board.context.branch ? board : { ...board, context };
 }
 
+// the note actions.js sets when push-to-talk is refused during STARTING (one text, two files)
+export const STARTING_PTT_NOTE = 'Claude is still starting: push-to-talk not sent';
+
 export function reduceBoard(board, event) {
   const b = isValidBoard(board) ? board : initialBoard();
   if (!isObj(event) || typeof event.hook_event_name !== 'string') return b;
@@ -184,13 +187,18 @@ export function reduceBoard(board, event) {
   if ((event.hook_event_name === 'RevviewNav' || event.hook_event_name === 'RevviewAnswered') && typeof next.note === 'string') next = { ...next, note: null };
   // the "Too early" note belongs to the prompt it was set for: when what the bar shows changes, it goes
   const TOO_EARLY = 'Too early: press again';
+  // the push-to-talk refusal belongs to STARTING: when the selected session no longer shows STARTING (first hook,
+  // launch limit) it goes, so UNKNOWN can say "No events from this session yet" (QA r6b-01); no other note is touched
+  if (b.note === STARTING_PTT_NOTE && next.note === STARTING_PTT_NOTE && !sessionStarting(next, selectedKey(next))) next = { ...next, note: null };
   if (b.note === TOO_EARLY && next.note === TOO_EARLY) {
     const id = (x) => { const p = shownPrompt(x); return p === null ? null : `${p.session}\u0000${p.agent}\u0000${p.since}`; };
     if (id(b) !== id(next)) next = { ...next, note: null };
   }
   // the selected session ended and others remain: the selection falls to another one, and the bar says so
   const wasSel = selectedOf(b);
-  if (wasSel !== null && next !== b && !has(next.sessions, wasSel) && Object.keys(next.sessions).length > 0
+  // (a quiet placeholder revview started that vanishes says so even when it was the only one: the key-on Claude that
+  // exited at once, QA r6b-02)
+  if (wasSel !== null && next !== b && !has(next.sessions, wasSel) && (Object.keys(next.sessions).length > 0 || b.sessions[wasSel].quiet === true)
     && (event.hook_event_name === 'SessionEnd' || event.hook_event_name === 'RevviewOwned')) {
     const label = b.sessions[wasSel].state.repo;
     next = { ...next, note: `${typeof label === 'string' && label !== '' ? label.slice(0, 100) : 'Selected session'} ended` };

@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-23, work/qa6-fixes: see DECISIONS "QA round 6b"; not yet re-run by QA)
 id: qa-20261122-r6b-08
 title: Without --data-lock a posted RevviewDataLock shows INSERT KEY "Data locked" while New session still starts; a posted RevviewStarting with no session leaves STARTING up indefinitely
 severity: polish

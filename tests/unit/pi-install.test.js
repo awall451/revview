@@ -181,7 +181,9 @@ test('install.sh: ~/.claude pointing to a missing locked data dir skips the hook
   fs.symlinkSync('/srv/revview-data/claude', path.join(r, 'home/alice/.claude'));
   const res = run(base(r));
   assert.equal(res.code, 1, res.out + res.err);
-  assert.match(res.out, /skipped hooks: ~\/\.claude points to the locked data partition/);
+  assert.match(res.out, /skipped hooks: ~\/\.claude is a link to \/srv\/revview-data\/claude, which does not exist; if that is the locked data partition, insert the key stick/);
+  assert.match(res.err, /not done: some files were refused/);
+  assert.doesNotMatch(res.out, /^done\. Next:/m);
   assert.ok(fs.existsSync(path.join(r, 'etc/systemd/user/revview.service')));
   assert.ok(fs.existsSync(path.join(r, 'home/alice/.config/labwc/autostart')));
   assert.equal(fs.existsSync(path.join(r, 'srv')), false, 'nothing created behind the link');
@@ -268,7 +270,8 @@ test('install.sh: setup.mjs exit 4 (refused) runs the rest and ends with exit 1'
   'process.exit(4);\n', (r, res) => {
     assert.equal(res.code, 1, res.out + res.err);
     assert.match(res.err, /some files were refused/);
-    assert.match(res.out, /^done\. Next:/m);
+    assert.match(res.err, /not done: some files were refused.*\n$/);
+    assert.doesNotMatch(res.out, /^done\. Next:/m);
     assert.ok(fs.existsSync(path.join(r, 'home/alice/.claude/settings.json')));
   }));
 

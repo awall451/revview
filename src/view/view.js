@@ -225,8 +225,14 @@ export function render(input) {
   const answerWord = (tool) => (tool !== '' && (s.answered === 'deny' || s.answered === 'allow') ? `${s.answered === 'deny' ? 'Denied' : 'Allowed'}: ${tool}` : '');
   if (note) {
     if (Object.hasOwn(NOTES, view)) {
-      set(el.note1, NOTES[view][0]);
-      set(el.note2, voiceNote || NOTES[view][1]);
+      // no session at all: "Not known until Claude's next step" would promise a next step that cannot come (r6b-07)
+      if (view === 'unknown' && voice === 'no-session') {
+        set(el.note1, voiceNote);
+        set(el.note2, '');
+      } else {
+        set(el.note1, NOTES[view][0]);
+        set(el.note2, voiceNote || NOTES[view][1]);
+      }
     } else {
       // OFFLINE keeps the confirmation of a button answer (Denied/Allowed) before "Claude: ..." on row A
       const word = view === 'offline' ? answerWord(str(s.tool)) : '';

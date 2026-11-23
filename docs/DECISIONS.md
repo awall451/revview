@@ -1261,7 +1261,7 @@ documentation reachable from the VM, no Pi): every such step is a bench item, `u
 - Files: `pi/lib.sh`, `pi/readonly.sh`, `pi/data-setup.sh`, `pi/data.mjs`, `pi/files.mjs` (the writer of `setup.mjs`,
   moved out unchanged), `pi/unlock.sh`, `pi/revview-unlock.service`, `pi/72-revview-key.rules`; `pi/install.sh` and
   `pi/revview.service` changed; `src/server/datalock.js` and `src/server/index.js` (`--data-lock`). Docs:
-  `pi/README.md` (data, read-only root, Updating, Piper), `docs/REVOKE.md`, bench B1-B17. Tests:
+  `pi/README.md` (data, read-only root, Updating, Piper), `docs/REVOKE.md`, bench S4B-1 to S4B-19 (the "Stage 4B" series; renamed from a second B1-B17 in QA round 6b). Tests:
   `pi-readonly`, `pi-unlock`, `pi-data`, `pi-data-setup`, `datalock`, `server-datalock`, more in `pi-install`.
 - **Piper: documented steps, no script.** A download whose checksum cannot be known here is not put in a script; the
   steps (rhasspy/piper 2023.11.14-2 aarch64 into `/opt/piper`, voice `en_US-lessac-medium` into `/opt/piper/voices`)
@@ -1351,3 +1351,35 @@ Tested in the unit suite only (fakes, injected timers); nothing run on a Pi.
   still exits 1 for a refusal and `data-setup.sh` reports any failure the same way (a vaguer message, it stops).
 - **The Pi needs no npm package** (checked: src/, hooks/, pi/ import only `node:` modules and relative files), so
   pi/README drops `sudo npm ci`; the repository comes by `git clone` over Wi-Fi or a copy from a laptop.
+
+## 2026-11-23: QA round 6b (small fixes on the r6 branch)
+
+- **Posted `RevviewStarting` and `RevviewDataLock` are refused over HTTP (403) unless `--dev-bridge` (r6b-08).** The
+  server makes both states itself (`--boot`, `--data-lock`), so on a real install nothing legitimate posts them.
+  Checked: `hooks/` posts neither; `pi/unlock.sh`'s poke posts `RevviewDataLock` to a server that runs with
+  `--data-lock`, and that case is answered 204 before this check (re-read the mount table, as before). The
+  emulator fixtures and the tests use the dev bridge, so they are unchanged. Rejected: bounding a posted
+  `RevviewStarting` with a timer (more state for an event nobody should send).
+- **The press-drop rule is pinned.** `dropped` keys on the internal `booting` flag, not on the phase or view alone;
+  a test posts `RevviewStarting` after the boot and presses while the view is `starting` (mutating the rule to
+  `board.phase === 'starting'` makes it fail).
+- **r6b-01:** the push-to-talk refusal note ("Claude is still starting: push-to-talk not sent", constant
+  `STARTING_PTT_NOTE`) is cleared by the reducer as soon as the selected session no longer shows STARTING (launch
+  limit or first hook); other notes are untouched. Bench P20 holds as written.
+- **r6b-02:** a quiet placeholder that vanishes while selected gets "`<repo>` ended" even when it was the only
+  session (the rule used to need other sessions). The owned poll logs `owned sessions: window of session <id>
+  (<name>) disappeared (Claude exited or the window was closed)`; a key-on start that fails because tmux says the
+  window or server is gone logs "Claude exited at once, its window disappeared before it could be set up" and the
+  note is "Key-on session ended at once: see the server log". Not done: Claude's exit status or last stderr line
+  (needs `remain-on-exit`, more machinery); the log says that it exited, not why.
+- **r6b-03:** New session refused while locked: "New session not started: data locked, insert the key stick".
+- **r6b-07:** UNKNOWN with no session at all (`voice` no-session) shows the note as the first line and leaves the
+  fixed "Not known until Claude's next step" out; with a session present nothing changes.
+- **Docs and installer.** REVOKE (c) step 3 adds the new key with `--pbkdf pbkdf2 --iter-time 500`, as
+  `data-setup.sh` does for its key slot (from memory, not checked on a device) and asks the owner to write the slot
+  numbers down (r6b-04). Updating in `pi/README.md` says to re-run `data-setup.sh` without `--format` after a change
+  to the `pi/data.mjs` templates, with the order (update with the stick in, reboot without it, set-up, reboot with
+  it); `install.sh` does not refresh those files (simpler and safe: it never touches an open data partition). The
+  second bench series is `S4B-1..S4B-19` (r6b-05); the README says the repository is public and clones without a
+  sign-in (not checked from the VM). `install.sh` ends with "not done: some files were refused" instead of "done.
+  Next: reboot" when it will exit 1, and a dangling `~/.claude` link is described as what it is (r6b-06).

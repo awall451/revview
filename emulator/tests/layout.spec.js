@@ -238,6 +238,14 @@ test('no-link is inverted: black band, white outline, nothing outside the panel'
   await expectFits(page);
 });
 
+test('unknown with no session at all (r6b-07): the note is the first line, no fixed "next step" line', async ({ openView, page }) => {
+  await openView({ view: 'unknown', voice: 'no-session', note: 'Key-on session not started: start folder missing' });
+  await expect(page.locator('#note1')).toHaveText('Key-on session not started: start folder missing');
+  await expect(page.locator('#note2')).toHaveText('');
+  await openView({ view: 'unknown', voice: 'no-session' });
+  await expect(page.locator('#note1')).toHaveText('Push-to-talk does nothing: no revview session');
+});
+
 test('new looks: notes, repo and diff', async ({ openView, page }) => {
   await openView({ view: 'unknown', repo: 'r', branch: 'b', diff: { added: 1, removed: 1 } });
   await expect(page.locator('#note1')).toHaveText("Not known until Claude's next step");

@@ -103,11 +103,17 @@ export async function startLiveServer({
     missingKey = k;
     apply({ hook_event_name: 'RevviewProjects', paths: projects, missing }, true);
   }
+  let lastOwned = new Map(); // id -> name of the windows the last listing had (only to log the ones that vanish)
   async function refreshOwned() {
     applyProjects();
     if (!sessions) return;
     try {
       const list = await sessions.list();
+      const now = new Map(list.map((x) => [x.id, x.name]));
+      for (const [id, name] of lastOwned) {
+        if (!now.has(id)) console.error(`owned sessions: window of session ${id}${typeof name === 'string' && name !== '' ? ` (${name})` : ''} disappeared (Claude exited or the window was closed)`);
+      }
+      lastOwned = now;
       if (!closed) apply({ hook_event_name: 'RevviewOwned', ids: list.map((x) => x.id), names: list.map((x) => x.name) }, true);
     } catch (e) {
       console.error('owned sessions: list failed:', e instanceof Error ? e.message : e);
@@ -659,10 +665,13 @@ export async function bootSessions({ runner, live, dirs = [], log = () => {}, ti
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    log(`boot sessions: ${msg}`);
+    // tmux says the window or its whole server is gone: Claude exited at once (sign-in expired, a broken update)
+    const gone = /no server running|can't find (window|pane|session)|no such (window|session)|server exited/i.test(msg);
+    log(gone ? `boot sessions: Claude exited at once, its window disappeared before it could be set up (${msg})` : `boot sessions: ${msg}`);
     note = msg.startsWith('cwd is not an existing directory')
       ? 'Key-on session not started: start folder missing'
-      : 'Key-on session not started: see the server log';
+      : gone ? 'Key-on session ended at once: see the server log'
+        : 'Key-on session not started: see the server log';
   }
   timers.clearTimeout(timer);
   live.bootDone?.(note);

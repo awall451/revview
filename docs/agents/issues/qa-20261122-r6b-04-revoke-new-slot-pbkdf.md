@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-23, work/qa6-fixes: see DECISIONS "QA round 6b"; cryptsetup details from memory, a spare-card bench item S4B-19 added; not yet re-run by QA)
 id: qa-20261122-r6b-04
 title: REVOKE.md (c) adds the new stick's key with cryptsetup's defaults, so the PBKDF rule it gives for telling slots apart no longer holds after one stick loss
 severity: minor

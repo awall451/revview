@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-23, work/qa6-fixes: see DECISIONS "QA round 6b"; the log says that Claude exited, not its exit status or stderr (left, needs remain-on-exit); not yet re-run by QA)
 id: qa-20261122-r6b-02
 title: A key-on Claude that exits a second after starting (e.g. sign-in expired) leaves no note on the bar and no reason in the server log
 severity: minor

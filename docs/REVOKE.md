@@ -39,7 +39,9 @@ power-off.
 1. Find the data partition (`lsblk`; call it `/dev/X`). Show the key slots: `sudo cryptsetup luksDump /dev/X`
    *(from memory)*. The recovery passphrase is in one slot and the stick's key file in another. Work out which is
    which before you remove anything: the set-up made the key file's slot with PBKDF `pbkdf2` and the passphrase's
-   slot with cryptsetup's default (`argon2id`), and `luksDump` shows the PBKDF of each slot *(from memory)*.
+   slot with cryptsetup's default (`argon2id`), and `luksDump` shows the PBKDF of each slot *(from memory)*. Write
+   the slot numbers down now. Step 3 adds the new key file with `pbkdf2` too, so after it two slots show `pbkdf2`:
+   run `luksDump` again after step 3 and note the new slot's number, so you can tell them apart next time.
 2. Remove the lost stick's slot: `sudo cryptsetup luksKillSlot /dev/X N` (N is the slot number). It asks for a
    passphrase of a remaining slot: use the recovery passphrase. *(from memory)*
 3. Make a new stick by hand. `pi/data-setup.sh` without `--format` only rewrites the configuration; it does not
@@ -50,10 +52,12 @@ power-off.
    ```
    sudo mkdir -p /mnt/revview
    head -c 4096 /dev/urandom | sudo tee /mnt/revview/data.key > /dev/null
-   sudo cryptsetup luksAddKey /dev/X /mnt/revview/data.key
+   sudo cryptsetup luksAddKey --pbkdf pbkdf2 --iter-time 500 /dev/X /mnt/revview/data.key
    ```
 
-   `luksAddKey` asks for the recovery passphrase. *(from memory)* Unmount the stick (`sudo umount /mnt`).
+   `luksAddKey` asks for the recovery passphrase. The options are the ones `pi/data-setup.sh` uses for the key
+   file's slot, so the boot unlock behaves as it did with the first stick. All cryptsetup details in this section
+   are from memory and were not checked on a device. *(from memory)* Unmount the stick (`sudo umount /mnt`).
    While the data is locked, SSH login with a key does not work (`~/.ssh` is on the encrypted partition): use the
    Pi's own keyboard or a password login for step 4.
 4. Record the new stick's UUID. `data-setup.sh` refuses while the read-only root is on and while the data is open,

@@ -1,4 +1,5 @@
 ---
+status: closed (2026-11-23, work/qa6-fixes: see DECISIONS "QA round 6b"; not yet re-run by QA)
 id: qa-20261122-r6b-01
 title: After the 30 s fallback the bar still says "Claude is still starting: push-to-talk not sent" under UNKNOWN, while push-to-talk is now sent
 severity: minor

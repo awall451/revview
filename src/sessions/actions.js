@@ -3,7 +3,7 @@
 // live windows right now; never anything a POSTed event could set. While a list or menu is open a gesture only
 // navigates: it can never send a key or answer a permission request.
 import { performance } from 'node:perf_hooks';
-import { shownPrompt, selectedKey, boardView, sessionStarting } from '../state/index.js';
+import { shownPrompt, selectedKey, boardView, sessionStarting, STARTING_PTT_NOTE } from '../state/index.js';
 
 export const CTRL_C_GAP_MS = 5000;
 export const NAV_TIMEOUT_MS = 10000;
@@ -101,7 +101,9 @@ export function createActions({
     } catch (e) {
       const msg = String(e?.message ?? e);
       note(msg.startsWith('cwd is not an existing directory')
-        ? 'New session not started: project folder missing' : 'New session not started: see the server log');
+        ? 'New session not started: project folder missing'
+        : msg.startsWith('data is locked') ? 'New session not started: data locked, insert the key stick'
+          : 'New session not started: see the server log');
       return out('new-session', false, msg);
     }
     // the owned refresh puts it on the board (quiet, until its first hook event) and the want selects it
@@ -150,7 +152,7 @@ export function createActions({
     if (button === 'push-to-talk' && gesture === 'tap') {
       // Claude is still loading (the boot STARTING, or a session revview just started with no hook yet): drop it
       if (!b.locked && sessionStarting(b, selectedKey(b))) {
-        note('Claude is still starting: push-to-talk not sent');
+        note(STARTING_PTT_NOTE);
         return out('push-to-talk', false, 'session starting');
       }
       return send('push-to-talk', 'Space');
