@@ -41,6 +41,17 @@ real device, write the steps for me to try in `docs/BENCH-TEST.md` and mark
 it untested. Reading live car data (OBD-II / CAN) is a possible later goal
 (see `docs/DESIGN.md`); do not start it unless I ask.
 
+## On the Pi
+
+Read in this order:
+
+1. [pi/README.md](pi/README.md): set-up from a fresh flash to the bar, then its "First drive (parked)" section
+   ([link](pi/README.md#first-drive-parked)).
+2. [docs/BENCH-TEST.md](docs/BENCH-TEST.md): the "First afternoon" list at its top, the ids to try before the first
+   useful drive, each with what it needs first. Every other section is reference, for later.
+3. [docs/REVOKE.md](docs/REVOKE.md): what to do if the Pi or the key stick is lost or stolen.
+4. [hooks/README.md](hooks/README.md): the Claude Code hooks that feed the bar.
+
 ## Plan and design
 
 - [docs/DESIGN.md](docs/DESIGN.md)

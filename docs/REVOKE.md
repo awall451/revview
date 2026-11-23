@@ -44,7 +44,7 @@ power-off.
    run `luksDump` again after step 3 and note the new slot's number, so you can tell them apart next time.
 2. Remove the lost stick's slot: `sudo cryptsetup luksKillSlot /dev/X N` (N is the slot number). It asks for a
    passphrase of a remaining slot: use the recovery passphrase. *(from memory)*
-3. Make a new stick by hand. `pi/data-setup.sh` without `--format` only rewrites the configuration; it does not
+3. Make a new stick by hand. `/opt/revview/pi/data-setup.sh` without `--format` only rewrites the configuration; it does not
    make a key. Plug in the new stick (FAT or exFAT), and mount it so that only root can read it: `sudo mount -o uid=0,gid=0,umask=077
    /dev/NEWSTICK /mnt` *(from memory)*. A plain mount makes the files on a FAT stick readable by every user, and
    `chmod` does nothing on FAT. Then:
@@ -55,15 +55,15 @@ power-off.
    sudo cryptsetup luksAddKey --pbkdf pbkdf2 --iter-time 500 /dev/X /mnt/revview/data.key
    ```
 
-   `luksAddKey` asks for the recovery passphrase. The options are the ones `pi/data-setup.sh` uses for the key
+   `luksAddKey` asks for the recovery passphrase. The options are the ones `/opt/revview/pi/data-setup.sh` uses for the key
    file's slot, so the boot unlock behaves as it did with the first stick. All cryptsetup details in this section
    are from memory and were not checked on a device. *(from memory)* Unmount the stick (`sudo umount /mnt`).
    While the data is locked, SSH login with a key does not work (`~/.ssh` is on the encrypted partition): use the
    Pi's own keyboard or a password login for step 4.
 4. Record the new stick's UUID. `data-setup.sh` refuses while the read-only root is on and while the data is open,
-   so: `sudo bash pi/readonly.sh disable` (both rounds, see `pi/README.md` "Updating"), boot WITHOUT any stick in
-   (the data stays locked), then `sudo bash pi/data-setup.sh --user NAME --device /dev/X --key-device /dev/NEWSTICK`
-   (no `--format`; add `--dry-run` first). Then `sudo bash pi/readonly.sh enable` and reboot with the new stick in.
+   so: `sudo bash /opt/revview/pi/readonly.sh disable` (both rounds, see `pi/README.md` "Updating"), boot WITHOUT any stick in
+   (the data stays locked), then `sudo bash /opt/revview/pi/data-setup.sh --user NAME --device /dev/X --key-device /dev/NEWSTICK`
+   (no `--format`; add `--dry-run` first). Then `sudo bash /opt/revview/pi/readonly.sh enable` and reboot with the new stick in.
 5. If whoever found the old stick could also reach the Pi, do (a) as well. Until step 2 the old stick still opens
    the data.
 

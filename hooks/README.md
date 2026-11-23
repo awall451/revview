@@ -61,7 +61,7 @@ server's default too).
   answers 413 and, if it was a `PostToolUse` of Edit/Write/MultiEdit, marks that session's diff incomplete (`≥`),
   as it does for any oversize body. Any other oversize event is lost (the bar keeps its previous state for it).
 - The hooks are synchronous: Claude waits for each (about 0.1 s here, mostly node start-up; slower on a Pi, bench
-  H3). Claude Code's `async` hook option is not used: background hooks could post a tool's Post before its Pre.
+  HW3). Claude Code's `async` hook option is not used: background hooks could post a tool's Post before its Pre.
 
 ## Spoken summary on Stop
 
