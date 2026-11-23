@@ -82,3 +82,10 @@ test('r7-01 (server): a non-key-on session whose window goes: "<repo> ended: ope
   await sleep(100);
   assert.equal(live.state().note, null);
 });
+
+test('r7-01: RevviewNoSessionPress also clears "<repo> ended" (others left, nothing selected)', () => {
+  const b = fold(initialBoard(), ev('RevviewOwned', { ids: [A, B], names: ['alpha', 'beta'] }), ev('RevviewSelect', { session_id: A }),
+    ev('RevviewOwned', { ids: [B], names: ['beta'] }));
+  assert.equal(b.note, 'alpha ended');
+  assert.equal(reduceBoard(b, ev('RevviewNoSessionPress')).note, null);
+});

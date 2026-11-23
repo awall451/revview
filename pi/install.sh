@@ -214,7 +214,7 @@ done. Next:
   - reboot to start everything (kiosk, server, boot screen);
   - sign in to Claude Code as $user if not done: run \`claude\` once in a terminal;
   - logs, as $user: journalctl --user -u revview
-  - dongle ids and keys: edit /etc/revview/buttons.json (USB ids and keys; kept by every re-run and update), then run
+  - dongle ids and keys: edit /etc/revview/buttons.json with sudo (sudoedit; the file is root-owned, mode 0644; USB ids and keys; kept by every re-run and update), then run
     sudo bash $dir/pi/install.sh --user $user $dir  again (with the same options as now) to regenerate the udev rule,
     and restart as $user:
     systemctl --user restart revview  (or reboot).

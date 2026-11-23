@@ -119,5 +119,5 @@ export function createWriter({ dry = false, owner, homeAbs = '', root = '/', say
     }
   };
 
-  return { write, link, mkdirp, refuse, isLink, readOr, failed: () => failed };
+  return { write, link, mkdirp, refuse, isLink, linkedComponent, readOr, failed: () => failed };
 }

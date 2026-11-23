@@ -199,7 +199,7 @@ function main(argv) {
   const say = (s) => console.log(s);
 
   const w = createWriter({ dry: o.dry, owner: o.owner, homeAbs, root: o.root, say, ownMark: AUTOSTART_MARK });
-  const { write, refuse, isLink, readOr } = w;
+  const { write, refuse, isLink, linkedComponent, readOr } = w;
 
   const piDir = path.dirname(fileURLToPath(import.meta.url));
   const edit = (rel, fn) => {
@@ -232,26 +232,32 @@ function main(argv) {
   write(etcButtons, repoButtonsText, { createOnly: true });
   // The rule follows the ids in that file (the repo copy when a dry run has not created it yet).
   let ids = null;
-  if (isLink(etcButtons)) refuse(R('/etc/udev/rules.d/70-revview-dongle.rules'), `${ETC_BUTTONS} is a symlink; not read through it, so the dongle ids are unknown`);
+  const RULE_PATH = R('/etc/udev/rules.d/70-revview-dongle.rules');
+  // a symlink anywhere on the way (the file or /etc/revview itself) is neither written nor read through
+  const linked = linkedComponent(etcButtons);
+  if (linked) refuse(RULE_PATH, `${ETC_BUTTONS}: ${linked === etcButtons ? 'it is' : `${linked} is`} a symlink; not read through it, so the dongle ids are unknown`);
   else {
     const text = readOr(etcButtons) ?? repoButtonsText;
     try {
       const dev = JSON.parse(text)?.device;
       ids = { vendor: dev?.vendor, product: dev?.product };
     } catch (e) {
-      refuse(R('/etc/udev/rules.d/70-revview-dongle.rules'), `${ETC_BUTTONS} is not valid JSON (${e.message}); fix it, the rule was left as it was`);
+      refuse(RULE_PATH, `${ETC_BUTTONS} is not valid JSON (${e.message}); fix it, the rule was left as it was`);
     }
   }
-  if (ids) {
+  if (ids && ids.vendor == null && ids.product == null) {
+    // a device given by name or path only is valid for the key reader (src/input/keymap.js); no USB ids, no rule
+    say(`note: ${ETC_BUTTONS} has no device.vendor and device.product: the dongle udev rule was not written (or left as it was); the device is found by name or path, and the input group must be able to read it`);
+  } else if (ids) {
     let rule = null;
     try {
       rule = renderDongleRule(fs.readFileSync(path.join(piDir, '70-revview-dongle.rules'), 'utf8'), ids);
     } catch (e) {
-      refuse(R('/etc/udev/rules.d/70-revview-dongle.rules'), `${ETC_BUTTONS}: ${e.message}; fix it, the rule was left as it was`);
+      refuse(RULE_PATH, `${ETC_BUTTONS}: ${e.message}; fix it, the rule was left as it was`);
     }
-    if (rule !== null) write(R('/etc/udev/rules.d/70-revview-dongle.rules'), rule);
+    if (rule !== null) write(RULE_PATH, rule);
   }
-  if (readOr(etcButtons) !== null && !isLink(etcButtons) && readOr(etcButtons) !== repoButtonsText) {
+  if (!linked && readOr(etcButtons) !== null && readOr(etcButtons) !== repoButtonsText) {
     say(`note: ${ETC_BUTTONS} (yours, kept) differs from ${repoButtons} (the default); after an update compare them: diff ${ETC_BUTTONS} ${repoButtons}`);
   }
   write(R('/etc/udev/rules.d/71-revview-touch.rules'), renderTouchRule(o.rotate));

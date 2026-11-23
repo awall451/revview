@@ -1395,8 +1395,12 @@ Tested in the unit suite only (fakes, injected timers); nothing run on a Pi.
   changes the shipped key codes must be copied over by the owner). Rejected: keeping the repo copy as the place (lost
   by the documented "copy over /opt/revview" update, and it blocks `git pull`); a separate ids file (two places
   again). Tested on a fake root: edit, re-run, the edit and the rule stay (`tests/unit/pi-install.test.js`). Not run
-  on a Pi. A path-only `device` (no vendor/product) makes the rule refusal permanent: not supported for the installed
-  rule.
+  on a Pi. A `device` with neither
+  vendor nor product (name or path only, valid for `src/input/keymap.js`) is not an error: the installer prints a
+  `note:`, writes no rule and exits 0; one id without the other, or a bad id, is refused as before (exit 1). A
+  symlinked `/etc/revview` directory is refused for the read too (same `linkedComponent` check as the write). The
+  file is root-owned, mode 0644 (the kiosk user only reads it): edit it with `sudoedit`; the README and the
+  installer's closing message say so.
 - **Voice set-up and the first drive (r7-02).** `pi/README.md` ends with "First drive (parked)". Checked in the
   installed Claude Code 2.1.330 (its strings; docs sites unreachable): `/voice [hold|tap|off]`, default hold; it
   writes user settings (`voiceEnabled`, `voice.enabled`, `voice.mode`); default binding `space` -> `voice:pushToTalk`;

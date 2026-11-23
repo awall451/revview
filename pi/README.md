@@ -82,7 +82,7 @@ and `audio`. The older set-up's `revview` system user is no longer used.
    - the kiosk: `~/.config/labwc/autostart` (rotation, then `kiosk.sh`). It replaces the desktop's own autostart, so
      there is no panel, no desktop and no icons. An autostart you had before is saved as `autostart.revview-backup`;
    - the server: `/etc/systemd/user/revview.service`, enabled, lingering on for the user;
-   - `/etc/revview/buttons.json`, your copy of `config/buttons.json` (USB ids and key map; written only if missing, never overwritten), and the dongle udev rule `/etc/udev/rules.d/70-revview-dongle.rules`, generated on every run from the ids in that file (a missing, damaged or symlinked file, or ids that are not 4 hex digits, leave the rule as it was and the installer exits 1). If your file differs from the repo's `config/buttons.json` it prints one `note:` line; after an update compare them with `diff`;
+   - `/etc/revview/buttons.json`, your copy of `config/buttons.json` (USB ids and key map; written only if missing, never overwritten), and the dongle udev rule `/etc/udev/rules.d/70-revview-dongle.rules`, generated on every run from the ids in that file (a missing, damaged or symlinked file or `/etc/revview` directory, or ids that are not 4 hex digits, leave the rule as it was and the installer exits 1). If your file differs from the repo's `config/buttons.json` it prints one `note:` line; after an update compare them with `diff`;
    - `/etc/revview/server.env` (only if missing; all settings commented out);
    - the Claude Code hooks for the user (`hooks/install.mjs`, into `~/.claude/settings.json`);
    - an old `/etc/systemd/system/revview.service` from the earlier set-up is disabled and removed.
@@ -116,10 +116,10 @@ and `audio`. The older set-up's `revview` system user is no longer used.
 9. **Reboot**: `sudo reboot`. Expected: a quiet boot, the desktop logs in by itself, the bar shows NO LINK for a
    moment, then STARTING, then your session.
 10. **Dongle ids and keys**, once the real dongle exists: read the ids with `lsusb` and `/proc/bus/input/devices`
-    (bench W1, D5). Edit `/etc/revview/buttons.json` (`device.vendor`, `device.product` and the keys): it is your file,
+    (bench W1, D5). Edit `/etc/revview/buttons.json` with `sudoedit /etc/revview/buttons.json` (it is root-owned, mode 0644, like the rest of `/etc`; the kiosk user only reads it) (`device.vendor`, `device.product` and the keys): it is your file,
     kept by every re-run of the installer and every update. Then run `sudo bash /opt/revview/pi/install.sh --user NAME
     /opt/revview` again, with the same options as the first time (e.g. `--rotate 270`), to regenerate the udev rule, and `systemctl --user restart revview` as the kiosk user (or
-    reboot). Do not edit the rule or `config/buttons.json` in the repository. With the read-only overlay on, `/etc`
+    reboot). A `device` given by `name` or `path` only (no `vendor` and `product`) is valid: the installer then writes no dongle rule, prints a `note:` and does not fail; with only one of the two ids, or an id that is not 4 hex digits, it refuses as above (exit 1). Do not edit the rule or `config/buttons.json` in the repository. With the read-only overlay on, `/etc`
     edits are lost at the next boot: turn the overlay off first (see Updating). Bench D13.
 
 ## Encrypted data and the key stick

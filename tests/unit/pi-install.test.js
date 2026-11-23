@@ -367,3 +367,103 @@ test('install.sh: the packages needed include sox (voice recording)', withRoot((
   const line = res.out.split('\n').find((l) => l.startsWith('skipped packages'));
   assert.match(line, /needed: .*\bsox\b/);
 }));
+
+// ---- QA r7 round 2: pins for the dongle rule guards ----
+
+const { renderDongleRule } = await import('../../pi/setup.mjs');
+const TEMPLATE = fs.readFileSync(path.join(ROOT, 'pi/70-revview-dongle.rules'), 'utf8');
+const BAD_IDS = ['1d500', '1d5', '1d50"', '1d50\n', '1d50", GOTO="x', 7350, null];
+
+test('renderDongleRule: anything but exactly 4 hex digits throws; good ids are lowercased and nothing else changes', () => {
+  for (const bad of BAD_IDS) {
+    assert.throws(() => renderDongleRule(TEMPLATE, { vendor: bad, product: '615e' }), /device\.vendor/, JSON.stringify(bad));
+    assert.throws(() => renderDongleRule(TEMPLATE, { vendor: '1d50', product: bad }), /device\.product/, JSON.stringify(bad));
+  }
+  const ok = renderDongleRule(TEMPLATE, { vendor: '1D50', product: 'ABCD' });
+  assert.match(ok, /ATTRS\{idVendor\}=="1d50", ATTRS\{idProduct\}=="abcd"/);
+  assert.doesNotMatch(ok, /@/);
+});
+
+test('install.sh: ids that could inject into the udev rule are refused: exit 1, rule untouched, no @ or stray line', withRoot((r) => {
+  assert.equal(run(base(r)).code, 0);
+  const rulePath = path.join(r, RULE);
+  const before = fs.readFileSync(rulePath, 'utf8');
+  const f = path.join(r, BTNS);
+  const cfg = JSON.parse(fs.readFileSync(f, 'utf8'));
+  for (const bad of BAD_IDS) {
+    for (const k of ['vendor', 'product']) {
+      fs.writeFileSync(f, JSON.stringify({ ...cfg, device: { ...cfg.device, [k]: bad } }));
+      const res = run(base(r));
+      const label = `${k}=${JSON.stringify(bad)}`;
+      assert.equal(res.code, 1, `${label}: ${res.out}${res.err}`);
+      const rule = fs.readFileSync(rulePath, 'utf8');
+      assert.equal(rule, before, label);
+      assert.doesNotMatch(rule, /@/, label);
+      assert.equal(rule.split('\n').length, before.split('\n').length, label);
+    }
+  }
+}));
+
+test('install.sh: a symlinked buttons.json pointing at DIFFERENT valid ids: rule does not take them, exit 1, says symlink', withRoot((r) => {
+  assert.equal(run(base(r)).code, 0);
+  const rulePath = path.join(r, RULE);
+  const before = fs.readFileSync(rulePath, 'utf8');
+  const f = path.join(r, BTNS);
+  const cfg = JSON.parse(fs.readFileSync(f, 'utf8'));
+  const real = path.join(r, 'elsewhere.json');
+  fs.writeFileSync(real, JSON.stringify({ ...cfg, device: { ...cfg.device, vendor: 'abcd', product: '1234' } }));
+  fs.rmSync(f);
+  fs.symlinkSync(real, f);
+  const res = run(base(r));
+  assert.notEqual(res.code, 0);
+  assert.equal(fs.readFileSync(rulePath, 'utf8'), before);
+  assert.doesNotMatch(fs.readFileSync(rulePath, 'utf8'), /abcd|1234/);
+  assert.match(res.out + res.err, /symlink/);
+}));
+
+test('install.sh: a symlinked /etc/revview directory is refused for the read too: rule untouched, exit 1', withRoot((r) => {
+  assert.equal(run(base(r)).code, 0);
+  const rulePath = path.join(r, RULE);
+  const before = fs.readFileSync(rulePath, 'utf8');
+  const dir = path.join(r, 'etc/revview');
+  const real = path.join(r, 'elsewhere-dir');
+  fs.renameSync(dir, real);
+  const cfg = JSON.parse(fs.readFileSync(path.join(real, 'buttons.json'), 'utf8'));
+  fs.writeFileSync(path.join(real, 'buttons.json'), JSON.stringify({ ...cfg, device: { ...cfg.device, vendor: 'abcd', product: '1234' } }));
+  fs.symlinkSync(real, dir);
+  const res = run(base(r));
+  assert.equal(res.code, 1, res.out + res.err);
+  assert.equal(fs.readFileSync(rulePath, 'utf8'), before);
+  assert.match(res.out + res.err, /etc\/revview is a symlink/);
+  assert.doesNotMatch(res.out, /differs from/);
+}));
+
+test('install.sh: a device with only name (or path): no rule written, a note, exit 0; one id alone is still refused', withRoot((r) => {
+  assert.equal(run(base(r)).code, 0);
+  const rulePath = path.join(r, RULE);
+  const before = fs.readFileSync(rulePath, 'utf8');
+  const f = path.join(r, BTNS);
+  const cfg = JSON.parse(fs.readFileSync(f, 'utf8'));
+  for (const device of [{ name: 'Wheel' }, { path: '/dev/input/event9' }]) {
+    fs.writeFileSync(f, JSON.stringify({ ...cfg, device }));
+    const res = run(base(r));
+    assert.equal(res.code, 0, res.out + res.err);
+    assert.match(res.out, /^note: \/etc\/revview\/buttons\.json has no device\.vendor and device\.product: the dongle udev rule was not written/m);
+    assert.equal(fs.readFileSync(rulePath, 'utf8'), before);
+  }
+  fs.writeFileSync(f, JSON.stringify({ ...cfg, device: { name: 'Wheel', vendor: '1d50' } }));
+  assert.equal(run(base(r)).code, 1);
+}));
+
+test('install.sh: /etc/revview/buttons.json is mode 0644 whoever runs it, and the closing message says to edit it with sudo', withRoot((r) => {
+  const res = run(base(r));
+  assert.equal(res.code, 0, res.out + res.err);
+  assert.equal(fs.statSync(path.join(r, BTNS)).mode & 0o777, 0o644);
+  assert.match(res.out.slice(res.out.indexOf('done. Next:')), /edit \/etc\/revview\/buttons\.json with sudo \(sudoedit/);
+}));
+
+test('pi/README.md: says to edit /etc/revview/buttons.json with sudoedit and what a name-or-path-only device does', () => {
+  const t = fs.readFileSync(path.join(ROOT, 'pi/README.md'), 'utf8');
+  assert.match(t, /sudoedit `?\/etc\/revview\/buttons\.json/);
+  assert.match(t, /`name` or `path` only/);
+});
