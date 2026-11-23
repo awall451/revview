@@ -58,6 +58,7 @@ function isValidBoard(b) {
     && (b.nav === null || (isObj(b.nav) && NAV_KINDS.includes(b.nav.kind) && Number.isInteger(b.nav.row) && b.nav.row >= 0
       && (b.nav.id === undefined || typeof b.nav.id === 'string')))
     && (b.launching === undefined || (Array.isArray(b.launching) && b.launching.every((x) => typeof x === 'string')))
+    && (b.keyon === undefined || typeof b.keyon === 'string')
     && (b.booting === undefined || typeof b.booting === 'boolean')
     && (b.note === undefined || b.note === null || typeof b.note === 'string')
     && Array.isArray(b.projects) && b.projects.every((x) => typeof x === 'string')
@@ -178,6 +179,11 @@ function withContext(board, patch) {
 
 // the note actions.js sets when push-to-talk is refused during STARTING (one text, two files)
 export const STARTING_PTT_NOTE = 'Claude is still starting: push-to-talk not sent';
+// the key-on session whose window vanished while STARTING (the server uses the same text for a start that failed at once)
+export const KEYON_ENDED_NOTE = 'Key-on session ended at once: see the server log';
+const ENDED_NEXT = ': open the menu for New session';
+// the notes a session's end leaves; a push-to-talk tap with no session replaces them (RevviewNoSessionPress)
+const isEndedNote = (n) => typeof n === 'string' && (n === KEYON_ENDED_NOTE || n.endsWith(' ended') || n.endsWith(` ended${ENDED_NEXT}`));
 
 export function reduceBoard(board, event) {
   const b = isValidBoard(board) ? board : initialBoard();
@@ -201,7 +207,12 @@ export function reduceBoard(board, event) {
   if (wasSel !== null && next !== b && !has(next.sessions, wasSel) && (Object.keys(next.sessions).length > 0 || b.sessions[wasSel].quiet === true)
     && (event.hook_event_name === 'SessionEnd' || event.hook_event_name === 'RevviewOwned')) {
     const label = b.sessions[wasSel].state.repo;
-    next = { ...next, note: `${typeof label === 'string' && label !== '' ? label.slice(0, 100) : 'Selected session'} ended` };
+    const last = Object.keys(next.sessions).length === 0;
+    // (cut so that the longer last-session note stays within 120 characters too)
+    const name = typeof label === 'string' && label !== '' ? label.slice(0, last ? 80 : 100) : 'Selected session';
+    // the key-on session that vanished while still STARTING: "ended at once" (its reason is in the server log)
+    const atOnce = b.keyon === wasSel && (b.launching ?? []).includes(wasSel) && b.sessions[wasSel].quiet === true;
+    next = { ...next, note: atOnce ? KEYON_ENDED_NOTE : `${name} ended${last ? ENDED_NEXT : ''}` };
   }
   const tid = targetOf(event, b.sessions);
   const spoke = isDriverPrompt(event) && has(next.sessions, tid) ? tid : null;
@@ -397,9 +408,12 @@ function reduceInner(b, event) {
       const id = event.session_id;
       if (typeof id !== 'string' || !UUID.test(id)) return b;
       const cur = b.launching ?? [];
-      if (cur.includes(id)) return b;
-      return { ...b, launching: [...cur, id].slice(-MAX_LAUNCHING) };
+      if (cur.includes(id)) return event.keyon === true && b.keyon !== id ? { ...b, keyon: id } : b;
+      return { ...b, launching: [...cur, id].slice(-MAX_LAUNCHING), ...(event.keyon === true ? { keyon: id } : {}) };
     }
+    case 'RevviewNoSessionPress':
+      // a push-to-talk tap with no session selected: the "... ended" note goes, so the view's "does nothing" line shows
+      return isEndedNote(b.note) ? { ...b, note: null } : b;
     case 'RevviewLaunchExpired': {
       const cur = b.launching ?? [];
       if (typeof event.session_id !== 'string' || !cur.includes(event.session_id)) return b;

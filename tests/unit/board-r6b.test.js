@@ -28,7 +28,7 @@ test('r6b-01: the first hook clears it too; another note is not touched by Launc
 test('r6b-02: the only (quiet, selected) session vanishing from the owned list says "<repo> ended"', () => {
   let b = fold(initialBoard(), ev('RevviewOwned', { ids: [A], names: ['alpha'] }), ev('RevviewSelect', { session_id: A }), ev('RevviewLaunching', { session_id: A }));
   b = reduceBoard(b, ev('RevviewOwned', { ids: [], names: [] }));
-  assert.equal(boardView(b).note, 'alpha ended');
+  assert.equal(boardView(b).note, 'alpha ended: open the menu for New session'); // r7-01: the last session
 });
 
 test('r6b-02: the boot path logs the window that disappeared and says Claude exited at once', async (t) => {
@@ -44,7 +44,7 @@ test('r6b-02: the boot path logs the window that disappeared and says Claude exi
   listed = [];
   await live.refreshOwned();
   assert.ok(logs.some((l) => l.includes(A) && l.includes('alpha') && /disappeared/.test(l)), logs.join('\n'));
-  assert.equal(live.state().note, 'alpha ended');
+  assert.equal(live.state().note, 'Key-on session ended at once: see the server log'); // r7-01: key-on, still STARTING
   const failing = { list: async () => [], start: async () => { throw new Error('Command failed: tmux set-option\nno server running on /tmp/revview'); } };
   const l2 = [];
   await bootSessions({ runner: failing, live, dirs: ['/x'], log: (m) => l2.push(m) });

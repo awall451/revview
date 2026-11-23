@@ -31,6 +31,12 @@ slow to start: see the server log" and the start goes on (a later success still 
 the limit starts after the unlock. `--boot` without `--sessions` ends STARTING at once, with no note. Without `--boot`,
 `REVVIEW_START` is ignored and `--start` works as before.
 
+Session lost (r7-01): the owned poll logs `owned sessions: window of session <id> (<name>) disappeared ...` and the bar
+says "<repo> ended" (other sessions left) or "<repo> ended: open the menu for New session" (none left). The key-on
+session (`live.launched(id, true)`, board field `keyon`) that vanishes while still STARTING gets "Key-on session
+ended at once: see the server log" instead. A push-to-talk tap with no session selected applies the internal
+`RevviewNoSessionPress` (403 over HTTP), which clears such a note so the view's "Push-to-talk does nothing" line shows.
+
 `--netmon`: "online" means a default route on any interface (`/proc/net/route`, `/proc/net/ipv6_route`, so the
 phone hotspot over Wi-Fi counts) plus a TCP connect to the Claude API host (`api.anthropic.com:443`; env
 `REVVIEW_NETMON_HOST` = `host` or `host:port` changes it; a bad value is logged (`REVVIEW_NETMON_HOST must be host or host:port, got <v>; using api.anthropic.com:443`) and the default is used, the server still starts; `netmonTarget` parses it). It checks every 10 s

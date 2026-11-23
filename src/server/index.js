@@ -10,7 +10,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { initialBoard, reduceBoard, boardView, pendingPrompts, shownPrompt, selectedKey } from '../state/index.js';
+import { initialBoard, reduceBoard, boardView, pendingPrompts, shownPrompt, selectedKey, KEYON_ENDED_NOTE } from '../state/index.js';
 import { createDataLockMonitor, DEFAULT_DATA_MOUNT } from './datalock.js';
 import { createNetMonitor, createDefaultProbe } from './netmon.js';
 import { createSessionRunner, createActions, createPermissionRegistry, loadProjects } from '../sessions/index.js';
@@ -38,7 +38,7 @@ const BUTTON_RE = /^[a-z][a-z0-9-]{0,31}$/;
 const GESTURES = ['tap', 'hold', 'long-hold'];
 // made only by revview itself (the actions, the boot path): no POST may forge them, not even under --dev-bridge
 const LAUNCH_LIMIT_MS = 30000;
-const INTERNAL_EVENTS = ['RevviewInterrupted', 'RevviewAnswered', 'RevviewSelect', 'RevviewNav', 'RevviewOwned', 'RevviewProjects', 'RevviewNote', 'RevviewBootBegin', 'RevviewBootDone', 'RevviewLaunching', 'RevviewLaunchExpired'];
+const INTERNAL_EVENTS = ['RevviewInterrupted', 'RevviewAnswered', 'RevviewSelect', 'RevviewNav', 'RevviewOwned', 'RevviewProjects', 'RevviewNote', 'RevviewBootBegin', 'RevviewBootDone', 'RevviewLaunching', 'RevviewLaunchExpired', 'RevviewNoSessionPress'];
 export const MAX_SSE_CLIENTS = 8;
 export const MAX_CLIENT_BACKLOG_BYTES = 256 * 1024; // unread bytes after which a stalled SSE client is dropped
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -139,9 +139,9 @@ export async function startLiveServer({
   const setT = timers?.setTimeout ?? setTimeout;
   const clearT = timers?.clearTimeout ?? clearTimeout;
   const launchTimers = new Map();
-  function launched(id) {
+  function launched(id, keyon = false) {
     if (closed || typeof id !== 'string') return;
-    apply({ hook_event_name: 'RevviewLaunching', session_id: id }, true);
+    apply({ hook_event_name: 'RevviewLaunching', session_id: id, ...(keyon ? { keyon: true } : {}) }, true);
     if (launchTimers.has(id)) clearT(launchTimers.get(id));
     const t = setT(() => {
       launchTimers.delete(id);
@@ -656,7 +656,7 @@ export async function bootSessions({ runner, live, dirs = [], log = () => {}, ti
         let last = null;
         for (const dir of dirs) {
           last = (await runner.start({ cwd: dir })).id;
-          live.launched?.(last);
+          live.launched?.(last, true);
         }
         await live.refreshOwned();
         live.select(last);
@@ -670,7 +670,7 @@ export async function bootSessions({ runner, live, dirs = [], log = () => {}, ti
     log(gone ? `boot sessions: Claude exited at once, its window disappeared before it could be set up (${msg})` : `boot sessions: ${msg}`);
     note = msg.startsWith('cwd is not an existing directory')
       ? 'Key-on session not started: start folder missing'
-      : gone ? 'Key-on session ended at once: see the server log'
+      : gone ? KEYON_ENDED_NOTE
         : 'Key-on session not started: see the server log';
   }
   timers.clearTimeout(timer);

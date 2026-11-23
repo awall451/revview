@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, shotsDir } from './harness.js';
+import { expectFits } from './checks.js';
 import { startLiveServer } from '../../src/server/index.js';
 import { FIXTURE_IDS, loadFixture } from '../fixtures.js';
 import { WORST_CASE_IDS, loadWorstCase, asPermission } from '../worst-case.js';
@@ -34,6 +35,19 @@ test('screenshot more-sessions (others and a lower-bound diff) is 1280x400', asy
   await expect(page.locator('#diff-approx')).toBeVisible();
   await page.screenshot({ path: file });
   expectPng1280x400(file);
+});
+
+test('screenshot last-session-ended (r7-01 note) is 1280x400 and the note fits', async ({ openView, page }) => {
+  const file = path.join(shotsDir(), 'last-session-ended.png');
+  const note = 'a-long-project-name ended: open the menu for New session';
+  await openView({ view: 'unknown', voice: 'no-session', note });
+  await expect(page.locator('#note1')).toHaveText(note);
+  await expectFits(page);
+  await page.screenshot({ path: file });
+  expectPng1280x400(file);
+  // the longest label the reducer lets through for this note (80 characters)
+  await openView({ view: 'unknown', voice: 'no-session', note: `${'W'.repeat(80)} ended: open the menu for New session` });
+  await expectFits(page);
 });
 
 test('screenshot boot page is 1280x400', async ({ page }) => {

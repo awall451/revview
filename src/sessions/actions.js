@@ -155,6 +155,8 @@ export function createActions({
         note(STARTING_PTT_NOTE);
         return out('push-to-talk', false, 'session starting');
       }
+      // no session selected: the tap goes nowhere, and an "... ended" note must not hide the line that says so
+      if (runner && selectedKey(b) === null) apply({ hook_event_name: 'RevviewNoSessionPress' });
       return send('push-to-talk', 'Space');
     }
     if (button === 'press' && gesture === 'tap') {
