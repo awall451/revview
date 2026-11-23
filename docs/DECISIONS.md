@@ -1468,3 +1468,8 @@ Tested in the unit suite only (fakes, injected timers); nothing run on a Pi.
 - **Tests:** the shell test of `run.sh` is a node:test file (`tests/unit/emulator-run.test.js`, stand-in browser) so
   it runs in the existing unit step; `tools/check` is unchanged; its lint step shellchecks `emulator/run.sh` as a
   tracked `.sh` file.
+- **Server and browser (fix round):** the script watches the server as well as the browser; if the server dies while
+  the window is open (or while only serving) it prints "the server stopped" with the log tail, closes the browser,
+  cleans up and exits 1. The browser runs in its own process group (`setsid`, else `pkill -P`) and the whole group is
+  stopped on exit, so its children go too (a process that leaves the group itself could survive). The traps are set
+  before `mktemp -d`; the port probe no longer silences stderr for the rest of the script.

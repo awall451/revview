@@ -24,11 +24,12 @@ async function until(fn, what, ms = 10000) {
 
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 
-function standIn(dir, { exitAtOnce = false } = {}) {
+function standIn(dir, { exitAtOnce = false, child = false } = {}) {
   const file = path.join(dir, 'stand-in.sh');
   fs.writeFileSync(file, `#!/bin/bash
 printf '%s\\n' "$@" > "${dir}/args.txt"
 echo $$ > "${dir}/pid.txt"
+${child ? `sleep 300 &\necho $! > "${dir}/childpid.txt"` : ''}
 ${exitAtOnce ? 'exit 0' : `while [ ! -e "${dir}/close" ]; do sleep 0.05; done`}
 `, { mode: 0o755 });
   return file;
@@ -248,3 +249,82 @@ test('Node older than 22 exits 1 with the Node 22 message', async () => {
     } finally { run.finish(); }
   } finally { fs.rmSync(fake, { recursive: true, force: true }); }
 });
+
+const stderrAfter = (run, re) => until(() => re.test(run.err), `stderr ${re}`);
+
+async function noProcessLeft(run, pids) {
+  for (const p of pids) await until(() => !alive(p), `pid ${p} gone`);
+  assert.deepEqual(leftovers(run), []);
+}
+
+const readPid = (run, name) => until(() => fs.existsSync(path.join(run.dir, name)) && fs.readFileSync(path.join(run.dir, name), 'utf8').trim(), name).then(Number);
+
+test('the server dying while the window is open: message with log tail on stderr, window closed, exit 1', async () => {
+  const run = start([], { env: { REVVIEW_QUICK_EXIT_SECS: '0' } });
+  try {
+    await run.url();
+    const { pid } = await run.stand();
+    const spid = await until(() => run.serverPid(), 'server pid');
+    process.kill(spid, 'SIGKILL');
+    const { code } = await run.exit();
+    assert.equal(code, 1);
+    assert.match(run.err, /the server stopped/);
+    assert.match(run.err, /view:/, 'tail of the server log');
+    await noProcessLeft(run, [pid, spid]);
+  } finally { run.finish(); }
+});
+
+test('the server dying with --no-browser: message on stderr (after a successful probe), exit 1', async () => {
+  const run = start(['--no-browser']);
+  try {
+    await run.url();
+    const spid = await until(() => run.serverPid(), 'server pid');
+    process.kill(spid, 'SIGKILL');
+    assert.equal((await run.exit()).code, 1);
+    await stderrAfter(run, /the server stopped/);
+    await noProcessLeft(run, [spid]);
+  } finally { run.finish(); }
+});
+
+test('the server dying when the browser returned at once: message, exit 1', async () => {
+  const run = start([], { env: { REVVIEW_QUICK_EXIT_SECS: '600' }, standOpts: { exitAtOnce: true } });
+  try {
+    await run.url();
+    await until(() => /another browser instance/.test(run.out), 'quick exit note');
+    const spid = await until(() => run.serverPid(), 'server pid');
+    process.kill(spid, 'SIGKILL');
+    assert.equal((await run.exit()).code, 1);
+    assert.match(run.err, /the server stopped/);
+    await noProcessLeft(run, [spid]);
+  } finally { run.finish(); }
+});
+
+// The stand-in starts a background child, as a real Chromium does. run.sh starts the browser in its own process
+// group and signals the whole group, so children and grandchildren in that group die too. A process that leaves
+// the group itself (setsid) could still survive; Chromium's renderer processes do not do that.
+test('a child of the browser does not survive the window closing', async () => {
+  const run = start([], { env: { REVVIEW_QUICK_EXIT_SECS: '0' }, standOpts: { child: true } });
+  try {
+    await run.url();
+    await run.stand();
+    const kid = await readPid(run, 'childpid.txt');
+    assert.equal(alive(kid), true);
+    fs.writeFileSync(path.join(run.dir, 'close'), '');
+    assert.equal((await run.exit()).code, 0);
+    await noProcessLeft(run, [kid]);
+  } finally { run.finish(); }
+});
+
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  test(`a child of the browser does not survive ${sig} to run.sh`, async () => {
+    const run = start([], { standOpts: { child: true } });
+    try {
+      await run.url();
+      const { pid } = await run.stand();
+      const kid = await readPid(run, 'childpid.txt');
+      process.kill(run.child.pid, sig);
+      assert.equal((await run.exit()).code, 0);
+      await noProcessLeft(run, [pid, kid]);
+    } finally { run.finish(); }
+  });
+}

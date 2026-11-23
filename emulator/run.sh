@@ -29,8 +29,8 @@ Environment:
   TMPDIR                    where the profile and log are made (removed on exit)
 
 The script stops when the browser window closes, or on Ctrl+C / TERM / HUP. Exit codes: 0 after the
-window closed or after Ctrl+C / TERM / HUP; 1 on a start failure (Node too old, server did not start);
-2 on a bad option.
+window closed or after Ctrl+C / TERM / HUP; 1 on a start failure (Node too old, server did not start)
+or when the server stops while running; 2 on a bad option.
 USAGE
 }
 
@@ -97,29 +97,35 @@ if [ -n "$want_keys" ]; then
   exit 0
 fi
 
-work=$(mktemp -d "${TMPDIR:-/tmp}/revview-emu.XXXXXX") || { echo "run.sh: cannot make a temp dir" >&2; exit 1; }
-log="$work/server.log"
+work=
 spid=
 bpid=
+bgrp=
 winprofile=
 
 # shellcheck disable=SC2317  # called through the EXIT trap
 cleanup() {
   trap '' INT TERM HUP
-  if [ -n "$bpid" ] && kill -0 "$bpid" 2> /dev/null; then
+  if [ -n "$bgrp" ]; then
+    # the browser was started in its own process group: stop it and everything it started
+    kill -- "-$bgrp" 2> /dev/null
+  elif [ -n "$bpid" ] && kill -0 "$bpid" 2> /dev/null; then
     command -v pkill > /dev/null 2>&1 && pkill -P "$bpid" 2> /dev/null
     kill "$bpid" 2> /dev/null
-    wait "$bpid" 2> /dev/null
   fi
+  if [ -n "$bpid" ]; then wait "$bpid" 2> /dev/null; fi
   if [ -n "$spid" ]; then
     kill "$spid" 2> /dev/null
     wait "$spid" 2> /dev/null
   fi
-  [ -n "$winprofile" ] && rm -rf "$winprofile"
-  rm -rf "$work"
+  if [ -n "$winprofile" ]; then rm -rf "$winprofile"; fi
+  if [ -n "$work" ]; then rm -rf "$work"; fi
 }
 trap cleanup EXIT
 trap 'exit 0' INT TERM HUP
+
+work=$(mktemp -d "${TMPDIR:-/tmp}/revview-emu.XXXXXX") || { echo "run.sh: cannot make a temp dir" >&2; exit 1; }
+log="$work/server.log"
 
 node "$root/src/server/index.js" "${port:-0}" --dev-bridge --dev-keys "$keymap" > "$log" 2>&1 &
 spid=$!
@@ -131,7 +137,7 @@ fail() {
 }
 answers() { # a bare HTTP GET over /dev/tcp, no curl needed
   local line
-  exec 3<> "/dev/tcp/127.0.0.1/$1" 2> /dev/null || return 1
+  { exec 3<> "/dev/tcp/127.0.0.1/$1"; } 2> /dev/null || return 1
   printf 'GET / HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n' >&3
   IFS= read -r -t 3 line <&3
   exec 3<&- 3>&-
@@ -207,11 +213,21 @@ args=("--app=$page" '--window-size=1280,400' "--user-data-dir=$profile" --no-fir
 
 echo "view:  $page"
 start=$SECONDS
-"$browser" "${args[@]}" > /dev/null 2>&1 &
+if command -v setsid > /dev/null 2>&1; then
+  setsid "$browser" "${args[@]}" > /dev/null 2>&1 &
+  bgrp=$!
+else
+  "$browser" "${args[@]}" > /dev/null 2>&1 &
+fi
 bpid=$!
+# watch the server as well as the browser
+while kill -0 "$bpid" 2> /dev/null && kill -0 "$spid" 2> /dev/null; do
+  sleep 0.2 &
+  wait $!
+done
+kill -0 "$spid" 2> /dev/null || fail "the server stopped"
 wait "$bpid"
 brc=$?
-bpid=
 if [ $((SECONDS - start)) -lt "$quick" ]; then
   if [ "$brc" -ne 0 ]; then
     echo "run.sh: the browser ($browser) exited at once with status $brc; open the view: line above in a browser yourself."
@@ -220,4 +236,4 @@ if [ $((SECONDS - start)) -lt "$quick" ]; then
   fi
   serve_on
 fi
-exit 0
+exit 0 # the EXIT trap stops what is left of the browser's process group
