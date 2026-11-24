@@ -21,6 +21,8 @@
   "others": 0,
   "diffIncomplete": false,
   "buttons": "unknown",
+  "hot": false,
+  "lowPower": false,
   "voice": null,
   "position": null,
   "elsewhere": 0,

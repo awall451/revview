@@ -82,7 +82,7 @@ const CHIP = { working: '#5eb1ff', waiting: '#c8a2ff', permission: '#ffb020', do
 
 const $ = (id) => document.getElementById(id);
 const str = (v) => (typeof v === 'string' ? v : '');
-const ids = ['band', 'shape', 'state-word', 'others', 'where', 'buttons-tag', 'tool', 'file', 'note1', 'note2', 'diff', 'diff-approx', 'diff-added',
+const ids = ['band', 'shape', 'state-word', 'others', 'where', 'tags', 'hot-tag', 'power-tag', 'buttons-tag', 'tool', 'file', 'note1', 'note2', 'diff', 'diff-approx', 'diff-added',
   'diff-removed', 'session', 'cmdbox', 'command', 'out1', 'out2', 'out3', 'offline-note', 'voice', 'voice-mark', 'position', 'voice-note',
   'lower', 'nav'];
 const el = Object.fromEntries(ids.map((id) => [id, $(id)]));
@@ -329,10 +329,31 @@ export function render(input) {
   // the "NO BUTTONS" tag (only when the wheel buttons are known to be missing; not while starting, not on NO LINK)
   // sits at the band's right end; it never shrinks, so the room it takes is not available to the hint
   el['buttons-tag'].hidden = !(s.buttons === 'missing' && view !== 'starting' && view !== 'no-link');
+  // the heat and supply tags (the box, not the session): any view but NO LINK, whose state is not trusted
+  const HOT_FULL = 'Pi is hot: it may be throttling, Claude and the bar can be slow';
+  const POWER_FULL = 'Low power: weak supply (under-voltage), the Pi may be slow';
+  const showTag = (tag, on, full) => {
+    tag.hidden = !on;
+    tag.dataset.full = on ? full : '';
+  };
+  showTag(el['hot-tag'], s.hot === true && view !== 'no-link', HOT_FULL);
+  showTag(el['power-tag'], s.lowPower === true && view !== 'no-link', POWER_FULL);
+  el.tags.hidden = el['hot-tag'].hidden && el['power-tag'].hidden && el['buttons-tag'].hidden;
   el.band.classList.remove('tight');
-  const tagPx = el['buttons-tag'].hidden ? 0 : el['buttons-tag'].offsetWidth + 24;
+  const tagPx = el.tags.hidden ? 0 : el.tags.offsetWidth + 24;
   const lastFixed = voice !== null ? el.voice : el.others;
   if ((others || voice !== null) && lastFixed.getBoundingClientRect().right > el.band.clientWidth - 24 - tagPx) el.band.classList.add('tight');
+  // The group must end inside the band's padding. At the detail size HOT, LOW POWER and NO BUTTONS beside the longest
+  // word and the hint do not all fit (the type size is not negotiable): the padding tightens first, then the heat and
+  // supply marks give way, LOW POWER before HOT, never the state, the hint, the voice mark or NO BUTTONS.
+  const tagsEnd = () => el.tags.getBoundingClientRect().right;
+  const limit = () => el.band.clientWidth - (el.band.classList.contains('tight') ? 10 : 24) + 0.5;
+  if (!el.tags.hidden && tagsEnd() > limit()) el.band.classList.add('tight');
+  for (const tag of [el['power-tag'], el['hot-tag']]) {
+    if (el.tags.hidden || tagsEnd() <= limit()) break;
+    showTag(tag, false, '');
+    el.tags.hidden = el['hot-tag'].hidden && el['power-tag'].hidden && el['buttons-tag'].hidden;
+  }
 
   // fitting needs layout, so it comes after the fields are in place
   if (!el.cmdbox.hidden) fitCommand(str(s.command), outRows);

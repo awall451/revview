@@ -92,11 +92,19 @@ body[data-view="no-link"] #band {
   font-weight: 400;
   font-size: var(--detail-font);
 }
-/* "NO BUTTONS": a quiet outline tag at the right end of the band (not a state takeover). Detail size, never
+/* "HOT", "LOW POWER", "NO BUTTONS": quiet outline tags at the right end of the band (not a state takeover), in #tags. Detail size, never
    shrinks; #where gives way first. Colour is the band's text colour, so it is never louder than the state. */
-#buttons-tag {
+#tags {
   flex: none;
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#tags[hidden] { display: none; }
+#band.tight #tags { gap: 4px; }
+#hot-tag, #power-tag, #buttons-tag {
+  flex: none;
   box-sizing: border-box;
   padding: 0 10px;
   border: 2px solid currentColor;
@@ -107,7 +115,7 @@ body[data-view="no-link"] #band {
   line-height: 1.2;
   white-space: nowrap;
 }
-#band.tight #buttons-tag { padding: 0 6px; }
+#band.tight #hot-tag, #band.tight #power-tag, #band.tight #buttons-tag { padding: 0 6px; }
 
 /* Below the band: a flow of 40 px rows without gaps: row A (tool, file, diff), then the notes or the command
    (wrapped), then the output lines. At most 7 rows: 84 + 8 + 7 x 40 + 8 = 380 of 400 px. */

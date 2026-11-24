@@ -24,6 +24,8 @@ export function initialBoard() {
     focus: null,
     spokenTo: null,
     buttons: null, // wheel buttons present: null = not known yet, true, false (RevviewInput)
+    hot: false, // the box is hot (RevviewThermal): board-level, not per session
+    lowPower: false, // weak supply / under-voltage (RevviewThermal)
     selected: null, // the session the driver chose (live id or null); null = the old heuristics decide
     want: null, // a session revview started that is not on the board yet: selected when it first appears
     owned: null, // ids of sessions revview owns (its tmux windows); null = the server runs without sessions
@@ -53,6 +55,7 @@ function isValidBoard(b) {
     && Array.isArray(b.ended) && Number.isInteger(b.tick) && (b.focus === null || typeof b.focus === 'string')
     && (b.spokenTo === null || typeof b.spokenTo === 'string')
     && (b.buttons === null || typeof b.buttons === 'boolean')
+    && (b.hot === undefined || typeof b.hot === 'boolean') && (b.lowPower === undefined || typeof b.lowPower === 'boolean')
     && (b.selected === null || typeof b.selected === 'string') && (b.want === null || typeof b.want === 'string')
     && (b.owned === null || (Array.isArray(b.owned) && b.owned.every((x) => typeof x === 'string')))
     && (b.nav === null || (isObj(b.nav) && NAV_KINDS.includes(b.nav.kind) && Number.isInteger(b.nav.row) && b.nav.row >= 0
@@ -375,6 +378,11 @@ function reduceInner(b, event) {
       return typeof event.locked === 'boolean' && b.locked !== event.locked ? { ...b, locked: event.locked } : b;
     case 'RevviewInput':
       return typeof event.present === 'boolean' && b.buttons !== event.present ? { ...b, buttons: event.present } : b;
+    case 'RevviewThermal': { // the box's heat / supply, board-level; a non-boolean field keeps its old value
+      const hot = typeof event.hot === 'boolean' ? event.hot : b.hot === true;
+      const lowPower = typeof event.lowPower === 'boolean' ? event.lowPower : b.lowPower === true;
+      return hot === (b.hot === true) && lowPower === (b.lowPower === true) ? b : { ...b, hot, lowPower };
+    }
     case 'RevviewInterrupted': { // revview sent Esc / Ctrl+C itself; Claude Code fires no hook for it
       if (!isStr(event.session_id) || live === null) return b;
       if (act(live) !== 'working' && act(live) !== 'permission') return b;
@@ -839,6 +847,8 @@ export function boardView(board) {
       others: 0,
       diffIncomplete: false,
       buttons,
+      hot: b.hot === true,
+      lowPower: b.lowPower === true,
       ...extrasOf(b, shownKey),
     };
   }
@@ -873,6 +883,8 @@ export function boardView(board) {
     others: Object.keys(b.sessions).filter((k) => k !== '').length - (shownKey === '' ? 0 : 1),
     diffIncomplete: shown.dropped,
     buttons,
+    hot: b.hot === true,
+    lowPower: b.lowPower === true,
     ...extrasOf(b, shownKey),
   };
 }

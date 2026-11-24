@@ -60,6 +60,7 @@ Pure logic that turns Claude Code hook events into the view state (no DOM, no I/
 | `RevviewNetwork` `{online: boolean}` (synthetic) | `offline = !online` |
 | `RevviewDataLock` `{locked: boolean}` (synthetic) | `locked` |
 | `RevviewInput` `{present: boolean}` (synthetic, from the server's input reader) | board `buttons` = `present` (wheel buttons found or not); a non-boolean is ignored; `RevviewStarting` does not clear it |
+| `RevviewThermal` `{hot: boolean, lowPower: boolean}` (internal, from the server's thermal reader) | board `hot` / `lowPower` (the box is hot / has a weak supply; board-level, about the box, not per session); a non-boolean field is ignored (that field keeps its value); same reference when nothing changes; never touches sessions, phase or focus and never creates a session; `RevviewStarting` does not clear them. Absent on old boards = false; `boardView` has flat `hot` and `lowPower` booleans |
 | `RevviewButton` `{button, gesture}` (synthetic) | ignored by the board (same reference, never makes a session) |
 
 `repo` is never renamed by other events, so a hook fired from a subdirectory keeps the repo name. On `Stop`
@@ -72,7 +73,7 @@ offline/locked overlays and shows again when they clear.
 
 `reduceBoard` keeps many sessions (key = `session_id`; an event without a usable one goes to the only live non-quiet session if there is exactly one (a quiet placeholder is never a target), else to the anonymous `''` session, which `others` never counts; subagent events carry
 the parent's `session_id`, so they never make a second session). Pure, never throws, returns the SAME reference
-when nothing changes. Board: `{phase, offline, locked, context: {repo, branch}, sessions, ended, tick, focus, spokenTo, buttons}`; `buttons` = `null` (not known yet) | `true` | `false`, set only by `RevviewInput`;
+when nothing changes. Board: `{phase, offline, locked, context: {repo, branch}, sessions, ended, tick, focus, spokenTo, buttons, hot, lowPower}`; `hot`/`lowPower` = booleans set only by `RevviewThermal` (board-level: the box, not a session); `buttons` = `null` (not known yet) | `true` | `false`, set only by `RevviewInput`;
 `sessions[id] = {state, open, touched, dropped, pending, pre}` (plus optional `closed` = the last 64 tool_use_ids a Post closed, so a duplicate Post is ignored, and `stopped` = the turn got its Stop and no new work since; `state` from `reduce`, `open` = tool_use_ids
 with a PreToolUse and no Post yet, `touched` = board tick of the last applied event, `pending` = unanswered
 permission prompts, `pre` = the open PreToolUse calls per agent (at most 32); `focus` = id of the session the bar shows, or null; `spokenTo` = id of the session the driver last spoke to (a real driver prompt only), or null).

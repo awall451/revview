@@ -26,14 +26,14 @@ test('fresh board is unknown; RevviewStarting -> starting and clears sessions; S
 test('initialBoard shape', () => {
   assert.deepEqual(initialBoard(), {
     phase: 'unknown', offline: false, locked: false, context: { repo: null, branch: null },
-    sessions: {}, ended: [], tick: 0, focus: null, spokenTo: null, buttons: null,
+    sessions: {}, ended: [], tick: 0, focus: null, spokenTo: null, buttons: null, hot: false, lowPower: false,
     selected: null, want: null, owned: null, nav: null, note: null, projects: [],
   });
 });
 
 test('boardView always has exactly the same keys', () => {
   const keys = Object.keys(boardView(initialBoard())).sort();
-  assert.deepEqual(keys, ['activity', 'answered', 'branch', 'buttons', 'command', 'compacting', 'diff', 'diffIncomplete', 'elsewhere', 'failed', 'file', 'locked', 'nav', 'note',
+  assert.deepEqual(keys, ['activity', 'answered', 'branch', 'buttons', 'command', 'compacting', 'diff', 'diffIncomplete', 'elsewhere', 'failed', 'file', 'hot', 'locked', 'lowPower', 'nav', 'note',
     'offline', 'others', 'output', 'outputLines', 'position', 'repo', 'tool', 'view', 'voice']);
   const b = run([ev('SessionStart', A), ev('PreToolUse', { ...A, ...BASH })]);
   assert.deepEqual(Object.keys(boardView(b)).sort(), keys);
