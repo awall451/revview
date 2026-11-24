@@ -81,7 +81,7 @@ settings and hooks and your repositories are in that user's home. The user is pu
 
    Options: `--rotate 270` if the panel is mounted the other way up (180 degrees), `--output HDMI-A-2` if the panel is
    on the other port, `--no-apt` to skip packages. It prints one line per thing it did. What it does:
-   - packages (only the missing ones): `chromium tmux python3 espeak-ng wlr-randr sox` *(names from memory; `sox` records the microphone for `/voice`)*;
+   - packages (only the missing ones): `chromium tmux python3 espeak-ng wlr-randr sox overlayroot` *(names checked against the Trixie package lists, 2026-11-24, `docs/PI-FACTS.md`; that they work on the Pi is untested; `sox` records the microphone for `/voice`; `overlayroot` is what the read-only step needs: raspi-config would otherwise `apt-get install` it at `enable` time, so it is installed now while the Pi is online)*;
    - groups `input`, `audio` and `video` for the user (`video`: `vcgencmd` for `--thermal`);
    - quiet boot: `/boot/firmware/config.txt` gets `disable_splash=1`; `/boot/firmware/cmdline.txt` loses `splash` and
      gets `quiet loglevel=0 logo.nologo vt.global_cursor_default=0` (kept on ONE line, CRLF becomes LF). It also
@@ -93,9 +93,15 @@ settings and hooks and your repositories are in that user's home. The user is pu
      (`video=HDMI-A-1:400x1280M@60,rotate=90`), the picture in the labwc autostart (`wlr-randr --output HDMI-A-1
      --transform 90`), the touch in `/etc/udev/rules.d/71-revview-touch.rules`;
    - autologin: `autologin-user=NAME` in `/etc/lightdm/lightdm.conf` *(from memory)*; if that file does not exist it
-     says so, and you turn on Desktop Autologin in `sudo raspi-config` (System Options, Boot / Auto Login);
-   - the kiosk: `~/.config/labwc/autostart` (rotation, then `kiosk.sh`). It replaces the desktop's own autostart, so
-     there is no panel, no desktop and no icons. An autostart you had before is saved as `autostart.revview-backup`;
+     says so, and you turn on Desktop Autologin in `sudo raspi-config` (System Options, S5 Boot, B4 Desktop Autologin);
+   - the kiosk: `~/.config/labwc/autostart` (rotation, then `kiosk.sh`). The Pi session starts labwc with `-m`
+     (merge), so this file runs AFTER the system autostart `/etc/xdg/labwc/autostart` and does not replace it: the
+     desktop, the panel and kanshi still start, and the kiosk is full screen above them (untested: bench P4, P6). An
+     autostart you had before is saved as `autostart.revview-backup`. Two things touch this file or the layout
+     afterwards: raspi-config's Screen Blanking option appends a `swayidle` line to `~/.config/labwc/autostart`
+     (and a rerun of `install.sh` rewrites that file, so the line is lost), and the desktop's Screen Configuration
+     tool writes a kanshi config that may override our `wlr-randr` rotation (`labwc-pi` creates an empty kanshi
+     config when none exists, so there is no profile until someone saves one);
    - the server: `/etc/systemd/user/revview.service`, enabled, lingering on for the user;
    - `/etc/revview/buttons.json`, your copy of `config/buttons.json` (USB ids and key map; created if missing, and on an update merged key by key with the new default, see Updating), `/var/lib/revview/buttons.shipped.json` (root-owned, 0644: the shipped version the last run merged from, the base of that merge), and the dongle udev rule `/etc/udev/rules.d/70-revview-dongle.rules`, generated on every run from the ids in that file (a missing, damaged or symlinked file or `/etc/revview` directory, or ids that are not 4 hex digits, leave the rule as it was and the installer exits 1). The rule is derived from the merged file;
    - `/etc/revview/server.env` (only if missing; all settings commented out);
@@ -212,12 +218,18 @@ sudo bash /opt/revview/pi/readonly.sh enable
 sudo reboot
 ```
 
-It uses raspi-config's overlay file system and its read-only boot partition option *(from memory: names and
-effects are unchecked)*. After the reboot nothing on the card's root or boot partition is written while driving; the
+It uses raspi-config's overlay file system and its read-only boot partition option *(function names and file
+layouts checked against raspi-config-core 20261026+2, 2026-11-24; what they do on a Pi is untested)*.
+`enable` needs the `overlayroot` package installed (`install.sh` installs it while the Pi is online; without it
+`readonly.sh enable` refuses, exit 2, because raspi-config would try to `apt-get` it). raspi-config's
+`do_overlayfs 0` also sets the boot partition read-only (the `ro` option on the `/boot/firmware` line of
+`/etc/fstab`) and puts `overlayroot=tmpfs` at the front of `cmdline.txt`; `readonly.sh` does not call
+`enable_bootro` separately any more. After the reboot nothing on the card's root or boot partition is written while driving; the
 only thing written is the data partition. A power cut can lose the last seconds of writes there (a transcript line,
 a file being saved), not the system. Anything you change on the root afterwards is gone at the next boot: see
-Updating. Swap: check `swapon --show` *(from memory: Trixie may use zram, which is fine; a swap FILE on the root
-makes no sense under the overlay)*. Run this step LAST, after the install, the data set-up and Piper.
+Updating. Swap: check `swapon --show` *(Pi OS Trixie has the package `rpi-swap` in its archive, which sets up zram
+and/or `/var/swap` per `/etc/rpi/swap.conf`, `Mechanism=auto`; whether your image has it, and which one `auto`
+picks, is bench S4B-14. Zram is fine under the overlay; a swap FILE on the root makes no sense under it)*. Run this step LAST, after the install, the data set-up and Piper.
 
 ## Updating
 
@@ -282,8 +294,8 @@ need changing. The paths in that file are the ones above.
   - `/var/lib/systemd/linger/NAME` (or `loginctl disable-linger NAME`);
   - `/etc/revview/server.env` and `/etc/revview/buttons.json` (your key map; keep a copy if you want it) with its `buttons.json.revview-backup-*` copies, and `/etc/revview/` if empty;
   - `/var/lib/revview/buttons.shipped.json` (the recorded base of the key map merge), and `/var/lib/revview/` if empty (there is no uninstall script; removing it is by hand);
-  - `~/.config/labwc/autostart`: on a fresh Pi it had no backup, so just delete it (the desktop's own autostart
-    applies again); if `autostart.revview-backup` exists, move it back over it;
+  - `~/.config/labwc/autostart`: on a fresh Pi it had no backup, so just delete it (the system autostart runs
+    on its own again); if `autostart.revview-backup` exists, move it back over it;
   - the hooks: `node /opt/revview/hooks/install.mjs --remove` as the kiosk user (it removes only revview's entries
     from `~/.claude/settings.json` and keeps the rest; `--dry-run` shows first);
   - the data set-up, if you did it (`docs/REVOKE.md` for the data itself): `/etc/revview/data.conf`, `data.env`,
@@ -299,7 +311,7 @@ need changing. The paths in that file are the ones above.
   STARTING to the bar itself (`--boot`) and, when no revview tmux window exists (after a power cut there is none),
   starts the `REVVIEW_START` session once it is listening, so that session's first hook reaches the bar. After a
   server restart the surviving window is picked up and nothing new starts.
-- **Kiosk**: labwc runs `~/.config/labwc/autostart` at login; `kiosk.sh` starts Chromium on
+- **Kiosk**: labwc runs `~/.config/labwc/autostart` at login, after the system autostart (labwc `-m`, untested); `kiosk.sh` starts Chromium on
   `file:///opt/revview/src/view/boot.html?port=8138`, which shows NO LINK until the server answers and then opens
   `http://127.0.0.1:8138/`. The Chromium profile lives in `$XDG_RUNTIME_DIR` (memory only): fresh each boot, so no
   "restore pages" after a power cut and no browser writes to the SD card. Chromium is restarted 1 s after it exits
@@ -314,7 +326,9 @@ need changing. The paths in that file are the ones above.
   unreadable value is quiet: one log line, no mark. Overrides (for tests and odd images): `REVVIEW_THERMAL_VCGENCMD`
   (the command), `REVVIEW_THERMAL_THROTTLED` and `REVVIEW_THERMAL_TEMP` (a value instead of reading). **From memory,
   untested on hardware** (bench PT-1 to PT-3). The unit is a user unit, so it has no `SupplementaryGroups=`: on
-  Raspberry Pi OS `vcgencmd` is `/usr/bin/vcgencmd` and talks to `/dev/vcio`, which is group `video` (from memory).
+  Raspberry Pi OS Trixie `vcgencmd` is `/usr/bin/vcgencmd` (package `raspi-utils-core`) and talks to
+  `/dev/vcio_gencmd`, which is group `video` mode 0660 (raspberrypi-sys-mods `10-vc.rules`); names and layout checked
+  against the packages, behaviour untested.
   The installer adds the user to `video` (with `input` and `audio`). If the mark never appears with a Pi that is
   throttled, run `vcgencmd get_throttled` as the kiosk user (after a new login) and tell the bench (PT-3) if it is denied.
   A `vcgencmd` that hangs is killed after 3 s and a read that gives no answer in 4 s counts as unreadable (the marks

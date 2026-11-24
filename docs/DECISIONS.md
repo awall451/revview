@@ -1826,3 +1826,21 @@ Tested in the unit suite only; nothing run on a Pi.
   is the problem. 80 C because the Pi 4B starts soft-limiting about there (from memory).
 - **Not proven:** the sources, the bit meanings and that the service user may call `vcgencmd` (the unit is a user unit; `video`
   group is added by the installer, from memory). BENCH PT-1 to PT-3; `docs/PI-FACTS.md` X08-X10.
+
+## Pi facts checked against the trixie packages (cycle 42)
+
+Evidence: the Debian Trixie and Raspberry Pi archive package indexes (arm64) and unpacked `.deb` files (under `/tmp`, never
+installed or run), 2026-11-24. This proves names and file layouts only; every bench item stays `untested`. Table: `docs/PI-FACTS.md`.
+
+- **L04** The raspi-config menu is "System Options, S5 Boot, B4 Desktop Autologin" (raspi-config-core 20261026+2), not "Boot / Auto Login". `setup.mjs` hint and `pi/README.md` fixed.
+- **L06** Our `~/.config/labwc/autostart` does not replace the system one: `labwc-pi` (rpd-wayland-core 1.35) ends with `exec /usr/bin/labwc -m`, and with `--merge-config` every autostart found is run, system first. Fixed in `setup.mjs` (comment and test) and the docs.
+- **L06, our choice.** We keep the `rpd-labwc` session (it sets Pi-specific environment in `labwc-pi`) and accept that the desktop, the panel and kanshi start under the full-screen kiosk. Not taken: `autologin-session=labwc` (plain labwc, no `-m`, only our autostart). To be decided after bench P4/P6 show what the panel and desktop do.
+- **L08** kanshi IS started by the system autostart; `labwc-pi` creates an empty `~/.config/kanshi/config` if missing, so there is no profile. The desktop's Screen Configuration tool writes that file and may override our `wlr-randr` rotation. The old claim "nothing re-applies a layout" is removed; behaviour is bench P4.
+- **L03** The `lightdm.conf` fixture now mirrors the layout of lightdm 1.32.0-6+rpt2+deb13u1 plus raspi-config's in-place edits (`user-session=rpd-labwc`, `autologin-session=rpd-labwc`, `greeter-session=pi-greeter-labwc`), not a short hand-written `[Seat:*]`. `display-setup-script=/usr/share/dispsetup.sh` is shipped by no package in the archive and stays from memory.
+- **C05** `--disable-session-crashed-bubble` is not in the Chromium 156 binary (1:156.0.8078.108-1~deb13u1+rpt1); removed from `kiosk.sh`. `--hide-crash-restore-bubble` stays.
+- **O02** `do_overlayfs` in nonint mode itself calls `enable_bootro`/`disable_bootro` with the same argument (both refuse while the overlay is active). `readonly.sh enable` called `enable_bootro` again, giving `defaults,ro,ro`, which one `disable_bootro` could not undo. Fixed: it does not call it after `do_overlayfs 0`; disable round 2 repeats `disable_bootro` until fstab has no `ro` (at most 3).
+- **O03** raspi-config PREPENDS `overlayroot=tmpfs ` to `cmdline.txt` (`sed "s/^/overlayroot=tmpfs /"`), it does not append. The `overlayroot=` token check works either way; test stubs and fixtures now prepend.
+- **O05** Confirmed: `do_overlayfs` runs `apt-get install -y overlayroot` when it is missing, and the package's postinst runs `update-initramfs`. `install.sh` now installs `overlayroot` while online; `readonly.sh enable` refuses (exit 2) when `/usr/share/initramfs-tools/scripts/init-bottom/overlayroot` is missing.
+- **X08** `vcgencmd` is `/usr/bin/vcgencmd` from `raspi-utils-core` 20260626-1 (`libraspberrypi-bin` is gone from the Pi archive), talking to `/dev/vcio_gencmd`, group `video` (raspberrypi-sys-mods `10-vc.rules`), not `/dev/vcio`. Docs and installer comment fixed; the output and bit meanings are still bench PT-3.
+- **P05** espeak-ng is 1.52.0+dfsg-5 on Trixie. The line in stage 4B (~841) that says "Debian 12 ... 1.51" is outdated; it is left as written.
+- **P08** The `cryptsetup` command is shipped by `cryptsetup-bin`; the package `cryptsetup` depends on it, so `apt install cryptsetup` (the message in `data-setup.sh`) does provide it. `overlayroot` now depends on `cryptsetup` too, so after `install.sh` it is on the Pi.
