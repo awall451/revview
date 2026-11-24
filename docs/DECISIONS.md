@@ -1718,3 +1718,44 @@ hang. Now the tool line says "Compacting context". Proven in the emulator and th
   `compact_summary` and `custom_instructions` before posting (large and private); no RevviewContext follows them.
 - **Demo.** Keys 8 (`compaction`: events 0-8, WORKING + the line) and 9 (`compact-cmd`: events 9-20, the compaction ends,
   Stop, `/compact`: DONE + the line), in one extra session `demo<loop>-compaction`. The `--keys` sheet stays at 24 lines.
+
+## Pi leftovers (cycle 39)
+
+Tested in the unit suite only; nothing run on a Pi.
+
+### data.mjs exit codes
+
+- `pi/data.mjs` now uses the codes of `pi/setup.mjs` (QA round 6): 0 done; 4 refused (devices not acceptable, a file
+  refused or skipped, an untrusted path to `unlock.sh`); 2 bad arguments; 3 an unexpected error, including an uncaught
+  exception or unhandled rejection (handlers added; a one-line message, no stack). Before, refusal and crash were both 1,
+  which is also node's own code for an import or syntax error, so a caller could not tell them apart.
+- Callers: only `pi/data-setup.sh` runs it. It keeps its own codes: the two pre-flight runs (`check`, `write --dry-run`)
+  fail with its exit 2 for any non-zero code (nothing changed yet, as before); the real `write` makes 4 and 3 both exit 1,
+  now with a message that says "refused" or "failed (exit N)". `install.sh`, `unlock.sh`, `readonly.sh`, `lib.sh` do not
+  call it. The table of all codes is in `pi/README.md`.
+- Not tested: an unhandled rejection is tested with a preload that rejects after the handlers are installed, not from a
+  real code path (none is known).
+
+### Key map merged on update (buttons.json)
+
+- Before: `/etc/revview/buttons.json` was written only if missing, and a `note:` pointed at `diff`. Now `pi/setup.mjs`
+  merges three versions per key on parsed JSON: base (the shipped file recorded at the last run), new (`config/buttons.json`)
+  and the owner's file. An array (the `buttons` list) is ONE value, so a changed key list is taken or kept whole, never
+  woven. Owner unchanged: follows the update (added, changed, removed). Owner changed: kept. Same change on both sides: no
+  conflict. Both changed differently, or removed upstream but edited by the owner (or the reverse): conflict, nothing is
+  written for the key map, exit 4 (install.sh: 1) with the keys and the `diff` command; the other files are still done.
+- Base: `/var/lib/revview/buttons.shipped.json` (root-owned, 0644), not beside the owner's file, so the owner's `/etc/revview`
+  holds only what they may edit. Written after every successful merge and on a first install; left alone on a conflict.
+  There is no uninstall script; the README's undo list names it (and the backups) for removal by hand.
+- Formatting: JSON has no comments, so a rewrite uses the shipped layout (`serializeButtons`, tested to reproduce the
+  shipped file byte for byte) and the owner's own layout is lost; values are not. When the merge result equals the owner's
+  file semantically it is not rewritten. Before a rewrite the old file is copied to `buttons.json.revview-backup-<UTC
+  stamp>` (newest 3 kept, older deleted: bounded, so repeated updates cannot fill the SD card), the write is atomic
+  (temp file in the same directory, rename), mode 0644. Symlinks anywhere in either path, an unparsable owner file or an
+  unparsable base: refused or ignored with a note, never written through.
+- No recorded base (an install from before this): file equal to the new default -> the base is recorded; otherwise the file
+  is kept and a note gives the diff command and two ways out: `install.sh --adopt-buttons-base` (keep the file, record the
+  current default as its base) or copy the default over it. The flag is the owner's statement that their edits are theirs.
+- The dongle rule is derived from the merged file (in a dry run from the text that would be written).
+- Not proven: any of it on a Pi (fake root only); `--adopt-buttons-base` through a real `install.sh` run is tested on the
+  fake root only. BENCH PL-2.

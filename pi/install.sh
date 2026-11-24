@@ -2,10 +2,13 @@
 # Set up the Pi as a revview kiosk. UNTESTED on a Pi: written without one; the file edits are tested only
 # against a fake root in a temp dir (tests/unit/pi-install.test.js).
 # Usage: sudo bash pi/install.sh --user NAME [--rotate 90|270] [--output HDMI-A-1] [--root DIR] [--dry-run]
-#                                [--no-apt] [REVVIEW_DIR]
+#                                [--no-apt] [--adopt-buttons-base] [REVVIEW_DIR]
 #   --user    the ordinary login user (the one the desktop auto-logs in as): runs the kiosk Chromium, the
 #             server (a systemd user unit, lingering on) and the Claude sessions. Required.
 #   --rotate  90 (normal mount, default) or 270 (mount flipped 180 degrees)
+#   --adopt-buttons-base  keep /etc/revview/buttons.json as it is and record the current config/buttons.json as the
+#             version it is based on (for an install made before the merge existed whose file differs from the
+#             shipped one); from then on an update is merged (see below)
 #   --root    act on this directory tree instead of / (a fake root for tests; no root needed, no apt,
 #             no usermod, no systemctl, no udevadm)
 #   REVVIEW_DIR defaults to this repository; it should live outside the home (e.g. /opt/revview); no npm ci is needed (Node's standard library only).
@@ -20,10 +23,20 @@
 # What it changes (see pi/setup.mjs): /boot/firmware/cmdline.txt and config.txt (quiet boot, rotated console),
 #   /etc/lightdm/lightdm.conf (autologin), udev rules (dongle, touch rotation), /etc/systemd/user/revview.service
 #   and its enable symlink, /var/lib/systemd/linger/<user>, /etc/revview/server.env and /etc/revview/buttons.json
-#   (each only if missing: the owner's files, the USB ids and key map are edited there and kept by every re-run;
+#   (the owner's files, the USB ids and key map, are edited there; server.env is only written if missing, buttons.json
+#   is created if missing and merged on an update, see below;
 #   the udev dongle rule is regenerated from the ids in /etc/revview/buttons.json on every run),
 #   ~/.config/labwc/autostart (kiosk, no desktop), the user's Claude Code hooks, packages, groups input and audio.
 #   A changed file that existed gets a copy once: <file>.revview-backup.
+# Key map on update: setup.mjs merges three versions of buttons.json per key (an array is one value): the shipped
+#   one it recorded at its last run (/var/lib/revview/buttons.shipped.json, root-owned 0644), the new config/buttons.json,
+#   and your /etc/revview/buttons.json. Keys you did not change follow the update, keys you changed are kept. If you
+#   both changed the same key differently it stops for that file (exit 1 from here, nothing written for the key map;
+#   it prints the diff command). A rewrite uses the shipped layout (comments do not exist in JSON; your own layout
+#   is lost, never your values), first saves your file as buttons.json.revview-backup-<UTC stamp> (the newest 3 are
+#   kept), and is atomic. A file that already equals the merge result is not touched. No recorded version (first
+#   update of an install from before the merge): equal to the new shipped file, the version is recorded; else the
+#   file is kept, a note says so and --adopt-buttons-base adopts it. --dry-run says what would happen.
 # Re-run it any time: it is idempotent. Then reboot.
 set -euo pipefail
 
@@ -34,6 +47,7 @@ output="HDMI-A-1"
 root="/"
 dry=0
 apt=1
+adopt=0
 dir=""
 
 die() { echo "install.sh: $*" >&2; exit 2; }
@@ -46,6 +60,7 @@ while [ $# -gt 0 ]; do
     --root) [ $# -ge 2 ] || die "--root needs a value"; root="$2"; shift 2 ;;
     --dry-run) dry=1; shift ;;
     --no-apt) apt=0; shift ;;
+    --adopt-buttons-base) adopt=1; shift ;;
     -*) die "unknown option $1" ;;
     *) [ -z "$dir" ] || die "only one REVVIEW_DIR"; dir="$1"; shift ;;
   esac
@@ -157,6 +172,7 @@ fi
 # Files.
 setup_args=(--root "$root" --user "$user" --home "$home" --dir "$dir" --rotate "$rotate" --output "$output" --node "$node_bin" --owner "$uid:$gid")
 if [ "$dry" -eq 1 ]; then setup_args+=(--dry-run); fi
+if [ "$adopt" -eq 1 ]; then setup_args+=(--adopt-buttons-base); fi
 # setup.mjs exits 4 when it refused a file (a symlink, a cmdline.txt without root=): the rest still runs, the exit
 # code of this script ends as 1. 2 = bad arguments: stop. Anything else (3 a crash, 1 node could not even load it,
 # a signal) = failed part way: stop. 1 is deliberately NOT "refused": node uses it for an uncaught error.
@@ -214,7 +230,7 @@ done. Next:
   - reboot to start everything (kiosk, server, boot screen);
   - sign in to Claude Code as $user if not done: run \`claude\` once in a terminal;
   - logs, as $user: journalctl --user -u revview
-  - dongle ids and keys: edit /etc/revview/buttons.json with sudo (sudoedit; the file is root-owned, mode 0644; USB ids and keys; kept by every re-run and update), then run
+  - dongle ids and keys: edit /etc/revview/buttons.json with sudo (sudoedit; the file is root-owned, mode 0644; USB ids and keys; kept by every re-run; an update merges it with the new default per key), then run
     sudo bash $dir/pi/install.sh --user $user $dir  again (with the same options as now) to regenerate the udev rule,
     and restart as $user:
     systemctl --user restart revview  (or reboot).

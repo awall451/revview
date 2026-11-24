@@ -79,7 +79,8 @@ export function createWriter({ dry = false, owner, homeAbs = '', root = '/', say
     }
   };
 
-  // write(p, content, { owned, backup: 'first' | 'foreign', createOnly, mode })
+  // write(p, content, { owned, backup: 'first' | 'foreign' | 'rotate', keep, createOnly, mode })
+  // 'rotate': <p>.revview-backup-<UTC stamp> before each rewrite, the newest `keep` (3) kept, older ones removed.
   const write = (p, content, opts = {}) => {
     const bad = linkedComponent(p);
     if (bad === p) return refuse(p, 'is a symlink; not written through (replace it with a regular file or remove it)');
@@ -90,8 +91,19 @@ export function createWriter({ dry = false, owner, homeAbs = '', root = '/', say
     if (dry) return say(`would write ${p}`);
     mkdirp(path.dirname(p), opts.owned);
     const bak = `${p}.revview-backup`;
-    const wantBackup = old !== null && !fs.existsSync(bak) && !isLink(bak)
+    const wantBackup = old !== null && opts.backup !== 'rotate' && !fs.existsSync(bak) && !isLink(bak)
       && (opts.backup === 'first' || (opts.backup === 'foreign' && !(ownMark && old.includes(ownMark))));
+    if (old !== null && opts.backup === 'rotate') {
+      // A timestamped copy of the old content before every rewrite; only the newest `keep` (default 3) are kept.
+      const stamp = new Date().toISOString().replace(/[-:.]/g, '').replace('T', '-').replace('Z', '');
+      let rb = `${bak}-${stamp}`;
+      for (let i = 1; fs.existsSync(rb) || isLink(rb); i++) rb = `${bak}-${stamp}-${i}`;
+      atomicWrite(rb, old, 0o644, opts.owned);
+      say(`backup ${p} -> ${rb}`);
+      const prefix = `${path.basename(p)}.revview-backup-`;
+      const mine = fs.readdirSync(path.dirname(p)).filter((n) => n.startsWith(prefix)).sort();
+      for (const n of mine.slice(0, Math.max(0, mine.length - (opts.keep ?? 3)))) fs.rmSync(path.join(path.dirname(p), n), { force: true });
+    }
     const mode = opts.mode ?? (old !== null ? fs.statSync(p).mode & 0o777 : 0o644);
     if (wantBackup) {
       atomicWrite(bak, old, mode, opts.owned);

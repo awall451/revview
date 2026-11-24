@@ -26,6 +26,20 @@ not marked here (package names, paths, keys, flags), is listed with how to check
 | `revview-unlock.service` | System unit template that runs `unlock.sh` (installed by `data-setup.sh`). |
 | `72-revview-key.rules` | udev rule template: the stick's UUID starts the unlock when it is plugged in late. |
 
+### Exit codes
+
+| Program | 0 | 1 | 2 | 3 | 4 |
+|---|---|---|---|---|---|
+| `setup.mjs` | done | never (node's own: an import or syntax error) | bad arguments | unexpected error in main | a file refused or skipped |
+| `data.mjs` (`check`, `write`) | done | never (node's own) | bad arguments | unexpected error, uncaught exception or unhandled rejection | devices not acceptable, a file refused or skipped, an untrusted path to `unlock.sh` |
+| `install.sh` | done | something refused or skipped (setup's 4), or setup's other codes passed on | bad arguments, or a read-only root | not used | not used |
+| `data-setup.sh` | done | refused or failed after work started (data.mjs's 3 or 4 on the real write) | bad arguments, or refused before anything changed (any non-zero code of data.mjs's checks) | not used | not used |
+| `unlock.sh` | unlocked, or no stick | any refusal or error | not used | not used | not used |
+| `readonly.sh` | done | raspi-config did not do what was expected | bad arguments or refused | not used | not used |
+
+The `.mjs` programs keep refusal (4) apart from a crash (3) because node itself exits 1 for an error outside the
+code's own handling; the shell scripts keep their own older codes.
+
 ## Who runs what
 
 ONE ordinary login user, the one the desktop logs in as automatically (you choose the name; it does not have to be
@@ -83,7 +97,7 @@ and `audio`. The older set-up's `revview` system user is no longer used.
    - the kiosk: `~/.config/labwc/autostart` (rotation, then `kiosk.sh`). It replaces the desktop's own autostart, so
      there is no panel, no desktop and no icons. An autostart you had before is saved as `autostart.revview-backup`;
    - the server: `/etc/systemd/user/revview.service`, enabled, lingering on for the user;
-   - `/etc/revview/buttons.json`, your copy of `config/buttons.json` (USB ids and key map; written only if missing, never overwritten), and the dongle udev rule `/etc/udev/rules.d/70-revview-dongle.rules`, generated on every run from the ids in that file (a missing, damaged or symlinked file or `/etc/revview` directory, or ids that are not 4 hex digits, leave the rule as it was and the installer exits 1). If your file differs from the repo's `config/buttons.json` it prints one `note:` line; after an update compare them with `diff`;
+   - `/etc/revview/buttons.json`, your copy of `config/buttons.json` (USB ids and key map; created if missing, and on an update merged key by key with the new default, see Updating), `/var/lib/revview/buttons.shipped.json` (root-owned, 0644: the shipped version the last run merged from, the base of that merge), and the dongle udev rule `/etc/udev/rules.d/70-revview-dongle.rules`, generated on every run from the ids in that file (a missing, damaged or symlinked file or `/etc/revview` directory, or ids that are not 4 hex digits, leave the rule as it was and the installer exits 1). The rule is derived from the merged file;
    - `/etc/revview/server.env` (only if missing; all settings commented out);
    - the Claude Code hooks for the user (`hooks/install.mjs`, into `~/.claude/settings.json`);
    - an old `/etc/systemd/system/revview.service` from the earlier set-up is disabled and removed.
@@ -118,7 +132,7 @@ and `audio`. The older set-up's `revview` system user is no longer used.
    moment, then STARTING, then your session.
 10. **Dongle ids and keys**, once the real dongle exists: read the ids with `lsusb` and `/proc/bus/input/devices`
     (bench W1, D5). Edit `/etc/revview/buttons.json` with `sudoedit /etc/revview/buttons.json` (it is root-owned, mode 0644, like the rest of `/etc`; the kiosk user only reads it) (`device.vendor`, `device.product` and the keys): it is your file,
-    kept by every re-run of the installer and every update. Then run `sudo bash /opt/revview/pi/install.sh --user NAME
+    kept by every re-run of the installer, and merged key by key with the new default on an update (see Updating). Then run `sudo bash /opt/revview/pi/install.sh --user NAME
     /opt/revview` again, with the same options as the first time (e.g. `--rotate 270`), to regenerate the udev rule, and `systemctl --user restart revview` as the kiosk user (or
     reboot). A `device` given by `name` or `path` only (no `vendor` and `product`) is valid: the installer then writes no dongle rule, prints a `note:` and does not fail; with only one of the two ids, or an id that is not 4 hex digits, it refuses as above (exit 1). Do not edit the rule or `config/buttons.json` in the repository. With the read-only overlay on, `/etc`
     edits are lost at the next boot: turn the overlay off first (see Updating). Bench D13.
@@ -224,7 +238,7 @@ makes no sense under the overlay)*. Run this step LAST, after the install, the d
    /dev/STICK` (see "Encrypted data and the key stick"); then reboot WITH the stick in (the overlay is still off, so this is safe), and
    carry on with step 7: `install.sh` writes the hooks into the unlocked data. If only `pi/unlock.sh` changed, skip this: it runs from `/opt/revview` and takes effect at once.
    Not tried on a Pi.
-7. Run `install.sh` again (step 7). Your `/etc/revview/buttons.json` is kept (a `note:` line says if it differs from the new `config/buttons.json`: compare with `diff`); the dongle rule is regenerated from its ids. It refuses (exit 2, nothing written) under the overlay, and when `/boot/firmware`
+7. Run `install.sh` again (step 7). Your `/etc/revview/buttons.json` is MERGED per key (an array such as `buttons` is one value) from three versions: the shipped file recorded at the last run (`/var/lib/revview/buttons.shipped.json`), the new `config/buttons.json`, and yours. A key you did not change follows the update (added, changed or removed); a key you changed is kept; the same change on both sides is fine. If you and the update changed the same key differently (or the update removed a key you edited) it writes nothing for the key map, prints the keys and `diff /etc/revview/buttons.json /opt/revview/config/buttons.json`, and exits 1 (the other files are done): edit your file by hand and run it again. When the merge changes your file it is rewritten in the shipped layout (JSON has no comments; your own layout is lost, your values are not), after saving the old one as `/etc/revview/buttons.json.revview-backup-<UTC time>` (the newest 3 are kept, older ones are deleted), written atomically, root:root 0644. If the merge result equals your file it is not touched. `--dry-run` prints `would merge ...` and writes nothing. An install from before this existed has no recorded version: if your file equals the new default the version is recorded; otherwise your file is kept and a `note:` says so; run `sudo bash /opt/revview/pi/install.sh --user NAME --adopt-buttons-base` to keep it as it is and record the current default as its base (later updates merge), or copy the default over it (`cp /opt/revview/config/buttons.json /etc/revview/buttons.json`, losing your edits) and run again. The dongle rule is regenerated from the merged file's ids. Not tried on a Pi. It refuses (exit 2, nothing written) under the overlay, and when `/boot/firmware`
    is read-only: that is the sign that step 1 or 2 is missing.
 8. `sudo bash /opt/revview/pi/readonly.sh enable`, then reboot (with the stick in).
 
@@ -261,7 +275,8 @@ need changing. The paths in that file are the ones above.
     data set-up);
   - `/etc/systemd/user/revview.service` and `/etc/systemd/user/default.target.wants/revview.service` (the link);
   - `/var/lib/systemd/linger/NAME` (or `loginctl disable-linger NAME`);
-  - `/etc/revview/server.env` and `/etc/revview/buttons.json` (your key map; keep a copy if you want it), and `/etc/revview/` if empty;
+  - `/etc/revview/server.env` and `/etc/revview/buttons.json` (your key map; keep a copy if you want it) with its `buttons.json.revview-backup-*` copies, and `/etc/revview/` if empty;
+  - `/var/lib/revview/buttons.shipped.json` (the recorded base of the key map merge), and `/var/lib/revview/` if empty (there is no uninstall script; removing it is by hand);
   - `~/.config/labwc/autostart`: on a fresh Pi it had no backup, so just delete it (the desktop's own autostart
     applies again); if `autostart.revview-backup` exists, move it back over it;
   - the hooks: `node /opt/revview/hooks/install.mjs --remove` as the kiosk user (it removes only revview's entries

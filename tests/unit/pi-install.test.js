@@ -312,7 +312,9 @@ test('install.sh: an edit of the ids in /etc/revview/buttons.json is kept and th
   const rule = fs.readFileSync(path.join(r, RULE), 'utf8');
   assert.match(rule, /ATTRS\{idVendor\}=="abcd", ATTRS\{idProduct\}=="12ef"/);
   assert.doesNotMatch(rule, /"1d50"|"615e"/);
-  assert.match(res.out, /^note: \/etc\/revview\/buttons\.json \(yours, kept\) differs from .*\/config\/buttons\.json \(the default\); after an update compare them: diff /m);
+  // the first run recorded the shipped version, so an owner-only edit is merged silently (pi-buttons-merge.test.js)
+  assert.doesNotMatch(res.out, /^note: \/etc\/revview\/buttons\.json/m);
+  assert.equal(fs.readFileSync(path.join(r, 'var/lib/revview/buttons.shipped.json'), 'utf8'), fs.readFileSync(path.join(ROOT, 'config/buttons.json'), 'utf8'));
 }));
 
 test('install.sh: invalid ids in /etc/revview/buttons.json: exit 1, the rule stays, the message names the file', withRoot((r) => {
@@ -467,3 +469,28 @@ test('pi/README.md: says to edit /etc/revview/buttons.json with sudoedit and wha
   assert.match(t, /sudoedit `?\/etc\/revview\/buttons\.json/);
   assert.match(t, /`name` or `path` only/);
 });
+
+test('install.sh: buttons.json three-way merge: conflict exits 1 with the diff command; --adopt-buttons-base is passed on', withRoot((r) => {
+  assert.equal(run(base(r)).code, 0);
+  const f = path.join(r, BTNS);
+  const baseF = path.join(r, 'var/lib/revview/buttons.shipped.json');
+  const shipped = JSON.parse(fs.readFileSync(baseF, 'utf8'));
+  const old = JSON.parse(JSON.stringify(shipped));
+  old.timing.holdMs = 300;
+  fs.writeFileSync(baseF, `${JSON.stringify(old, null, 2)}\n`);
+  const mine = JSON.parse(JSON.stringify(old));
+  mine.timing.holdMs = 350;
+  const mineText = `${JSON.stringify(mine, null, 2)}\n`;
+  fs.writeFileSync(f, mineText);
+  const res = run(base(r));
+  assert.equal(res.code, 1, res.out + res.err);
+  assert.equal(fs.readFileSync(f, 'utf8'), mineText);
+  assert.match(res.out + res.err, /diff \/etc\/revview\/buttons\.json /);
+  // an install without a recorded version: kept, then adopted
+  fs.rmSync(baseF);
+  assert.equal(run(base(r)).code, 0);
+  assert.equal(fs.existsSync(baseF), false);
+  assert.equal(run([...base(r), '--adopt-buttons-base']).code, 0);
+  assert.equal(JSON.parse(fs.readFileSync(baseF, 'utf8')).timing.holdMs, shipped.timing.holdMs);
+  assert.equal(fs.readFileSync(f, 'utf8'), mineText);
+}));

@@ -4,6 +4,7 @@
 // The edit/render functions are pure (text in, text out). The CLI writes files at <root><path as seen on the Pi>.
 // Usage: node pi/setup.mjs --root R --user U --home H --dir D [--rotate 90|270] [--output HDMI-A-1]
 //                          [--node /usr/bin/node] [--owner UID:GID] [--dry-run]
+//                          [--adopt-buttons-base]
 // Exit: 0 done; 4 a file was refused or skipped so that the appliance is half set up (a symlink anywhere in its path,
 //   cmdline.txt or config.txt missing or malformed, no root=): left as it was, everything else done; 2 bad arguments;
 //   3 an unexpected error inside main (the files after that point were not written). Refusal is 4, not 1, because
@@ -140,6 +141,71 @@ export function renderDongleRule(template, { vendor, product }) {
   return String(template).replaceAll('@VENDOR@', vendor.toLowerCase()).replaceAll('@PRODUCT@', product.toLowerCase());
 }
 
+// ---- three-way merge of the key map (buttons.json) ----
+// Leaves are scalars and arrays (an array is ONE value); objects are merged key by key.
+const ABSENT = Symbol('absent');
+const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+export function jsonEqual(a, b) {
+  if (a === ABSENT || b === ABSENT) return a === b;
+  if (Array.isArray(a) || Array.isArray(b)) return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => jsonEqual(x, b[i]));
+  if (isObj(a) && isObj(b)) {
+    const ka = Object.keys(a);
+    return ka.length === Object.keys(b).length && ka.every((k) => k in b && jsonEqual(a[k], b[k]));
+  }
+  return a === b;
+}
+// base = the shipped file the owner's copy came from, theirs = the new shipped file, mine = the owner's file.
+// Returns { value, conflicts: [dotted paths] }. A key the owner did not change follows the update (added, changed,
+// removed); a key the owner changed is kept; both changed to the same value is no conflict; both changed to
+// different values, or removed on one side and edited on the other, is a conflict (value then keeps the owner's).
+export function mergeJson(base, theirs, mine) {
+  const conflicts = [];
+  const node = (b, n, m, at) => {
+    if (jsonEqual(m, n)) return m;
+    if (jsonEqual(m, b)) return n;
+    if (jsonEqual(n, b)) return m;
+    if (isObj(n) && isObj(m) && (isObj(b) || b === ABSENT)) {
+      const out = {};
+      for (const k of [...Object.keys(m), ...Object.keys(n).filter((x) => !(x in m))]) {
+        const r = node(isObj(b) && k in b ? b[k] : ABSENT, k in n ? n[k] : ABSENT, k in m ? m[k] : ABSENT, at ? `${at}.${k}` : k);
+        if (r !== ABSENT) out[k] = r;
+      }
+      return out;
+    }
+    conflicts.push(at || '(whole file)');
+    return m;
+  };
+  return { value: node(base, theirs, mine, ''), conflicts };
+}
+// The leaf paths where a and b differ (for the "what the merge does" line).
+export function diffPaths(a, b, at = '') {
+  if (isObj(a) && isObj(b)) {
+    return [...new Set([...Object.keys(a), ...Object.keys(b)])].flatMap((k) => diffPaths(k in a ? a[k] : ABSENT, k in b ? b[k] : ABSENT, at ? `${at}.${k}` : k));
+  }
+  return jsonEqual(a, b) ? [] : [at || '(whole file)'];
+}
+// The shipped file's layout: 2 spaces, a final newline; an object whose values are all scalars (not the top one) and an
+// array of scalars sit on one line, `{ "key": "F13", "button": "push-to-talk" }`. serializeButtons(JSON.parse(shipped)) === shipped.
+export function serializeButtons(v) {
+  const scalar = (y) => y === null || typeof y !== 'object';
+  const ser = (x, ind, top) => {
+    const pad = ' '.repeat(ind + 2);
+    if (Array.isArray(x)) {
+      if (x.length === 0) return '[]';
+      if (x.every(scalar)) return `[${x.map((y) => JSON.stringify(y)).join(', ')}]`;
+      return `[\n${x.map((y) => pad + ser(y, ind + 2, false)).join(',\n')}\n${' '.repeat(ind)}]`;
+    }
+    if (isObj(x)) {
+      const ks = Object.keys(x);
+      if (ks.length === 0) return '{}';
+      if (!top && ks.every((k) => scalar(x[k]))) return `{ ${ks.map((k) => `${JSON.stringify(k)}: ${JSON.stringify(x[k])}`).join(', ')} }`;
+      return `{\n${ks.map((k) => `${pad}${JSON.stringify(k)}: ${ser(x[k], ind + 2, false)}`).join(',\n')}\n${' '.repeat(ind)}}`;
+    }
+    return JSON.stringify(x);
+  };
+  return `${ser(v, 0, true)}\n`;
+}
+
 export function renderServerEnv() {
   return `# Environment of the revview server (read by the user unit, one KEY=value per line, no quotes).
 # Written by pi/install.sh when missing; never overwritten. Restart: systemctl --user restart revview
@@ -158,7 +224,7 @@ export function renderServerEnv() {
 // ---- CLI ----
 
 function usage(msg) {
-  process.stderr.write(`revview setup: ${msg}\nusage: node pi/setup.mjs --root R --user U --home H --dir D [--rotate 90|270] [--output HDMI-A-1] [--node PATH] [--owner UID:GID] [--dry-run]\n`);
+  process.stderr.write(`revview setup: ${msg}\nusage: node pi/setup.mjs --root R --user U --home H --dir D [--rotate 90|270] [--output HDMI-A-1] [--node PATH] [--owner UID:GID] [--dry-run] [--adopt-buttons-base]\n`);
   process.exit(2);
 }
 
@@ -168,6 +234,7 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--dry-run') o.dry = true;
+    else if (a === '--adopt-buttons-base') o.adopt = true;
     else if (need[a]) {
       if (i + 1 >= argv.length) usage(`${a} needs a value`);
       o[need[a]] = argv[++i];
@@ -224,12 +291,69 @@ function main(argv) {
   // a missing lightdm.conf stays a plain note (no exit code change): the desktop autologin is another way to get it
   else say(`skipped ${lightdm}: no lightdm.conf; set Desktop Autologin with raspi-config`);
 
-  // The owner's key map and dongle ids: created once from the repo's default, never overwritten.
+  // The owner's key map and dongle ids: created once from the repo's default; on an update a three-way merge of
+  // the shipped version recorded at the last run (BASE_PATH), the new shipped file and the owner's file.
   const ETC_BUTTONS = '/etc/revview/buttons.json';
+  const BASE_PATH = '/var/lib/revview/buttons.shipped.json';
   const etcButtons = R(ETC_BUTTONS);
+  const baseP = R(BASE_PATH);
   const repoButtons = path.join(o.dir, 'config/buttons.json');
   const repoButtonsText = fs.readFileSync(path.join(path.dirname(piDir), 'config/buttons.json'), 'utf8');
-  write(etcButtons, repoButtonsText, { createOnly: true });
+  const diffCmd = `diff ${ETC_BUTTONS} ${repoButtons}`;
+  const recordBase = () => write(baseP, repoButtonsText, { mode: 0o644 });
+  let mergedText = null; // what the owner's file is (dry run: will be) after a merge rewrite
+  if (linkedComponent(etcButtons)) { /* refused below, where the rule is derived */ }
+  else if (readOr(etcButtons) === null) {
+    write(etcButtons, repoButtonsText, { createOnly: true });
+    recordBase();
+  } else {
+    let mine = null;
+    try {
+      mine = JSON.parse(readOr(etcButtons));
+      if (!isObj(mine)) throw new Error('not a JSON object');
+    } catch (e) {
+      refuse(etcButtons, `not valid JSON (${e.message}); fix it, nothing was merged or written`);
+      mine = null;
+    }
+    if (mine) {
+      const newV = JSON.parse(repoButtonsText);
+      let baseV = null;
+      const baseLink = linkedComponent(baseP);
+      if (baseLink) refuse(baseP, `${baseLink === baseP ? 'it is' : `${baseLink} is`} a symlink; the shipped version is not recorded or read, ${ETC_BUTTONS} was kept as it is`);
+      else if (o.adopt) {
+        recordBase();
+        say(`note: ${ETC_BUTTONS} kept as it is; the current ${repoButtons} is now recorded as the version it is based on, later updates are merged`);
+      } else {
+        const bt = readOr(baseP);
+        if (bt !== null) {
+          try {
+            baseV = JSON.parse(bt);
+            if (!isObj(baseV)) throw new Error('not a JSON object');
+          } catch (e) {
+            baseV = null;
+            say(`note: ${BASE_PATH} is damaged (${e.message}); treated as missing`);
+          }
+        }
+        if (baseV === null) {
+          if (jsonEqual(mine, newV)) recordBase();
+          else say(`note: ${ETC_BUTTONS} (yours, kept) differs from ${repoButtons} (the default) and the installer has no record of the shipped version it came from, so it cannot merge; compare: ${diffCmd}. To keep your file as it is and merge from the next update on: run install.sh again with --adopt-buttons-base; or to take the new default (losing your edits): cp ${repoButtons} ${ETC_BUTTONS} and run install.sh again`);
+        } else {
+          const { value, conflicts } = mergeJson(baseV, newV, mine);
+          if (conflicts.length) {
+            refuse(etcButtons, `both you and the update changed ${conflicts.join(', ')}; nothing was merged or written; compare: ${diffCmd}, then edit ${ETC_BUTTONS} (take over or drop the update's value for those keys) and run install.sh again`);
+          } else {
+            if (!jsonEqual(value, mine)) {
+              const text = serializeButtons(value);
+              say(`${o.dry ? 'would merge' : 'merging'} the update into ${ETC_BUTTONS}: changed by the update: ${diffPaths(mine, value).join(', ')}; your other keys kept (the file is rewritten in the shipped layout, the old one is saved first)`);
+              write(etcButtons, text, { backup: 'rotate', keep: 3, mode: 0o644 });
+              mergedText = text;
+            }
+            recordBase();
+          }
+        }
+      }
+    }
+  }
   // The rule follows the ids in that file (the repo copy when a dry run has not created it yet).
   let ids = null;
   const RULE_PATH = R('/etc/udev/rules.d/70-revview-dongle.rules');
@@ -237,7 +361,7 @@ function main(argv) {
   const linked = linkedComponent(etcButtons);
   if (linked) refuse(RULE_PATH, `${ETC_BUTTONS}: ${linked === etcButtons ? 'it is' : `${linked} is`} a symlink; not read through it, so the dongle ids are unknown`);
   else {
-    const text = readOr(etcButtons) ?? repoButtonsText;
+    const text = mergedText ?? readOr(etcButtons) ?? repoButtonsText;
     try {
       const dev = JSON.parse(text)?.device;
       ids = { vendor: dev?.vendor, product: dev?.product };
@@ -256,9 +380,6 @@ function main(argv) {
       refuse(RULE_PATH, `${ETC_BUTTONS}: ${e.message}; fix it, the rule was left as it was`);
     }
     if (rule !== null) write(RULE_PATH, rule);
-  }
-  if (!linked && readOr(etcButtons) !== null && readOr(etcButtons) !== repoButtonsText) {
-    say(`note: ${ETC_BUTTONS} (yours, kept) differs from ${repoButtons} (the default); after an update compare them: diff ${ETC_BUTTONS} ${repoButtons}`);
   }
   write(R('/etc/udev/rules.d/71-revview-touch.rules'), renderTouchRule(o.rotate));
   write(R('/etc/systemd/user/revview.service'), renderUnit(fs.readFileSync(path.join(piDir, 'revview.service'), 'utf8'), o));
