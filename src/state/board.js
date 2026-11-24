@@ -188,7 +188,7 @@ function withContext(board, patch) {
 //                 "Highlighted session ended: list closed")
 //   too-early     actions.js: an answer refused too early    goes when the prompt the bar shows changes
 //   starting-ptt  actions.js: push-to-talk during STARTING   goes when the selected session no longer shows STARTING
-//   answer-prompt actions.js: push-to-talk refused, the      none
+//   answer-prompt actions.js: push-to-talk refused, the      goes when the selected session has no pending prompt left
 //                 selected session has a pending prompt
 //   ended         a session's end (here); the key-on Claude  a push-to-talk tap with no session clears it
 //                 that exited at once (BootDone)             (RevviewNoSessionPress); RevviewEndReason replaces it
@@ -229,6 +229,11 @@ export function reduceBoard(board, event) {
   // the push-to-talk refusal belongs to STARTING: when the selected session no longer shows STARTING (first hook,
   // launch limit) it goes, so UNKNOWN can say "No events from this session yet" (QA r6b-01); no other note is touched
   if (noteKind(b.note) === 'starting-ptt' && noteKind(next.note) === 'starting-ptt' && !sessionStarting(next, selectedKey(next))) next = { ...next, note: null };
+  // the push-to-talk refusal for a pending prompt goes when the selected session has none left (answered in the terminal)
+  if (noteKind(b.note) === 'answer-prompt' && noteKind(next.note) === 'answer-prompt') {
+    const sel = selectedKey(next);
+    if (sel === null || !has(next.sessions, sel) || next.sessions[sel].pending.length === 0) next = { ...next, note: null };
+  }
   if (noteKind(b.note) === 'too-early' && noteKind(next.note) === 'too-early') {
     const id = (x) => { const p = shownPrompt(x); return p === null ? null : `${p.session}\u0000${p.agent}\u0000${p.since}`; };
     if (id(b) !== id(next)) next = { ...next, note: null };

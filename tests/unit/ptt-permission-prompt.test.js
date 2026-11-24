@@ -73,3 +73,28 @@ test('the note is cleared by the next gesture', async () => {
   s.push({ hook_event_name: 'RevviewNav', button: 'up', gesture: 'tap' });
   assert.equal(s.get().note, null);
 });
+
+test('the note goes by itself when the prompt is answered elsewhere (in the terminal)', async () => {
+  const s = setup(perm(SID));
+  await s.tap();
+  assert.equal(s.get().note?.text, 'Answer the prompt first');
+  s.push(ev(SID, 'PostToolUse', { tool_name: 'Bash', tool_use_id: 't1', tool_input: { command: 'ls' }, tool_response: {} }));
+  assert.equal(s.get().sessions[SID].pending.length, 0);
+  assert.equal(s.get().note, null);
+});
+
+test('the note stays while the prompt is pending, whatever another session does', async () => {
+  const s = setup(perm(SID));
+  await s.tap();
+  for (const e of perm(OTHER)) s.push(e);
+  s.push(ev(OTHER, 'PostToolUse', { tool_name: 'Bash', tool_use_id: 't1', tool_input: { command: 'ls' }, tool_response: {} }));
+  s.push(ev(SID, 'Notification', { message: 'Claude needs your permission to use Bash' }));
+  assert.ok(s.get().sessions[SID].pending.length > 0);
+  assert.equal(s.get().note?.text, 'Answer the prompt first');
+});
+
+test('a plain note is not cleared by the selected session having no prompt', () => {
+  let b = reduceBoard(base(), { hook_event_name: 'RevviewNote', note: 'Answer the prompt first' });
+  b = reduceBoard(b, ev(SID, 'PreToolUse', { tool_name: 'Read', tool_use_id: 'r1', tool_input: { file_path: '/x' } }));
+  assert.deepEqual(b.note, { kind: 'plain', text: 'Answer the prompt first' });
+});
