@@ -1,6 +1,6 @@
 # STATE
 
-Detail and history: `HISTORY.md` (the old STATE, verbatim), `JOURNAL-archive.md` (journal before cycle 36), `docs/DECISIONS.md`, `docs/PI-FACTS.md`. Read them only when needed. The owner's console counts cycles (this file was last written in cycle 47); that number is used. Gate main: 1667 tests.
+Detail and history: `HISTORY.md` (the old STATE, verbatim), `JOURNAL-archive.md` (journal before cycle 36), `docs/DECISIONS.md`, `docs/PI-FACTS.md`. Read them only when needed. The owner's console counts cycles (this file was last written in cycle 48); that number is used. Gate main: 1667 tests (1676 once `note-kinds` merges).
 
 ## Status per charter stage
 
@@ -17,7 +17,8 @@ Nothing is proven on a Pi. The list is `docs/BENCH-TEST.md` (groups: First after
 ## Leftovers (open, none blocking; the rest: HISTORY.md, sections "Small follow-ups", "QA issues", "Wheel buttons", "Next")
 
 - Trust boundary (DECISIONS, cycle 47): processes of the same user are trusted; forged local events (for example a `SessionEnd` for an id not in the owned listing) are accepted, not defended. The owner was asked to add the one line to `docs/DESIGN.md`.
-- "Answer the prompt first" (push-to-talk refused while the selected session has a prompt) has no auto-clear: answered in the terminal, it stays until the next gesture. Do it by kind in the typed-notes job (#24). It also shows when the selected session's prompt is not the one the bar shows.
+- "Answer the prompt first" now clears itself when the selected session has no pending prompt left (cycle 48). It still shows when the selected session's prompt is not the one the bar shows; an automatic focus move to another session with a prompt leaves it (kept).
+- Board notes have kinds (cycle 48; table at the top of the note code in `src/state/board.js`: plain, too-early, starting-ptt, answer-prompt, ended, ended-last, no-session). A new note that needs a clearing or hiding rule gets a kind there; never match on text. A plain note ending in ": open the menu for New session" is no longer hidden while locked (only ended-last and no-session are).
 - `netmon.check()`: pokes during a real outage reach OFFLINE faster than the 2-probe debounce (real probes only; same-user, accepted). Under `--netmon` the dev bridge cannot force OFFLINE either. No test for "failing probe after a poke".
 - Hold-mode push-to-talk is not built (tap is the charter's mode).
 - No script installs Piper (written steps only; its command line is from memory; neither archive has a TTS piper package, Debian's `piper` is a mouse tool).
@@ -31,13 +32,12 @@ Nothing is proven on a Pi. The list is `docs/BENCH-TEST.md` (groups: First after
 
 ## In flight
 
-- Nothing except `ready/lead-notes-47b` (this note; delete `work/` and `ready/lead-notes-47b` once merged). Cycle 47's stack merged (main aac0207, 1667 tests); owner issues #22, #23, #26 set `done`; publish requested.
-- No worktree is left over. No held change. Published: main 689813e (2026-11-24).
+- Cycle 48 submitted: `ready/note-kinds` (cc799ee, owner issue #24, backlog a926ba taken) and `ready/lead-notes-48` (this note) stacked on it. Expected 1676 tests. On merge: delete `ready/` and `work/` branches (note-kinds, lead-notes-48), set issue #24 (20261124T172325Z-i-58af4c) done with `--commit` and a note on stdin, request a publish.
+- No worktree is left over. No held change. Published: main 406d255 (2026-11-24).
 
 ## Next
 
-- Owner issue #24 (backlog 20261124T165646Z-b-a926ba, Opus `area-lead-core`): board notes get a kind. Alone in its cycle. Use the new test file names (table in `tests/unit/README.md`). Include a clearing rule for the "Answer the prompt first" note. Guard: view output and all 57 screenshots byte-identical; reviewer; looped run of the board tests.
-- Then owner issue #25 (backlog 20261124T165658Z-b-f9c0be, Opus): split `src/server/index.js`. After #24 has merged, never in the same cycle. Looped run under CPU load of the server timer tests; reviewer.
+- Next cycle, once `note-kinds` has merged: owner issue #25 (backlog 20261124T165658Z-b-f9c0be, Opus): split `src/server/index.js`. After #24 has merged, never in the same cycle. Looped run under CPU load of the server timer tests; reviewer. If issue #25 is not in the lead's open list, take the backlog item 20261124T165658Z-b-f9c0be with `owner-backlog taken` as a normal-cycle item.
 - After those: nothing planned; the team waits for the owner's bench (`docs/BENCH-TEST.md`). Small `pi/` leftovers for the next `pi/` change: `readonly.sh --dry-run` exits 2 when overlayroot is missing (say so in the help); an fstab line where `ro` is not right after `defaults` makes `disable` give up after 3 calls; PI-FACTS E11 and E13 are only part-checked.
 - Open escalations: see `ESCALATIONS.md` (the cycle schedule only; the others are resolved).
 

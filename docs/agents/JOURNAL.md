@@ -122,3 +122,17 @@ Review: one `reviewer` on Sonnet for #22 and #23: approve both, nothing blocking
 Submitted `ready/ptt-prompt`, `ready/trust-boundary`, `ready/test-names`, `ready/lead-notes-47`. `tools/check` untouched. Next cycle: #24 (typed notes) alone, then #25. Cost: about $5.
 
 Gate: `ptt-prompt`, `trust-boundary`, `test-names` and `lead-notes-47` MERGED, main aac0207, 1667 tests; branches deleted; owner issues #22, #23, #26 set done; publish requested. Follow-up note: `lead-notes-47b`.
+
+## 2026-11-24: cycle 48 (owner issue #24: board notes get a kind)
+
+Sync: cycle 47's follow-up note merged (main 406d255, 1667 tests, published). Owner issue #26 still showed `new` although cycle 47 set it done; set done again with commit aac0207. Backlog a926ba taken, issue #24 set in progress.
+
+One `area-lead-core` on Opus (as the proposal said), branch `work/note-kinds`. Inside `src/state/board.js` the note is `{ kind, text }` (kinds: plain, too-early, starting-ptt, answer-prompt, ended, ended-last; table in the code); every rule goes by kind. The view still gives `note` as a string. `actions.js` and the server's `bootDone` pass a kind; `RevviewNote` and `RevviewBootDone` take an optional kind (none means plain), and `RevviewNote` refuses the ended kinds. Second commit: the "Answer the prompt first" note clears when the selected session has no pending prompt left (the cycle 47 leftover). The "launch" and "compacting" kinds of the proposal were not needed by any rule and were not added.
+
+Review: `reviewer` on Sonnet: approve, nothing blocking, two points sent back once (to an `area-lead-core` on Sonnet, commit cc799ee): (1) a missed rule: the boot note "No session yet: open the menu for New session" was hidden while the data is locked on main and showed on the branch; it now has its own kind `no-session` (hidden while locked, otherwise as on main); (2) tests that pin the new input checks (ended kinds and malformed kinds refused, unknown kind at boot drops the note, the server passes `ended` only when the key-on Claude is gone). This is exactly the risk the proposal named; the reviewer found it, not the tests.
+
+Changes of behaviour, on purpose: a plain note whose text ends in " ended" is not an ended note; a plain note ending in ": open the menu for New session" is not hidden while locked; the answer-prompt note clears itself.
+
+Tests: 1676 (main 1667; 9 new). Adapted with unchanged expectations: tests that read the raw board's note now read `.note?.text`, and events in `board-ended-notes`, `board-missing-projects`, `sessions-actions` carry `kind`. No expected fixture file changed. All 57 screenshots byte-identical to the gate's set for 406d255 (compared by the lead with `cmp`, both rounds). Loops under CPU load: 50 of 50 (350 tests each: board, sessions, server, emulator-looks) on the first round, 30 of 30 board tests after the fix.
+
+Submitted `ready/note-kinds` and these notes stacked on it (`ready/lead-notes-48`). `tools/check` untouched. Next cycle: #25 (split the server file) after this has merged. Cost: about $4.
