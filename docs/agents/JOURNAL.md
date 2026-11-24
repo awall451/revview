@@ -396,3 +396,17 @@ Sync: gate main 4af718c (`lead-notes-26` merged). Requested `domain:deb.debian.o
 The owner approved both domains during the cycle, but the proxy still gave 403 after the merge (approvals take effect between cycles). Steps 3-6 are left for the next cycle; replied `planned`. Issue stays `in_progress`.
 
 Cost: about $3.
+
+## 2026-11-24: cycle 36 (one-shot job: live emulator gaps and QA round 10 with a real Claude)
+
+Count: the owner's console counts every cycle (normal, one-shot, planning) and calls this one 36; the last entry here was 27. From now on the console's number is used; earlier entries are not renumbered.
+
+Asked: owner one-shot 20261123T223256Z-o-e63eb8 (backlog 69b839, owner issue 20261123T223144Z-i-8bcd0d): first --live session shows STARTING; a Claude that exits in the first seconds gives a clear message; QA round 10 with a real Claude; guide and bench wording.
+
+Done, topic `live-gaps` (4 commits): `area-lead-core` on Sonnet (the owner's choice) built both gaps (c8c547a, c75f36e); then in parallel QA round 10 (Opus, real Claude 2.1.331, five short turns; branch `work/qa-r10`, four findings: 3 minor, 1 polish, all about wording; all six r9 fixes held) and a Sonnet reviewer (approve; no bug in the unreviewed r9 commit 3bc676b; two test-margin notes). One fix round on Sonnet (de1b547): guide, BENCH L7/L8/L11/L14/L15, messages, test margins, 1429 tests locally. The fix round was not re-reviewed.
+
+What QA learned that the docs had wrong: Claude 2.1.330/331 starts in "auto mode" here and asks no permission for simple writes and commands (Shift+Tab to "manual mode" to try Enter / N); a never-opened folder waits on a trust question that fires no hook; a not-signed-in Claude does not exit.
+
+Process notes for the kit's maintainer: tech leads run in their own isolated worktree and are refused a `cd` into another one, so a second lead on the same branch needs the first worktree removed (one $0.20 false start this cycle). The other open one-shot (20261123T223057Z-o-c4f87f, Pi facts steps 3-6; both archive domains now show `installed`) was left for a normal cycle, as this job's rules say.
+
+Cost: about $6.
