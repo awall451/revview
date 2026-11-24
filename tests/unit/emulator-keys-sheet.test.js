@@ -68,6 +68,8 @@ test('the demo keys come from scenes.js: every scene name and the range', async 
   const names = buildLoop(1).map((s) => s.name);
   for (const n of names) assert.ok(out.includes(n), n);
   assert.match(out, new RegExp(`1-${names.length}`));
+  assert.equal(names.length, 9);
+  assert.ok(names.includes('compaction') && names.includes('compact-cmd'), 'keys 8 and 9 are on the sheet');
   assert.match(out, /nothing is sent to a Claude/i);
   assert.match(out, /--live/);
 });

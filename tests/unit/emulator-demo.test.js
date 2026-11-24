@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
@@ -52,7 +53,7 @@ async function demoServer(extra = {}) {
 const get = async (url, p) => (await fetch(`${url}${p}`)).json();
 async function shown(url) {
   const { state } = await get(url, '/state');
-  return { view: state.view, sessions: state.view === 'ended' ? 0 : state.others + 1, offline: state.offline, locked: state.locked };
+  return { view: state.view, sessions: state.view === 'ended' ? 0 : state.others + 1, offline: state.offline, locked: state.locked, compacting: state.compacting, tool: state.tool, file: state.file };
 }
 function newPlayer(url, lines = []) {
   const clock = fakeClock();
@@ -74,7 +75,8 @@ test('playing through: every scene reaches the state the bar shows, then the loo
         assert.ok(clock.runNext(), `a timer is pending before scene ${i + 1}`);
       }
       const s = await shown(url);
-      assert.deepEqual({ view: s.view, sessions: s.sessions }, expect, `scene ${i + 1} ${buildLoop(1)[i].name}`);
+      assert.deepEqual({ view: s.view, sessions: s.sessions, ...(expect.compacting ? { compacting: true } : {}) }, expect, `scene ${i + 1} ${buildLoop(1)[i].name}`);
+      if (!expect.compacting) assert.ok(!s.compacting, `scene ${i + 1} is not compacting`);
       assert.equal(player.status().loop, 1);
       clock.runNext(); // the hold ends
     }
@@ -86,8 +88,9 @@ test('playing through: every scene reaches the state the bar shows, then the loo
       if (player.status().holding) break;
       clock.runNext();
     }
-    assert.deepEqual(await shown(url), { view: 'working', sessions: 3, offline: false, locked: false });
-    assert.deepEqual(lines.slice(0, 8), ['working', 'permission', 'done', 'waiting', 'offline', 'insert-key', 'ended', 'working'].map((n, i) => `demo: ${(i % 7) + 1} ${n}`));
+    const s1 = await shown(url);
+    assert.deepEqual({ view: s1.view, sessions: s1.sessions, offline: s1.offline, locked: s1.locked, compacting: s1.compacting }, { view: 'working', sessions: 3, offline: false, locked: false, compacting: false });
+    assert.deepEqual(lines.slice(0, 10), ['working', 'permission', 'done', 'waiting', 'offline', 'insert-key', 'ended', 'compaction', 'compact-cmd', 'working'].map((n, i) => `demo: ${(i % 9) + 1} ${n}`));
   } finally {
     player.stop();
     await live.close();
@@ -102,17 +105,17 @@ test('jump(n) reaches scene n for every n, from any state, and leaves no overlay
     await player.idle();
     const expects = buildLoop(1).map((s) => s.expect);
     // descending, then ascending: the old loop's sessions and overlays must not leak into the next scene
-    for (const n of [7, 6, 5, 4, 3, 2, 1, 1, 2, 3, 4, 5, 6, 7]) {
+    for (const n of [9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9]) {
       await player.jump(n);
       const s = await shown(url);
-      assert.deepEqual({ view: s.view, sessions: s.sessions }, expects[n - 1], `jump ${n}`);
+      assert.deepEqual({ view: s.view, sessions: s.sessions, ...(expects[n - 1].compacting ? { compacting: true } : {}) }, expects[n - 1], `jump ${n}`);
       assert.equal(s.offline, n === 5, `offline after jump ${n}`);
       assert.equal(s.locked, n === 6, `locked after jump ${n}`);
     }
     await player.jump(0);
-    await player.jump(8);
+    await player.jump(10);
     await player.jump(1.5);
-    assert.equal((await shown(url)).view, 'ended', 'jumps outside 1..7 do nothing');
+    assert.equal((await shown(url)).view, 'done', 'jumps outside 1..9 do nothing');
   } finally {
     player.stop();
     await live.close();
@@ -309,9 +312,46 @@ test('DEMO_CODES: Digit1-9, P, [ and ], none of them bound in the laptop key map
 test('scenes: ids are fresh per loop, overlays are cleared by the loop end, Claude events come from the recordings', () => {
   const ids = (loop) => new Set(buildLoop(loop).flatMap((s) => s.steps.map((x) => x.event.session_id)).filter(Boolean));
   const [one, two] = [ids(1), ids(2)];
-  assert.equal(one.size, 3);
+  assert.equal(one.size, 4, 'three sessions and the compaction one');
   for (const id of one) assert.ok(!two.has(id));
   assert.deepEqual(clearOverlays().map((e) => e.hook_event_name), ['RevviewNetwork', 'RevviewDataLock']);
   const names = new Set(buildLoop(1).flatMap((s) => s.steps.map((x) => x.event.hook_event_name)));
   for (const n of names) assert.ok(!n.startsWith('Revview') || ['RevviewContext', 'RevviewNetwork', 'RevviewDataLock'].includes(n), n);
+});
+
+test('compaction scenes: the real recording, events 0-8 and 9-20, one session re-addressed to revview, "Compacting context" on the bar', async () => {
+  const rec = fs.readFileSync(new URL('../../fixtures/sessions/compaction.jsonl', import.meta.url), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  const [auto, cmd] = buildLoop(1).slice(7);
+  assert.deepEqual([auto.name, cmd.name], ['compaction', 'compact-cmd']);
+  const claude = (scene) => scene.steps.map((x) => x.event).filter((e) => !e.hook_event_name.startsWith('Revview'));
+  const key = (e) => [e.hook_event_name, e.source, e.trigger, e.tool_name].join('/');
+  assert.deepEqual(claude(auto).map(key), rec.slice(0, 9).map(key));
+  assert.deepEqual(claude(cmd).map(key), rec.slice(9, 21).map(key));
+  assert.deepEqual(claude(auto).at(-1).hook_event_name, 'SubagentStop');
+  assert.deepEqual(claude(cmd).slice(-2).map((e) => e.hook_event_name + (e.trigger ?? '')), ['PreCompactmanual', 'SubagentStop']);
+  for (const e of [...claude(auto), ...claude(cmd)]) {
+    assert.equal(e.session_id, 'demo1-compaction');
+    assert.ok(e.cwd === undefined || e.cwd === '/home/user/revview');
+  }
+  const ok = ['RevviewContext'];
+  for (const e of [...auto.steps, ...cmd.steps].map((x) => x.event)) assert.ok(!e.hook_event_name.startsWith('Revview') || ok.includes(e.hook_event_name));
+  assert.deepEqual([auto.expect, cmd.expect], [{ view: 'working', sessions: 1, compacting: true }, { view: 'done', sessions: 1, compacting: true }]);
+  // /state carries the mark (the words are the view's: emulator/tests/demo-keys.spec.js)
+  const { live, url } = await demoServer();
+  const { player } = newPlayer(url);
+  try {
+    player.start();
+    await player.idle();
+    await player.jump(8);
+    let s = await shown(url);
+    assert.deepEqual([s.view, s.compacting], ['working', true]);
+    await player.jump(9);
+    s = await shown(url);
+    assert.deepEqual([s.view, s.compacting], ['done', true]);
+    await player.jump(7);
+    assert.equal((await shown(url)).compacting, false, 'ending the sessions clears it');
+  } finally {
+    player.stop();
+    await live.close();
+  }
 });

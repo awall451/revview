@@ -375,7 +375,7 @@ if [ "$mode" = live ]; then
 else
   node "$root/emulator/demo/player.js" --url "http://127.0.0.1:$actual" &
   dpid=$!
-  echo "demo mode: 1-7 scenes, P pause, [ ] slower/faster; see --keys"
+  echo "demo mode: 1-9 scenes, P pause, [ ] slower/faster; see --keys"
 fi
 player_noted=
 note_player() { # the demo player stopped by itself while the server is up: the bar still works

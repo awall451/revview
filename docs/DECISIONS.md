@@ -1486,8 +1486,10 @@ Tested in the unit suite only (fakes, injected timers); nothing run on a Pi.
   `emulator/wb4/recipes.js`); offline and insert key by `RevviewNetwork` / `RevviewDataLock`, the events the product's
   own monitors send (accepted over POST under the dev bridge). The permission prompt is finished from its recording
   before "done", and all three sessions end for "ended", because the bar shows the neediest session and "ended" only
-  when the last one goes. **Compaction is left out:** the board has no compaction view (a compacting session is
-  WORKING), so a scene would repeat "working". So the keys are 1-7; 8 and 9 do nothing.
+  when the last one goes. **Compaction (added later, keys 8 and 9):** the bar shows
+  "Compacting context" in the tool slot while a session compacts (state `compacting`). Scene 8 = recording events 0-8 (auto compaction
+  mid-turn: WORKING), scene 9 = events 9-20 (it ends, the turn ends, `/compact` at the prompt: DONE), one extra session `demo<loop>-compaction`
+  (repo revview). Originally the keys were 1-7 and 8 and 9 did nothing.
 - **Loop and jumps:** a loop ends with SessionEnd for its sessions and both overlays cleared; the next loop uses fresh
   session ids (`demo<loop>-<repo>`: ended ids are remembered by the board). A jump to N does the same, then posts
   everything up to scene N's target at once and paces on from there; a generation counter drops the old run's steps.

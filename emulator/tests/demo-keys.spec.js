@@ -55,7 +55,7 @@ const tap = async (page, key) => {
 };
 
 test.describe('demo keys through the dev bridge', () => {
-  test('1-7 jump to a scene, P pauses, ] and [ change the speed, and a laptop key still reaches the bar', async ({ page }) => {
+  test('1-9 jump to a scene, P pauses, ] and [ change the speed, and a laptop key still reaches the bar', async ({ page }) => {
     await withDemo(async ({ server, player }) => {
       await open(page, server);
 
@@ -89,6 +89,28 @@ test.describe('demo keys through the dev bridge', () => {
       expect(player.status().paused).toBe(true);
       await tap(page, 'Backspace');
       await expect(page.locator('#nav')).toBeHidden();
+    });
+  });
+
+  test('8 and 9 show the compaction: WORKING and DONE, both with "Compacting context" in the tool slot', async ({ page }) => {
+    await withDemo(async ({ server, player }) => {
+      await open(page, server);
+
+      await tap(page, '8');
+      await expect(body(page)).toHaveAttribute('data-view', 'working');
+      await expect(page.locator('#tool')).toHaveText('Compacting context');
+      await expect(page.locator('#tool')).toHaveAttribute('data-compacting', '1');
+      await expect.poll(() => player.status().scene).toBe(8);
+
+      await tap(page, '9');
+      await expect(body(page)).toHaveAttribute('data-view', 'done');
+      await expect(page.locator('#tool')).toHaveText('Compacting context');
+      await expect(page.locator('#tool')).toHaveAttribute('data-compacting', '1');
+
+      // another scene: the line is gone
+      await tap(page, '3');
+      await expect(body(page)).toHaveAttribute('data-view', 'done');
+      await expect(page.locator('#tool')).not.toHaveAttribute('data-compacting', /.+/);
     });
   });
 });

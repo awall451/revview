@@ -307,7 +307,7 @@ run on a real laptop. DECISIONS "Emulator on your laptop 2".
 
 | # | Try | Should happen | State |
 |---|---|---|---|
-| L3 | Linux laptop: `bash emulator/run.sh`, watch one full loop, then press 1-7, P, `[` and `]`; close the window | The bar shows working, permission, done, waiting, offline, insert key, ended at a pace you can follow and loops; the terminal prints one `demo: N scene` line per scene. Each digit jumps to its scene, P freezes and resumes, `[` `]` slow down and speed up; the bar's own keys (M, arrows, Enter, Backspace) still work during the demo. Closing the window ends the script; `pgrep -af 'demo/player.js\|src/server/index.js'` shows nothing | untested |
+| L3 | Linux laptop: `bash emulator/run.sh`, watch one full loop, then press 1-9, P, `[` and `]`; close the window | The bar shows working, permission, done, waiting, offline, insert key, ended, then WORKING and DONE both with "Compacting context" at a pace you can follow and loops; the terminal prints one `demo: N scene` line per scene. Each digit jumps to its scene, P freezes and resumes, `[` `]` slow down and speed up; the bar's own keys (M, arrows, Enter, Backspace) still work during the demo. Closing the window ends the script; `pgrep -af 'demo/player.js\|src/server/index.js'` shows nothing | untested |
 | L4 | Same, `bash emulator/run.sh --live` | No `demo:` lines; the bar stays on its empty state until real Claude Code hooks post to the port; digits do nothing | untested |
 
 ## Emulator on your laptop 3: the guide (2026-11-23)

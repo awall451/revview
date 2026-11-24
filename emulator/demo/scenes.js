@@ -4,8 +4,11 @@
 // RevviewNetwork, RevviewDataLock). `expect` is what the bar SHOWS after the scene's last step (GET /state,
 // boardView): the shown session's view (or the overlay) and how many sessions are on the board.
 //
-// Not a scene: compaction. The board has no compaction view: a compacting session shows WORKING (see
-// fixtures/sessions/compaction.expected.json), so it cannot be told apart on the bar and is left out.
+// Scenes 8 and 9: compaction, from fixtures/sessions/compaction.jsonl, in ONE extra session (repo revview, id ...-compaction).
+// The main state does not change while Claude compacts: the bar says it in the tool line ("Compacting context", `expect.compacting`).
+// 8 ends on the PreCompact of a turn's auto compaction (and its SubagentStop): WORKING + the line. 9 goes on from there: the compaction
+// ends (the line goes away), the turn finishes, then a /compact typed at the prompt (PreCompact manual): DONE + the line. A scene ends
+// on the compacting state (the player's hold shows it); the next scene (or the loop's restart) shows its end.
 import fs from 'node:fs';
 
 function recording(name) {
@@ -23,6 +26,7 @@ function between(events, from, to, lastTo = false) {
 const workingTurn = recording('working-turn');
 const permissionPrompt = recording('permission-prompt');
 const idlePrompt = recording('idle-prompt');
+const compaction = recording('compaction');
 const start = is('SessionStart');
 const lastBash = workingTurn.findLastIndex(is('PostToolUse', { tool_name: 'Bash' }));
 
@@ -36,6 +40,10 @@ const PARTS = {
   permission: between(permissionPrompt, is('UserPromptSubmit'), is('Notification', { notification_type: 'permission_prompt' })),
   // the prompt answered, on the real recording: the tool's result and the turn's Stop
   permissionRest: between(permissionPrompt, is('PostToolUse', { tool_name: 'Bash' }), is('Stop')),
+  // recording events 0-8: start, prompt, reads, a PreCompact not followed by a compaction, a read, the auto PreCompact, SubagentStop
+  compactAuto: compaction.slice(0, 9),
+  // events 9-20: SessionStart compact + PostCompact, a read, the turn's Stop, then `/compact` at the prompt: PreCompact manual + SubagentStop
+  compactManual: compaction.slice(9, 21),
   waiting: between(idlePrompt, is('UserPromptSubmit'), is('Notification', { notification_type: 'idle_prompt' })),
 };
 if (!start(PARTS.starts.revview[0]) || !start(PARTS.starts.garden[0]) || !start(PARTS.starts.notes[0])) throw new Error('demo: recording does not start with SessionStart');
@@ -44,6 +52,7 @@ export const REPOS = Object.freeze(['revview', 'garden', 'notes']);
 
 export const sessionId = (loop, repo) => `demo${loop}-${repo}`;
 
+const COMPACTION = 'compaction';
 const readdress = (events, id, repo) => events.map((ev) => {
   const { cwd, ...rest } = ev;
   return {
@@ -64,7 +73,7 @@ export const clearOverlays = () => [net(true), lock(false)];
 
 // The loop's last events: every demo session still on the board ends (an id the board never saw is harmless).
 export function endLoop(loop) {
-  return REPOS.map((repo) => ({ hook_event_name: 'SessionEnd', session_id: sessionId(loop, repo) }));
+  return [...REPOS, COMPACTION].map((repo) => ({ hook_event_name: 'SessionEnd', session_id: sessionId(loop, repo) }));
 }
 
 // The scenes of loop number `loop` (session ids derive from it, so every loop's ids are fresh).
@@ -72,6 +81,7 @@ export function buildLoop(loop) {
   const [a, b, c] = REPOS.map((repo) => ({ repo, id: sessionId(loop, repo) }));
   const as = (s, events) => readdress(events, s.id, s.repo);
   const ctx = (s) => ({ hook_event_name: 'RevviewContext', session_id: s.id, cwd: `/home/user/${s.repo}`, branch: 'main' });
+  const d = { repo: 'revview', id: sessionId(loop, COMPACTION) };
   const starts = [a, b, c].flatMap((s) => [...as(s, PARTS.starts[s.repo]), ctx(s)]);
   return [
     { name: 'working', steps: [...steps(starts, 0), ...steps(as(a, PARTS.working))], expect: { view: 'working', sessions: 3 } },
@@ -82,5 +92,9 @@ export function buildLoop(loop) {
     { name: 'offline', steps: steps([net(false)]), expect: { view: 'offline', sessions: 3 } },
     { name: 'insert-key', steps: steps([net(true), lock(true)]), expect: { view: 'insert-key', sessions: 3 } },
     { name: 'ended', steps: steps([lock(false), ...endLoop(loop)]), expect: { view: 'ended', sessions: 0 } },
+    // one session of its own, started here (the three above have ended): auto compaction in the middle of a turn
+    { name: 'compaction', steps: [...steps([...as(d, PARTS.compactAuto.slice(0, 1)), ctx(d)], 0), ...steps(as(d, PARTS.compactAuto.slice(1)))], expect: { view: 'working', sessions: 1, compacting: true } },
+    // the compaction ends, the turn finishes, then /compact at the prompt
+    { name: 'compact-cmd', steps: steps(as(d, PARTS.compactManual)), expect: { view: 'done', sessions: 1, compacting: true } },
   ];
 }

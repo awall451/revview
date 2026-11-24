@@ -67,10 +67,10 @@ server did not start) or the server stopped while running; 2 for a bad option.
 ## What you see
 
 By default you see the **demo**. A small player (`emulator/demo/player.js`) feeds the server the recorded Claude Code
-sessions from `fixtures/sessions/`, shown as three sessions called revview, garden and notes. It loops through seven
+sessions from `fixtures/sessions/`, shown as three sessions called revview, garden and notes. It loops through nine
 scenes, and the terminal prints a `demo: N scene` line for each:
 
-1. working  2. permission  3. done  4. waiting  5. offline  6. insert-key  7. ended
+1. working  2. permission  3. done  4. waiting  5. offline  6. insert-key  7. ended  8. compaction  9. compact-cmd
 
 What each scene puts on the screen (the big state word of the bar):
 
@@ -83,6 +83,8 @@ What each scene puts on the screen (the big state word of the bar):
 | offline | OFFLINE |
 | insert-key | INSERT KEY (the data is locked: insert the key stick) |
 | ended | CLAUDE EXITED (no Claude Code session is running) |
+| compaction | WORKING, the tool line reads "Compacting context" (Claude compacts in the middle of a turn) |
+| compact-cmd | DONE, the tool line reads "Compacting context" (a `/compact` typed at the prompt); scene 8 and 9 are one session, revview |
 
 The digit keys jump to a scene; P pauses; `[` and `]` slow down and speed up (the cheatsheet lists them).
 
@@ -132,9 +134,9 @@ R         read-aloud    read aloud      stop speech
 Esc       cancel        Esc to Claude                Ctrl+C
 N         deny          deny
 M         menu          menu
-
 Demo keys (demo mode only; the demo player takes them, not the bar):
-  1-7  jump: working, permission, done, waiting, offline, insert-key, ended
+  1-9  jump: working, permission, done, waiting, offline, insert-key, ended,
+       compaction (mid-turn auto), compact-cmd (/compact at the prompt)
   P  pause / continue          [  slower          ]  faster
 In the demo these change the screen: Left, Right, Up, Down, M, Backspace held
 (go to the session that needs you most). Enter picks a row in a list or menu.
