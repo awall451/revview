@@ -464,3 +464,5 @@ Tests changed on purpose: `board.test.js` (two more keys), `emulator-fixtures.te
 Submitted `ready/thermal` and these notes stacked on it. `tools/check` untouched. Cost: about $4.
 
 Gate: `thermal` (4f761d2) and `lead-notes-40` MERGED, 1651 tests; branches deleted; owner issue set done, owner message replied done, publish requested. Follow-up note: `lead-notes-40b`.
+
+After the merge: `lead-notes-40b` (docs only) FAILED at the gate on the new server test in `tests/unit/thermal.test.js`: it waited for "one pending timer", which is also true mid-tick when one read is done and the other read's 4 s timeout is still armed, so the test sometimes fired the timeout instead of the poll (30 failures in 100 runs under CPU load). Test bug only; fixed on `work/thermal-flake` 3223da3 (the fake timers tell poll timers from read timeouts; 200 of 200 under load; full check 1651) by an `area-lead-core` on Sonnet, submitted as `ready/thermal-flake` with these notes stacked on it. Lesson: the review-round fix to "deterministic waits" was not proven under load before it merged; ask for a looped run under load whenever a test waits on timers.
