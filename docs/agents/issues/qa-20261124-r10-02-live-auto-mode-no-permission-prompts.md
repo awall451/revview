@@ -24,3 +24,5 @@ Enter/N, switch the session to "manual mode" with shift+tab in the attached wind
 seen with.
 
 The keys themselves work once a prompt shows (see the round report): Enter allowed, N denied, "Too early" held.
+
+Status: fixed on work/live-gaps (see docs/DECISIONS.md "Live emulator gaps (cycle 36)")

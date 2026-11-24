@@ -339,7 +339,7 @@ while :; do
   if ! kill -0 "$spid" 2> /dev/null; then
     # claude ended at once: its tmux window closed with it, so the server's own tmux error follows
     if [ "$mode" = live ] && grep -qE 'sessions: Command failed: tmux|no server running' "$log" 2> /dev/null; then
-      echo "run.sh: Claude exited at once, so no session could start. Run \`claude\` once in a normal terminal to see why (is it signed in?)." >&2
+      echo "run.sh: Claude exited at once, so no session could start. Run \`claude\` once in a normal terminal to see why (not signed in, or a first-run or trust question answered with exit?)." >&2
       exit 1
     fi
     fail "the server stopped while starting"
@@ -356,12 +356,12 @@ done
 # --live: Claude ending within the first claude_window seconds after the server is up is a start failure (not signed in, a
 # first run that quits, a crash): say so and stop, exit 1 (as when it ends before the server is up). Later the run goes on
 # as before: a session the user ends normally is not an error.
-claude_window=10
+claude_window=${REVVIEW_EMU_CLAUDE_WINDOW:-10} # the override is for the unit tests only
 claude_until=$((SECONDS + claude_window))
 check_claude() {
   [ "$mode" = live ] && [ "$SECONDS" -le "$claude_until" ] || return 0
   tmux -S "$sock" has-session -t revview 2> /dev/null && return 0
-  echo "run.sh: Claude exited within $claude_window s of starting, so there is no session. Run \`claude\` once in a normal terminal to see why (is it signed in?)." >&2
+  echo "run.sh: Claude exited within $claude_window s of starting, so there is no session. Run \`claude\` once in a normal terminal to see why (not signed in, or a first-run or trust question answered with exit?)." >&2
   exit 1
 }
 
@@ -369,6 +369,7 @@ if [ "$mode" = live ]; then
   check_claude # it may have ended while the server came up
   echo "live mode: no demo; Claude Code runs in $live_dir and sends its real Claude Code hook events to 127.0.0.1:$actual"
   printf 'attach: tmux -S %q attach -t revview\n' "$sock"
+  echo "if the bar stays on STARTING, attach: Claude may be asking a question (trust this folder?)"
   if [ -n "${TMUX:-}" ]; then echo "(you are inside tmux: run the attach line from a shell outside tmux, or prefix it with TMUX=)"; fi
   echo "detach again with Ctrl-b d; closing the window, Ctrl+C or run.sh --stop ends this Claude session"
 else

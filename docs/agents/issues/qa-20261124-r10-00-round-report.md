@@ -60,3 +60,5 @@ long hold on a real prompt or turn (L8's Esc parts). R read-aloud. Global hooks 
 server alongside (L12). REVVIEW_PROJECTS with two folders against a real Claude. A brand-new Claude install that never
 finished onboarding. The early-exit check with a browser window (only --no-browser was used for it; unit tests cover
 the other).
+
+Status: report only; findings r10-01..r10-04 fixed on work/live-gaps

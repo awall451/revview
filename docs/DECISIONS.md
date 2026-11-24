@@ -1646,9 +1646,28 @@ real Claude Code (bench L7-L15 stay `untested`).
 - **Claude exits early.** After the server answers, `run.sh --live` checks (`tmux has-session`, every 0.2 s in the loops it
   already has, with or without a browser) for the first 10 s (`claude_window`). If the Claude session is gone it prints
   "run.sh: Claude exited within 10 s of starting, so there is no session. Run `claude` once ..." and exits 1 through the
-  normal clean-up (tmux server, browser, server, work dir, pid file and directory all gone). 10 s catches a not-signed-in
-  or first-run quit and a crash after start, yet is short enough that a session the user ends on purpose is not an error.
+  normal clean-up (tmux server, browser, server, work dir, pid file and directory all gone). 10 s catches a first-run quit or a crash after start
+  (QA round 10 found that a not-signed-in Claude does not end, see below), yet is short enough that a session the user ends on purpose is not an error.
   After the window nothing is checked: the run behaves as before (a Claude that ends later leaves the server and the bar
   up; Ctrl+C or the window ends the run, exit 0). Exit status 1, as for "Claude exited at once" (r9-03).
   Tests: stand-in that exits after 1.5 s, one killed after 1.5 s (both with and without a browser), and one that ends
   after 12 s (no message, run still up, clean stop).
+
+QA round 10 (a real Claude 2.1.331 on the build VM, headless page; nothing on a laptop) found four small things, fixed on
+the same branch:
+
+- **r10-01 trust question.** A folder Claude has not opened asks "trust this folder?" in the tmux window; no hook fires, so
+  the bar goes STARTING then UNKNOWN, and the default answer "No, exit" ends Claude. The guide (Live, Troubleshooting) now
+  says to attach and answer; `run.sh` prints one more line after `attach:` ("if the bar stays on STARTING, attach ...");
+  both early-exit messages now say "not signed in, or a first-run or trust question answered with exit?". Nothing
+  answers the question automatically.
+- **r10-02 permission mode.** 2.1.330/2.1.331 started in auto mode and showed no prompt; after Shift+Tab ("manual mode on")
+  prompts came. Guide, L7, L8, L14 say how to get a prompt, without claiming what a user's own Claude starts in.
+- **r10-03 not signed in.** The real not-signed-in Claude stayed up (WAITING, then "Turn failed: authentication failed").
+  The 10 s message is for a Claude that really ends (seen: the trust question's "No, exit"; a crash; a first run that
+  quits was not tried). Guide, L15 and the sentence above are corrected.
+- **r10-04 late exit.** run.sh returns up to ~0.7 s before its Claude has ended. Wording only (guide, L11): wait a second
+  before the `ps` check; no clean-up code changed.
+- **Tests.** `REVVIEW_EMU_CLAUDE_WINDOW` (default 10) exists only so the "ends later than the window" test can use a 3 s
+  window against a 12 s stand-in; it is not a user option. The 1.5 s stand-ins accept either exit message (a slow server
+  can hit "exited at once"); a new test ends a stand-in 1 s after the server is up and requires the within-window message.

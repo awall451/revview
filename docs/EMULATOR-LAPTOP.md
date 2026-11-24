@@ -89,6 +89,8 @@ The digit keys jump to a scene; P pauses; `[` and `]` slow down and speed up (th
 With `--live` there is no demo. `run.sh` starts a real Claude Code session and the bar shows that session (see
 "Live: a real Claude Code session" below). Until its first hook arrives the bar shows STARTING (the
 same as a session started from the menu: at most 30 s, then UNKNOWN, "No events from this session yet", if no hook came).
+If the bar stays on STARTING or falls to UNKNOWN, attach with the printed `attach:` line: Claude may be asking whether
+you trust the folder (or another first-run question), and it waits for your answer there.
 
 **Nothing is sent to a Claude, ever, in demo mode.** No real session is behind the demo, so only some keys do
 anything you can see:
@@ -165,6 +167,10 @@ directory of yours (mode 700): `$XDG_RUNTIME_DIR/revview-emu` when that variable
 to others is not used. If none can be had, `run.sh` says `run.sh: no pid file; --stop will not find this run` and
 keeps running (stop it with Ctrl+C in its terminal). The file is removed when the script ends.
 
+With `--live`, `run.sh` can return up to about a second before its Claude process has ended (QA round 10 saw 0.5 to
+0.7 s). If you check for leftovers with `ps`, wait a second first, then look. A `claude` still listed right after the
+stop is not a leak.
+
 `--stop` stops EVERY `run.sh` of yours that is running (they may have different ports). It looks in ALL of
 `$XDG_RUNTIME_DIR/revview-emu` (when set), `/run/user/<uid>/revview-emu`, `${TMPDIR:-/tmp}/revview-emu-<uid>` and
 `/tmp/revview-emu-<uid>`, so it finds a run started in another shell (a desktop terminal and an ssh or WSL shell
@@ -178,9 +184,10 @@ It works from any directory, however `run.sh` was started.
 
 ## Live: a real Claude Code session
 
-**None of this has been run with a real, signed-in Claude Code.** It is tested only with a stand-in `claude` (a small
-script) on the build VM. Treat it as untested until the bench items in `docs/BENCH-TEST.md` ("Emulator on your laptop 4")
-are done.
+**Nothing of this has been run on a laptop.** It is tested with a stand-in `claude` (a small script) on the build VM.
+QA round 10 also ran it on the build VM with a real, signed-in Claude Code 2.1.331 (it started as 2.1.330 and updated
+itself), with the page in a headless browser, not a real window. Treat it as untested on a laptop until the bench items
+in `docs/BENCH-TEST.md` ("Emulator on your laptop 4") are done.
 
 What you need, besides the list at the top: `tmux`, and Claude Code (`claude`) installed and signed in. `run.sh --live`
 checks both are on your `PATH` before it starts anything; if one is missing it says which and exits 1.
@@ -207,10 +214,22 @@ attach: tmux -S <socket> attach -t revview
 Run that in another terminal and you are in the Claude session: type to it as usual, detach with Ctrl-b d (that leaves
 it running). If you are already inside tmux, run it outside tmux, or prefix it with `TMUX=`.
 
+**A folder Claude has not opened before.** Claude Code may ask "Is this a project you created or one you trust?" in the
+tmux window and wait. No hook fires until you answer, so the bar shows STARTING and after 30 s UNKNOWN. Attach with the
+`attach:` line and answer there (the highlighted default is "No, exit", which ends Claude). `run.sh` does not answer it
+for you. Another first-run question looks the same.
+
 **The keys act on that session.** Enter (a tap) answers a shown permission prompt with allow, N denies it, Esc sends
 Escape to Claude (held long: Ctrl+C), and Space (push-to-talk) sends its key to Claude. Whether voice input works
 depends on Claude Code and a microphone; this is unproven. Up, Down, Left, Right, M, Backspace and R work as on the
 Pi. In demo mode nothing is sent to a Claude.
+
+**Permission prompts depend on Claude's permission mode.** There is a prompt for Enter and N only when Claude asks. In
+QA round 10, Claude Code 2.1.330/2.1.331 on the build VM started in "auto mode" (footer "auto mode on (shift+tab to
+cycle)"), and Write, `cat`, `echo` and `date` ran with no prompt and no NEEDS PERMISSION. After one Shift+Tab in the
+attached window the footer said "manual mode on" and the same kind of command showed NEEDS PERMISSION. QA saw the cycle
+auto, manual, accept edits, plan, auto. Which mode your own Claude starts in is not known here: to try Enter and N,
+attach and press Shift+Tab until the footer says "manual mode".
 
 **"Too early: press again".** A button answers a permission prompt only after the bar has shown it for 1.5 seconds
 (and 1.5 seconds after Left or Right switched to it), so a tap that comes sooner does nothing to Claude and the bar says
@@ -275,11 +294,18 @@ The temp directory `revview-emu.XXXXXX` in your `TMPDIR` (or `/tmp`) was not rem
 **`--live` says `tmux` or `claude` was not found.** Install it, or put its folder on the `PATH` of the shell you run
 `run.sh` from. Nothing was started; the exit code is 1.
 
-**`--live` says `Claude exited at once` or `Claude exited within 10 s of starting`.** `claude` started and ended within a
-moment (the first before the page was up, the second in the first 10 s after), so there is no session (exit 1, everything
-cleaned up). A Claude that you end yourself later is not an error: the run goes on as it did before. The usual cause is that it is not signed in or needs a first-run answer. Its own message is gone with the tmux
-window, so run `claude` once in a normal terminal, answer whatever it asks (sign in), leave it, and run `run.sh --live`
-again.
+**`--live` says `Claude exited at once` or `Claude exited within 10 s of starting`.** `claude` started and ended within
+a moment (the first before the page was up, the second in the first 10 s after), so there is no session (exit 1,
+everything cleaned up). Ending the only Claude yourself in the first 10 s is reported the same way. A Claude that you end
+yourself later is not an error: the run goes on as it did before. This is for a Claude that really ends. Seen on the
+build VM (QA round 10): answering the folder-trust question with its default "No, exit". Not tried: a first run that
+quits. A Claude that is not signed in did not end there: it stayed up, the bar showed WAITING FOR ME and, after the first
+prompt, "Turn failed: authentication failed" ("Not logged in"); a brand-new install that never finished onboarding was
+not tried. Its own message is gone with the tmux window, so run `claude` once in a normal terminal, answer whatever it
+asks (trust the folder, sign in), leave it, and run `run.sh --live` again.
+
+**The bar stays on STARTING, then UNKNOWN, and nothing happens.** Claude is probably waiting for an answer (trust this
+folder?) in the tmux window: attach with the printed `attach:` line and answer there.
 
 **`--live` says DIR must not contain `#`.** The server refuses a folder with `#` or a control character in its path
 (exit 2, nothing started). Use another folder, or a link to it without those characters (the current directory counts

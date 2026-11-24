@@ -18,3 +18,5 @@ parent is pid 1 and whose `--settings` file no longer exists. That looks like a 
 
 Expected: either run.sh waits (up to a few seconds) for the pane processes of its tmux server to end before it
 returns, or L11 and the guide say "wait a second, then check".
+
+Status: fixed on work/live-gaps (see docs/DECISIONS.md "Live emulator gaps (cycle 36)")

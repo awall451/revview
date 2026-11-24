@@ -23,3 +23,5 @@ would look like STARTING -> UNKNOWN, as in r10-01).
 Expected: write down what was seen (not signed in = the run goes on, the bar says "Turn failed: authentication
 failed"), mark the brand-new-install case as unchecked, and name the trust question as a known cause of the early
 exit instead of the sign-in.
+
+Status: fixed on work/live-gaps (see docs/DECISIONS.md "Live emulator gaps (cycle 36)")

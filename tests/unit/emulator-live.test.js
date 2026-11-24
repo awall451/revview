@@ -522,7 +522,8 @@ for (const [name, body] of [
       const run = startLive(browser ? ['--live'] : ['--live', '--no-browser'], { fx, browser });
       try {
         assert.equal((await run.exit()).code, 1);
-        assert.match(run.err, /run\.sh: Claude exited within \d+ s of starting/);
+        // on a slow machine the server may answer after the stand-in has ended: the older message then
+        assert.match(run.err, /run\.sh: Claude exited (within \d+ s of starting|at once)/);
         assert.match(run.err, /Run `claude` once in a normal terminal/);
         assert.doesNotMatch(run.err, /server stopped/);
         assert.deepEqual(procsInDirs(run.tmp), []);
@@ -534,10 +535,29 @@ for (const [name, body] of [
   }
 }
 
+test('c36-02b: a claude that ends a clear time after the server is up gives the within-window message (only the new path)', async () => {
+  const fx = liveFixture();
+  const marker = path.join(fx.dir, 'end-now');
+  fs.writeFileSync(path.join(fx.shim, 'claude'), `#!/bin/bash\nwhile [ ! -e "${marker}" ]; do sleep 0.05; done\nexit 1\n`, { mode: 0o755 });
+  const run = startLive(['--live', '--no-browser'], { fx });
+  try {
+    await run.attach(); // printed once the server answers
+    await sleep(1000);
+    fs.writeFileSync(marker, '');
+    assert.equal((await run.exit()).code, 1);
+    assert.match(run.err, /run\.sh: Claude exited within 10 s of starting/);
+    assert.doesNotMatch(run.err, /Claude exited at once/);
+    assert.match(run.err, /Run `claude` once in a normal terminal/);
+    assert.deepEqual(fs.readdirSync(run.tmp), []);
+  } finally { run.finish(); }
+});
+
 test('c36-03: a claude that ends later than the window is not reported as an error (the run goes on as before)', async () => {
   const fx = liveFixture();
+  // REVVIEW_EMU_CLAUDE_WINDOW is a test-only override (default 10): window 3 s, claude ends 12 s after it started, so the
+  // margin is large even when the machine is loaded
   fs.writeFileSync(path.join(fx.shim, 'claude'), '#!/bin/bash\nsleep 12\nexit 0\n', { mode: 0o755 });
-  const run = startLive(['--live', '--no-browser'], { fx });
+  const run = startLive(['--live', '--no-browser'], { fx, env: { REVVIEW_EMU_CLAUDE_WINDOW: '3' } });
   try {
     await run.attach();
     await sleep(14500);

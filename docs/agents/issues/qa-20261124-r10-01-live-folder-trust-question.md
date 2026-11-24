@@ -30,3 +30,5 @@ round saw the same behaviour in the emulator.
 Expected: the Live section (and the `attach:` hint, or the UNKNOWN note for a first session) tells the owner that a
 new folder asks for trust in the tmux window: attach, pick "Yes, I trust this folder". The early-exit message should
 not name only the sign-in as the cause.
+
+Status: fixed on work/live-gaps (see docs/DECISIONS.md "Live emulator gaps (cycle 36)")
