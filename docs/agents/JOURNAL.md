@@ -448,3 +448,17 @@ Tests changed on purpose: `pi-data.test.js` (refusals now exit 4), `pi-install.t
 Submitted `ready/pi-leftovers` and these notes stacked on it. `tools/check` untouched. Cost: about $8.
 
 Gate: `pi-leftovers` (66fff51) and `lead-notes-39` MERGED, 1559 tests; branches deleted; owner issue set done, owner message replied done, publish requested. Follow-up note: `lead-notes-39b`.
+
+## 2026-11-24: cycle 40 (one-shot job: throttling and temperature mark)
+
+Job: owner message 20261123T223540Z-o-a0625e (backlog cf4ad5), owner issue 20261123T223531Z-i-5c9049. Nothing else was touched: the Pi-facts one-shot and the owner's note that the proxy is fixed (20261124T021916Z-o-575c89) still wait for a normal cycle. Not too early: all four charter stages are built, so the job was done as proposed.
+
+Dispatched: one `area-lead-core` on Sonnet (the owner's choice), branch `work/thermal`, four commits (server monitor, state and view, pi and docs, emulator), four Sonnet builders. Full check 1650. It also fixed a view bug the new worst case showed (the file name was fitted before `#session` took room in row A).
+
+Review: `reviewer` on Sonnet (core state, installer, tests): approve, no blocking finding. Five smaller points sent back once to an `area-lead-core` on Sonnet and fixed in 4f761d2 (full check 1651): a hung `vcgencmd` could stop polling and leave a mark lit (now SIGKILL, a 4 s limit on each read, no second read while one is stuck); bit 1 (frequency capped) no longer means HOT, since under-voltage sets it too (from memory); two fixed 50 ms sleeps in a test replaced by a bounded wait; the installer adds the user to `video` so `vcgencmd` can open `/dev/vcio` (from memory); the docs say the marks can be absent in the fullest band.
+
+Kit note (nothing for the owner): an area lead now starts in its own worktree and cannot enter another agent's, so the first fix agent returned without doing anything; I removed the first lead's clean worktree and started the fix again with "check out the branch in your own worktree". Brief future fix rounds that way.
+
+Tests changed on purpose: `board.test.js` (two more keys), `emulator-fixtures.test.js` (a flag map per fixture), `pi-install.test.js` (`--netmon --thermal`, groups `input,audio,video`), `pi-setup.test.js`; regenerated expected files add only `hot:false` / `lowPower:false`.
+
+Submitted `ready/thermal` and these notes stacked on it. `tools/check` untouched. Cost: about $4.
