@@ -9,7 +9,8 @@
 #
 # Flags: --input (the wheel-button reader runs inside the server; its file is /etc/revview/buttons.json, the owner's
 # copy of config/buttons.json, written once by install.sh and never overwritten), --sessions (revview's own tmux sessions),
-# --boot (STARTING at key-on, then the REVVIEW_START session) and --netmon (RevviewNetwork events).
+# --boot (STARTING at key-on, then the REVVIEW_START session), --netmon (RevviewNetwork events) and --thermal (HOT / LOW POWER
+# marks from vcgencmd get_throttled and the CPU temperature; quiet when they cannot be read; from memory, untested).
 # NEVER add --dev-bridge: it opens POST /dev/key and is for the emulator only.
 #
 # Ordering: there is deliberately no Requires=, Wants= or After= on the kiosk, the network or the dongle.
@@ -34,7 +35,7 @@ EnvironmentFile=-/etc/revview/data.env
 # Under the read-only root an update would land in RAM and vanish. Claude Code is updated with the overlay off
 # (pi/README.md, Updating). The variable name is in Claude Code 2.1.330; its effect is from memory.
 Environment=DISABLE_AUTOUPDATER=1
-ExecStart=@NODE@ @REVVIEW_DIR@/src/server/index.js --input /etc/revview/buttons.json --sessions --boot --netmon
+ExecStart=@NODE@ @REVVIEW_DIR@/src/server/index.js --input /etc/revview/buttons.json --sessions --boot --netmon --thermal
 Restart=always
 RestartSec=2
 # Do not kill the private tmux server (revview's sessions) when the service restarts: only the node

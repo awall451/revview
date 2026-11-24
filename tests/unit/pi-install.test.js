@@ -203,7 +203,7 @@ test('revview.service: data.env, the auto-updater off, flags unchanged', () => {
   const unit = fs.readFileSync(path.join(ROOT, 'pi/revview.service'), 'utf8').replace(/^#.*$/gm, '');
   assert.match(unit, /^EnvironmentFile=-\/etc\/revview\/data\.env$/m);
   assert.match(unit, /^Environment=DISABLE_AUTOUPDATER=1$/m);
-  assert.match(unit, /--input .*--sessions --boot --netmon/);
+  assert.match(unit, /--input .*--sessions --boot --netmon --thermal/);
 });
 
 test('install.sh: a symlinked ~/.config/labwc is refused: exit 1, nothing at the target', withRoot((r) => {

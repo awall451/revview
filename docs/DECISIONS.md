@@ -1800,3 +1800,22 @@ Tested in the unit suite only; nothing run on a Pi.
 - **Second review:** the missing status is a lost SIGCHLD (the pane stays a zombie, 4 of 12 side by side, none came in 20 s);
   `reap` now runs `run-shell true` once per reap when a status is unknown, which makes tmux collect it (4 of 4), so the real-tmux test expects status 3 strictly (56/56 runs, 4 in parallel; 6/24 fail without it); `null` stays the fallback.
 - **Hangs and odd names:** every tmux command times out after 5 s (child killed, an error for every caller, `has-session` too); the server runs one owned refresh at a time (callers meanwhile share one later run); a backup-named entry that is not a regular file (`lstat`) is noted and left alone.
+
+## Thermal and power mark (cycle 40)
+
+Tested in the unit suite only; nothing run on a Pi.
+
+- **Option `--thermal`, poll every 5 s.** Sources: `vcgencmd get_throttled` (default) and `/sys/class/thermal/thermal_zone0/temp`;
+  overridable with `REVVIEW_THERMAL_VCGENCMD`, `REVVIEW_THERMAL_THROTTLED` and `REVVIEW_THERMAL_TEMP`. `pi/revview.service` has it.
+- **HOT** = throttle bits 1, 2 or 3 ("now") OR CPU temperature >= 80 C, with hysteresis: it stays until the CPU is below 75 C.
+- **LOW POWER** = bit 0 (under-voltage now).
+- **No mark for "has occurred".** Bits 16-19 show nothing: the bar says what is true now. They are logged once, so the journal
+  keeps the history.
+- **Hold of 10 s.** A mark that turns off stays 10 s, so a short dip is seen. Events are posted only when the marks change.
+- **Quiet when unreadable.** A missing or garbage source gives one log line and no mark.
+- **Board-level, not per session.** The marks are quiet outline tags in the band beside the other marks. Never a main state,
+  never replace the state word. `RevviewThermal` is an internal event and is refused over HTTP.
+- **Why.** A throttled or under-powered Pi makes Claude and the bar slow with no visible cause; the mark says the box, not Claude,
+  is the problem. 80 C because the Pi 4B starts soft-limiting about there (from memory).
+- **Not proven:** the sources, the bit meanings and that the service user may call `vcgencmd` (the unit is a user unit; `video`
+  group not added by the installer). BENCH PT-1 to PT-3; `docs/PI-FACTS.md` X08-X10.

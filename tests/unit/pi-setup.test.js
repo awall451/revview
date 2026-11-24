@@ -121,6 +121,7 @@ test('the rendered unit keeps the dongle test rules and has --boot and --netmon'
   assert.match(exec, /--sessions/);
   assert.match(exec, /--boot/);
   assert.match(exec, /--netmon/);
+  assert.match(exec, /--thermal/);
   assert.doesNotMatch(exec, /--dev-bridge/);
   assert.doesNotMatch(unit.replace(/^#.*$/gm, ''), /^(Requires|Wants|After|Before|BindsTo)=/m);
   assert.match(unit, /^WantedBy=default\.target$/m);

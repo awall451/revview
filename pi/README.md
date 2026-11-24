@@ -15,7 +15,7 @@ not marked here (package names, paths, keys, flags), is listed with how to check
 | `install.sh` | The one script to run, as root. Idempotent: re-run it any time. `--dry-run` shows what it would do; `--root DIR` works on a copy of a file tree (tests). |
 | `setup.mjs` | Called by `install.sh`: every file edit and generated file (below). Pure functions, unit-tested. |
 | `kiosk.sh` | The kiosk respawn loop: Chromium on the boot page, restarted when it exits; pause markers. |
-| `revview.service` | systemd USER unit template of the server: `--input --sessions --boot --netmon`, never `--dev-bridge`, no ordering on the kiosk. |
+| `revview.service` | systemd USER unit template of the server: `--input --sessions --boot --netmon --thermal`, never `--dev-bridge`, no ordering on the kiosk. |
 | `70-revview-dongle.rules` | udev rule TEMPLATE for the wheel-button dongle (group `input`): the installer fills in the USB ids of `/etc/revview/buttons.json` and writes the rule on every run. |
 | `lib.sh` | Sourced by the other scripts: reads the mount table; refuses to write when `/` is the read-only overlay or `/boot/firmware` is read-only. |
 | `readonly.sh` | `status`, `enable`, `disable` of the read-only root (raspi-config's overlay file system and read-only boot partition). Run last. |
@@ -307,6 +307,16 @@ need changing. The paths in that file are the ones above.
 - **Network** (`--netmon`): every 10 s the server checks for a default route on any interface (Wi-Fi hotspot, or the
   bench's Ethernet; nothing depends on either) and opens a TCP connection to the Claude API host. Two failures in a
   row show OFFLINE; one success clears it.
+- **Thermal and power** (`--thermal`): every 5 s the server reads `vcgencmd get_throttled` and
+  `/sys/class/thermal/thermal_zone0/temp`. A quiet outline tag `HOT` shows in the band when the CPU is throttled or
+  soft-limited now (bits 1, 2, 3) or at 80 C and above (until it is below 75 C); `LOW POWER` shows while the supply is
+  under-voltage now (bit 0). The "has occurred" bits show nothing (they are logged once). A missing `vcgencmd` or an
+  unreadable value is quiet: one log line, no mark. Overrides (for tests and odd images): `REVVIEW_THERMAL_VCGENCMD`
+  (the command), `REVVIEW_THERMAL_THROTTLED` and `REVVIEW_THERMAL_TEMP` (a value instead of reading). **From memory,
+  untested on hardware** (bench PT-1 to PT-3). The unit is a user unit, so it has no `SupplementaryGroups=`: on
+  Raspberry Pi OS `vcgencmd` is `/usr/bin/vcgencmd` and talks to `/dev/vcio`, which is group `video` (from memory).
+  The installer adds `input` and `audio` only. If the mark never appears with a Pi that is throttled, run
+  `vcgencmd get_throttled` as the kiosk user and, if it is denied, `sudo usermod -aG video NAME` and log in again.
 - **Buttons**: `src/input` finds the dongle by the USB ids in `/etc/revview/buttons.json` (the unit's `--input`; `config/buttons.json` is only the default it is created from); the user's `input` group lets the
   server read and grab it; a missing dongle shows NO BUTTONS and is retried.
 - **Read aloud**: `espeak-ng` is installed; Piper is optional (section Piper). The user unit runs inside the user's audio session.

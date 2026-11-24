@@ -181,6 +181,9 @@ and `mounts` are WRITTEN FROM MEMORY (`fixtures/pi/data/README.md`).
 | X05 | Piper: release `2023.11.14-2` of `rhasspy/piper`, `piper_linux_aarch64.tar.gz` unpacks to `/opt/piper/piper`; voice `en_US-lessac-medium.onnx` (+ `.json`); `--model ... --output-raw` gives raw 22050 Hz S16_LE | README:230-245; config/speech.json; DECISIONS:838-844, 1267; bench S4B-16 | Not in D or R (check whether D/R has a `piper` package that changed this). Pi: S4B-16 | from memory |
 | X06 | ZMK dongle USB ids `1d50:615e` (default in `config/buttons.json`) | 70-revview-dongle.rules:6-7; DECISIONS:815; bench W1, D5; test pi-install.test.js:291-296 | Not a package. Pi with the dongle: W1, D5 | from memory |
 | X07 | Panel touch ids `0712:000a`, panel mode 400x1280 | setup.mjs:116-120 | DESIGN "Known Pi settings" (owner's Pi 5 build). Pi: P4 | from memory |
+| X08 | `vcgencmd get_throttled` exists on Raspberry Pi OS Trixie (`/usr/bin/vcgencmd`), prints `throttled=0x...`, and the kiosk user may call it (it talks to `/dev/vcio`, group `video`; the installer adds only `input,audio`) | revview.service (`--thermal`); README Thermal; DECISIONS cycle 40 | Pi: PT-3 (unpack `libraspberrypi-bin` from R for the path only) | from memory |
+| X09 | Throttle bits: 0 under-voltage now, 1 arm frequency capped now, 2 currently throttled, 3 soft temperature limit active; 16-19 the same have occurred since boot | README Thermal; DECISIONS cycle 40 | Pi: PT-3 | from memory |
+| X10 | `/sys/class/thermal/thermal_zone0/temp` is the CPU temperature in millidegrees C; the Pi 4B starts soft-limiting at about 80 C | README Thermal; DECISIONS cycle 40 | Pi: PT-1, PT-3 | from memory |
 
 ## Doing the check later (when both domains answer 200)
 
