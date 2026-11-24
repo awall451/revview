@@ -1,11 +1,13 @@
 // Live server: hook scripts POST raw Claude Code hook JSON to /event, the state core
 // (src/state) reduces it, and the new state is pushed to the page over Server-Sent Events.
 // It also serves the view. Binds to 127.0.0.1 only; see src/server/README.md.
-//   node src/server/index.js [port] [--input [path]] [--dev-bridge [--dev-keys file] [--dev-demo]] [--sessions] [--start dir]... [--projects file] [--speech file] [--boot] [--netmon] [--data-lock [dir]]   (port default 8138, or REVVIEW_PORT)
+//   node src/server/index.js [port] [--input [path]] [--dev-bridge [--dev-keys file] [--dev-demo]] [--sessions] [--start dir]... [--projects file] [--speech file] [--boot] [--netmon] [--thermal] [--data-lock [dir]]   (port default 8138, or REVVIEW_PORT)
 //   --boot: key-on start: show STARTING until the first session is on the board; with no tmux windows, start one session in $REVVIEW_START (or each --start dir)
 //   --data-lock [dir]: the data is locked until the topmost mount on dir (default /srv/revview-data, or $REVVIEW_DATA_MOUNT) is ext4 from /dev/mapper/revview-data;
 //     locked shows INSERT KEY, no session starts (key-on and New session wait); a posted RevviewDataLock is only a poke to re-read the mount table
 //   --netmon: watch the network (default route + TCP connect to $REVVIEW_NETMON_HOST, default api.anthropic.com:443); offline after 2 failures, online after 1 success
+//   --thermal: watch temperature and the Pi throttle flags: HOT and LOW POWER marks (sources: $REVVIEW_THERMAL_TEMP file, default /sys/class/thermal/thermal_zone0/temp;
+//     `vcgencmd get_throttled`, command path $REVVIEW_THERMAL_VCGENCMD, or a file $REVVIEW_THERMAL_THROTTLED instead of the command); a missing source is logged once
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -13,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { initialBoard, reduceBoard, boardView, pendingPrompts, shownPrompt, selectedKey, KEYON_ENDED_NOTE } from '../state/index.js';
 import { createDataLockMonitor, DEFAULT_DATA_MOUNT } from './datalock.js';
 import { createNetMonitor, createDefaultProbe } from './netmon.js';
+import { createThermalMonitor, createDefaultReaders, thermalEnv, DEFAULT_TEMP_PATH, DEFAULT_VCGENCMD } from './thermal.js';
 import { createSessionRunner, createActions, createPermissionRegistry, loadProjects } from '../sessions/index.js';
 import { startInput, createInputPipeline } from '../input/index.js';
 import { loadConfig, ConfigError, DEFAULT_CONFIG_PATH } from '../input/keymap.js';
@@ -40,7 +43,7 @@ const GESTURES = ['tap', 'hold', 'long-hold'];
 const LAUNCH_LIMIT_MS = 30000;
 // a compaction took 5-7 s in the recordings and 1-2 min in long sessions; this bounds a lost end event
 export const COMPACT_LIMIT_MS = 180000;
-const INTERNAL_EVENTS = ['RevviewInterrupted', 'RevviewAnswered', 'RevviewSelect', 'RevviewNav', 'RevviewOwned', 'RevviewProjects', 'RevviewNote', 'RevviewBootBegin', 'RevviewBootDone', 'RevviewLaunching', 'RevviewLaunchExpired', 'RevviewNoSessionPress', 'RevviewCompactExpired', 'RevviewEndReason'];
+const INTERNAL_EVENTS = ['RevviewInterrupted', 'RevviewAnswered', 'RevviewSelect', 'RevviewNav', 'RevviewOwned', 'RevviewProjects', 'RevviewNote', 'RevviewBootBegin', 'RevviewBootDone', 'RevviewLaunching', 'RevviewLaunchExpired', 'RevviewNoSessionPress', 'RevviewCompactExpired', 'RevviewEndReason', 'RevviewThermal'];
 export const MAX_SSE_CLIENTS = 8;
 export const MAX_DEMO_CLIENTS = 2;
 // Browser codes the demo player owns under --dev-demo (the demo's keys: scene 1-9, pause, slower, faster).
@@ -88,7 +91,7 @@ export async function startLiveServer({
   port = 0, viewDir = DEFAULT_VIEW_DIR, reduce: reduceEvent = reduceBoard,
   input = null, devBridge = false, devKeys = null, devDemo = false, inputDeps, inputRetryMs, onGesture,
   sessions = null, clock, permissionWaitMs, minShownMs, projects = [], timers, navTimeoutMs, ownedPollMs = 5000, speech = null, launchLimitMs = LAUNCH_LIMIT_MS, compactLimitMs = COMPACT_LIMIT_MS,
-  boot = false, netmon = null, dataLock = null,
+  boot = false, netmon = null, thermal = null, dataLock = null,
 } = {}) {
   const root = path.resolve(viewDir);
   let board = initialBoard();
@@ -599,6 +602,13 @@ export async function startLiveServer({
       onChange: (online) => { if (!closed) apply({ hook_event_name: 'RevviewNetwork', online }, true); },
     });
   }
+  let thermalMonitor = null;
+  if (thermal) {
+    thermalMonitor = createThermalMonitor({
+      log: (m) => console.error(m), ...thermal,
+      onChange: ({ hot, lowPower }) => { if (!closed) apply({ hook_event_name: 'RevviewThermal', hot, lowPower }, true); },
+    });
+  }
   let unlocked = !dataLock;
   let resolveUnlocked = () => {};
   const whenUnlocked = unlocked ? Promise.resolve() : new Promise((r) => { resolveUnlocked = r; });
@@ -645,6 +655,7 @@ export async function startLiveServer({
         closed = true;
         inputHandle?.stop();
         monitor?.stop();
+        thermalMonitor?.stop();
         dataMonitor?.stop();
         actions.close();
         for (const t of launchTimers.values()) clearT(t);
@@ -672,6 +683,7 @@ export function parseArgs(argv) {
     else if (a === '--sessions') out.sessions = true;
     else if (a === '--boot') out.boot = true;
     else if (a === '--netmon') out.netmon = true;
+    else if (a === '--thermal') out.thermal = true;
     else if (a === '--data-lock') {
       const next = argv[i + 1];
       if (next !== undefined && next.startsWith('/')) { out.dataLock = next; i++; } else out.dataLock = DEFAULT_DATA_MOUNT;
@@ -856,6 +868,13 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     netmon = { probe: createDefaultProbe({ host, port }) };
     netmonLine = `netmon: online = default route + TCP connect to ${host}:${port} every 10 s`;
   }
+  let thermal = null;
+  let thermalLine = null;
+  if (args.thermal) {
+    const env = thermalEnv(process.env);
+    thermal = createDefaultReaders(env);
+    thermalLine = `thermal: temperature from ${env.tempPath ?? DEFAULT_TEMP_PATH}, throttle flags from ${env.throttledPath ?? `${env.vcgencmd ?? DEFAULT_VCGENCMD} get_throttled`} every 5 s`;
+  }
   const projects = args.projects ? loadProjects(args.projects, { log: (m) => console.error(m) }) : [];
   // a bad speech config means no voice, never no bar
   let speech = null;
@@ -871,7 +890,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     console.error(e.message);
     speechLine = 'speech: off (bad speech config, see the log)';
   }
-  const live = await startLiveServer({ port: args.port, input, devBridge: args.devBridge, devKeys, devDemo: args.devDemo === true, sessions: runner, projects, speech, boot: args.boot, netmon, dataLock: args.dataLock ? { mountPoint: args.dataLock } : null });
+  const live = await startLiveServer({ port: args.port, input, devBridge: args.devBridge, devKeys, devDemo: args.devDemo === true, sessions: runner, projects, speech, boot: args.boot, netmon, thermal, dataLock: args.dataLock ? { mountPoint: args.dataLock } : null });
   if (args.boot && runner && args.dataLock) {
     const log = (m) => console.error(m);
     bootAfterUnlock({ live, runner, dirs: args.start, log }).then(() => log('boot: key-on session step done'));
@@ -891,6 +910,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   if (runner) console.log(`sessions: private tmux server (${args.tmuxSocket ? `-S ${args.tmuxSocket}` : '-L revview'}), ${selectId === null ? 'selected: none' : `${selectedNow ? 'selected' : 'wanted'}: ${selectId}`}`);
   console.log(speechLine);
   if (netmonLine) console.log(netmonLine);
+  if (thermalLine) console.log(thermalLine);
   if (args.boot) console.log('boot: STARTING until the first session is on the board');
   if (args.boot && runner && args.dataLock) console.log(`boot: the key-on session waits for the data unlock (${args.dataLock})`);
   if (args.projects) console.log(`projects: ${projects.length} from ${args.projects}`);

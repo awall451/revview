@@ -7,7 +7,7 @@ session, see `src/state/README.md`), reduces every event with `reduceBoard` and 
 No persistence: a fresh or restarted server shows `unknown` (a restored state could not be trusted, and hooks
 posted while the server was down are lost).
 
-Run: `npm start` or `node src/server/index.js [port] [--input [path]] [--dev-bridge [--dev-keys file] [--dev-demo]] [--sessions] [--start dir]... [--projects file] [--speech file] [--boot] [--netmon] [--data-lock [dir]]` (port default **8138**, or env `REVVIEW_PORT`).
+Run: `npm start` or `node src/server/index.js [port] [--input [path]] [--dev-bridge [--dev-keys file] [--dev-demo]] [--sessions] [--start dir]... [--projects file] [--speech file] [--boot] [--netmon] [--thermal] [--data-lock [dir]]` (port default **8138**, or env `REVVIEW_PORT`).
 `--input` reads the wheel buttons in this process (config `config/buttons.json`, or the path given); a bad config or
 unknown flag prints the message to stderr and exits with code 2 before listening. `--dev-bridge` (or `npm run start:dev`) turns on `POST /dev/key`. SIGTERM and SIGINT close the server (stopping the grab helper) and exit 0.
 It binds to **127.0.0.1 only**; there is deliberately no way to change the host from the CLI.
@@ -42,6 +42,21 @@ phone hotspot over Wi-Fi counts) plus a TCP connect to the Claude API host (`api
 `REVVIEW_NETMON_HOST` = `host` or `host:port` changes it; a bad value is logged (`REVVIEW_NETMON_HOST must be host or host:port, got <v>; using api.anthropic.com:443`) and the default is used, the server still starts; `netmonTarget` parses it). It checks every 10 s
 (every 5 s while offline). Two failures in a row make the bar show OFFLINE; one success brings it back. Without
 a default route nothing is sent at all. Nothing depends on Ethernet. Code: `src/server/netmon.js`.
+
+## Heat and weak supply: `--thermal`
+
+`--thermal` polls every 5 s and posts the internal `RevviewThermal` (`hot`, `lowPower`; 403 over HTTP) only when
+a mark changes. HOT = throttle flags "frequency capped now", "throttled now" or "soft temperature limit now"
+(bits 1, 2, 3), or a temperature of 80 C or more (stays until below 75 C). LOW POWER = "under-voltage now" (bit 0).
+A mark that goes off stays for 10 s so a short dip is still seen. The "has occurred since boot" bits (16-19) show no
+mark; they are logged once per distinct value (`thermal: since boot: ...`).
+
+Sources: the temperature from `/sys/class/thermal/thermal_zone0/temp` (env `REVVIEW_THERMAL_TEMP` = another file);
+the flags from `vcgencmd get_throttled` (env `REVVIEW_THERMAL_VCGENCMD` = command path, 3 s timeout) or, with env
+`REVVIEW_THERMAL_THROTTLED` = a file holding the value (`throttled=0x50005`, `0x50005` or decimal), from that file.
+A source that is missing or unreadable (no `vcgencmd` off a Pi) or gives garbage is logged once
+(`thermal: <source> not readable (<why>); no mark from it`), gives no mark, and never stops the server. The sources
+are written from memory and are unproven on hardware. Code: `src/server/thermal.js`.
 
 ## Locked data on the Pi: `--data-lock [dir]`
 
