@@ -1759,3 +1759,24 @@ Tested in the unit suite only; nothing run on a Pi.
 - The dongle rule is derived from the merged file (in a dry run from the text that would be written).
 - Not proven: any of it on a Pi (fake root only); `--adopt-buttons-base` through a real `install.sh` run is tested on the
   fake root only. BENCH PL-2.
+
+### Why the session ended
+
+- **Capture.** `remain-on-exit on` is set in the same tmux command line that creates the window (`new-session ... ; set-option -g
+  remain-on-exit on`), so even a Claude that dies at once leaves its window. The server's owned poll (5 s) calls `runner.reap()`:
+  for each dead pane it runs `capture-pane -p -J -S -100`, then `kill-window`. Captured with scrollback because the first lines of a
+  short run are already in history when the pane dies (seen on the installed tmux 3.4). tmux's own line "Pane is dead (status N,
+  ...)" is dropped. Dead windows therefore live at most one poll interval and cannot pile up; the `--live` cleanup still ends
+  with `kill-server`, which removes whatever is left.
+- **Log.** Up to the last 20 cleaned lines go to stderr (the journal), under one header line with the id, name and exit status.
+  The README of `src/sessions` and `pi/README.md` say that the journal then holds screen text. Untrusted: ANSI escapes and control
+  characters are removed in the runner, again in the reducer; the bar sets note text with `textContent` only.
+- **Bar.** New internal event `RevviewEndReason {session_id, text}`; the reducer keeps at most 8 reasons (`board.endReasons`) and
+  makes the end note "Session ended: <line>" (line cut at 80 characters with an ellipsis; an empty screen gives "Session ended:
+  no output"). If the end note was already made (a SessionEnd came first), the reason replaces it. It replaces the KEYON "ended at
+  once" text too when a reason is known; the old texts stay when none is. A tap with no session clears it like the other ended notes.
+- **On purpose.** No menu action stops a session today. `runner.stop(id)` kills a live window, which is never reaped, so no reason
+  and no alarm. A Claude that ends itself (`/exit`, exit 0) gets the reason note too: the owner has no keyboard to ask why.
+- **Emulator.** `emulator/run.sh --live` used `has-session` to notice a Claude that died at once; a kept dead window made that
+  true, so it now looks for a live pane (`pane_dead` 0). The messages and exit codes are unchanged.
+- **Not proven:** anything on the Pi (its tmux may be another version: BENCH PL-3), that the systemd journal shows the lines as expected.

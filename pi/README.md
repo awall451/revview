@@ -263,6 +263,11 @@ need changing. The paths in that file are the ones above.
 
 - Server status and log, as the kiosk user: `systemctl --user status revview`, `journalctl --user -u revview -b`.
   Restart it: `systemctl --user restart revview` (the Claude sessions in tmux survive, bench D3).
+- **Why a Claude ended** (key-on or any session revview started): the bar says "Session ended: <last line of its
+  screen>", and the journal (command above) has a line `owned sessions: Claude of session <id> ... ended with status N`
+  followed by up to 20 screen lines, each starting `  | `. Those lines are what Claude last showed, so the journal can
+  hold file names or parts of a conversation; look before you share it. A session stopped from the tmux side while it
+  still runs (`kill-window`) leaves no such note.
 - See the Claude sessions: `tmux -L revview attach` (detach with Ctrl+B then D).
 - **Pause the kiosk** (to use the desktop): `mkdir -p ~/.config/revview && touch ~/.config/revview/kiosk-paused`,
   then close the running Chromium yourself (the marker only stops a new one from starting; it does not stop one

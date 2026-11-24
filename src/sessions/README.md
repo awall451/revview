@@ -16,6 +16,19 @@ The selection lives on the board (`board.selected`, `selectedKey(board)`): the r
 - `send(key, id)` key is `Escape`, `C-c` or `Space` only (else it throws). Goes only to the re-verified window of
   `id`; no valid uuid gives `{ sent: false, reason: 'no session selected' }`.
 - `stop(id)`, `killServer()`.
+- `reap({ maxLines = 20 })` why a session ended. Every window is created with tmux `remain-on-exit on` (set in the
+  same tmux command line as the window, so a Claude that dies at once is still kept). `reap` finds the windows whose
+  Claude has exited (`pane_dead`), reads their last lines (`capture-pane -p -J -S -100`), kills the window (none piles
+  up) and returns `[{ id, name, status, lines }]`; `lines` are at most 20, ANSI escapes and control characters removed
+  (`cleanScreen`), tmux's own "Pane is dead" line dropped. `list()` does not list a dead window. A window `stop(id)`
+  kills while it lives is never reaped, so a session stopped on purpose leaves no reason and no alarming note.
+
+**The journal holds screen lines.** The server calls `reap` on every owned poll (5 s): for each ended session it logs
+one header line (id, name, exit status) and at most 20 screen lines (`  | <line>`) to stderr, which is the journal under
+the systemd user unit. That text is whatever Claude last showed (untrusted, and it can include file names or parts of
+a conversation); keep it in mind when sharing a journal. The bar gets only the last non-empty line, as the note
+"Session ended: <line>" (cut at 80 characters, control characters removed, no screen: "Session ended: no output");
+the view sets it as text (`textContent`). The board keeps the reasons of at most 8 sessions.
 
 `socket` is `{ name }` (`-L`) or `{ path }` (`-S`, for tests). Every call passes `-f /dev/null` (no user config).
 

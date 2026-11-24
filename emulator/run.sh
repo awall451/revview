@@ -360,13 +360,18 @@ claude_window=${REVVIEW_EMU_CLAUDE_WINDOW:-10} # the override is for the unit te
 claude_until=$((SECONDS + claude_window))
 check_claude() {
   [ "$mode" = live ] && [ "$SECONDS" -le "$claude_until" ] || return 0
-  tmux -S "$sock" has-session -t revview 2> /dev/null && return 0
+  # a window whose Claude has exited stays (remain-on-exit) until the server reads its last screen: only a live pane counts
+  tmux -S "$sock" list-panes -s -t revview -F '#{pane_dead}' 2> /dev/null | grep -qx 0 && return 0
+  if [ "${1:-}" = first ]; then
+    echo "run.sh: Claude exited at once, so no session could start. Run \`claude\` once in a normal terminal to see why (not signed in, or a first-run or trust question answered with exit?)." >&2
+    exit 1
+  fi
   echo "run.sh: Claude exited within $claude_window s of starting, so there is no session. Run \`claude\` once in a normal terminal to see why (not signed in, or a first-run or trust question answered with exit?)." >&2
   exit 1
 }
 
 if [ "$mode" = live ]; then
-  check_claude # it may have ended while the server came up
+  check_claude first # it may have ended while the server came up
   echo "live mode: no demo; Claude Code runs in $live_dir and sends its real Claude Code hook events to 127.0.0.1:$actual"
   printf 'attach: tmux -S %q attach -t revview\n' "$sock"
   echo "if the bar stays on STARTING, attach: Claude may be asking a question (trust this folder?)"

@@ -40,7 +40,7 @@ const GESTURES = ['tap', 'hold', 'long-hold'];
 const LAUNCH_LIMIT_MS = 30000;
 // a compaction took 5-7 s in the recordings and 1-2 min in long sessions; this bounds a lost end event
 export const COMPACT_LIMIT_MS = 180000;
-const INTERNAL_EVENTS = ['RevviewInterrupted', 'RevviewAnswered', 'RevviewSelect', 'RevviewNav', 'RevviewOwned', 'RevviewProjects', 'RevviewNote', 'RevviewBootBegin', 'RevviewBootDone', 'RevviewLaunching', 'RevviewLaunchExpired', 'RevviewNoSessionPress', 'RevviewCompactExpired'];
+const INTERNAL_EVENTS = ['RevviewInterrupted', 'RevviewAnswered', 'RevviewSelect', 'RevviewNav', 'RevviewOwned', 'RevviewProjects', 'RevviewNote', 'RevviewBootBegin', 'RevviewBootDone', 'RevviewLaunching', 'RevviewLaunchExpired', 'RevviewNoSessionPress', 'RevviewCompactExpired', 'RevviewEndReason'];
 export const MAX_SSE_CLIENTS = 8;
 export const MAX_DEMO_CLIENTS = 2;
 // Browser codes the demo player owns under --dev-demo (the demo's keys: scene 1-9, pause, slower, faster).
@@ -113,6 +113,13 @@ export async function startLiveServer({
     applyProjects();
     if (!sessions) return;
     try {
+      // Claude windows that exited stay until read here (remain-on-exit): the last screen lines go to the log (the
+      // journal under the user unit; untrusted text, at most 20 lines) and the last non-empty one to the bar
+      for (const r of (await sessions.reap?.()) ?? []) {
+        console.error(`owned sessions: Claude of session ${r.id}${r.name ? ` (${r.name.replace(/[\u0000-\u001f\u007f-\u009f]/g, '')})` : ''} ended${r.status === null ? '' : ` with status ${r.status}`}; ${r.lines.length === 0 ? 'its screen was empty' : `last ${r.lines.length} screen line(s):`}`);
+        for (const l of r.lines) console.error(`  | ${l}`);
+        apply({ hook_event_name: 'RevviewEndReason', session_id: r.id, text: [...r.lines].reverse().find((l) => l.trim() !== '') ?? '' }, true);
+      }
       const list = await sessions.list();
       const now = new Map(list.map((x) => [x.id, x.name]));
       for (const [id, name] of lastOwned) {

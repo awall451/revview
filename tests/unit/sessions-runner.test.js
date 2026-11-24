@@ -37,11 +37,12 @@ test('start: first creates the session, argv shape, no shell', async () => {
   const ns = sub(f.calls, 'new-session')[0];
   assert.equal(ns.bin, 'tmux');
   assert.deepEqual(ns.args.slice(0, 4), ['-f', '/dev/null', '-L', 'revview']);
-  assert.deepEqual(ns.args.slice(ns.args.indexOf('--')), ['--', 'claude', '--x', '--session-id', A]);
+  assert.deepEqual(ns.args.slice(ns.args.indexOf('--'), ns.args.indexOf(';')), ['--', 'claude', '--x', '--session-id', A]);
   assert.equal(ns.args[ns.args.indexOf('-c') + 1], os.tmpdir());
   assert.ok(ns.args.includes('-d') && ns.args.includes('-P'));
-  const so = sub(f.calls, 'set-option')[0];
+  const so = sub(f.calls, 'set-option').find((c) => c.args.includes('@revview_id'));
   assert.deepEqual(so.args.slice(-5), ['-w', '-t', '@7', '@revview_id', A]);
+  assert.deepEqual(ns.args.slice(-5), [';', 'set-option', '-g', 'remain-on-exit', 'on'], 'a window whose Claude exited is kept for reap');
   assert.equal(r.chosen, undefined, 'the runner keeps no second "chosen" state');
   assert.equal(r.choose, undefined);
 });

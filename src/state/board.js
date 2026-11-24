@@ -58,6 +58,7 @@ function isValidBoard(b) {
     && (b.nav === null || (isObj(b.nav) && NAV_KINDS.includes(b.nav.kind) && Number.isInteger(b.nav.row) && b.nav.row >= 0
       && (b.nav.id === undefined || typeof b.nav.id === 'string')))
     && (b.launching === undefined || (Array.isArray(b.launching) && b.launching.every((x) => typeof x === 'string')))
+    && (b.endReasons === undefined || isObj(b.endReasons))
     && (b.keyon === undefined || typeof b.keyon === 'string')
     && (b.booting === undefined || typeof b.booting === 'boolean')
     && (b.note === undefined || b.note === null || typeof b.note === 'string')
@@ -183,7 +184,16 @@ export const STARTING_PTT_NOTE = 'Claude is still starting: push-to-talk not sen
 export const KEYON_ENDED_NOTE = 'Key-on session ended at once: see the server log';
 const ENDED_NEXT = ': open the menu for New session';
 // the notes a session's end leaves; a push-to-talk tap with no session replaces them (RevviewNoSessionPress)
-const isEndedNote = (n) => typeof n === 'string' && (n === KEYON_ENDED_NOTE || n.endsWith(' ended') || n.endsWith(` ended${ENDED_NEXT}`));
+// What a session's end leaves on the bar when its last screen line is known (RevviewEndReason): the line is
+// display text from an untrusted screen, cleaned and cut here (the server cleans it too).
+export const ENDED_PREFIX = 'Session ended: ';
+const REASON_MAX = 80;
+const endReasonText = (t) => {
+  const c = typeof t === 'string' ? t.replace(/\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007\u001b]*(?:\u0007|\u001b\\)?|[@-Z\\-_])/g, '').replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').replace(/\s+/g, ' ').trim() : '';
+  if (c === '') return null;
+  return c.length > REASON_MAX ? `${c.slice(0, REASON_MAX - 1)}\u2026` : c;
+};
+const isEndedNote = (n) => typeof n === 'string' && (n === KEYON_ENDED_NOTE || n.startsWith(ENDED_PREFIX) || n.endsWith(' ended') || n.endsWith(` ended${ENDED_NEXT}`));
 
 export function reduceBoard(board, event) {
   const b = isValidBoard(board) ? board : initialBoard();
@@ -213,7 +223,8 @@ export function reduceBoard(board, event) {
     const name = typeof label === 'string' && label !== '' ? label.slice(0, last ? 80 : 100) : 'Selected session';
     // the key-on session that vanished while still STARTING: "ended at once" (its reason is in the server log)
     const atOnce = b.keyon === wasSel && (b.launching ?? []).includes(wasSel) && b.sessions[wasSel].quiet === true;
-    next = { ...next, note: atOnce ? KEYON_ENDED_NOTE : `${name} ended${last ? ENDED_NEXT : ''}` };
+    const reason = b.endReasons?.[wasSel];
+    next = { ...next, note: typeof reason === 'string' ? `${ENDED_PREFIX}${reason}` : atOnce ? KEYON_ENDED_NOTE : `${name} ended${last ? ENDED_NEXT : ''}` };
   }
   const tid = targetOf(event, b.sessions);
   const spoke = isDriverPrompt(event) && has(next.sessions, tid) ? tid : null;
@@ -487,6 +498,17 @@ function reduceInner(b, event) {
       if (samePaths && sameList(missing, b.projectsMissing ?? [])) return b;
       const rowsChanged = !samePaths && b.nav !== null && (b.nav.kind === 'new' || b.nav.kind === 'projects');
       return { ...b, projects: [...paths], projectsMissing: [...missing], nav: rowsChanged ? null : b.nav };
+    }
+    case 'RevviewEndReason': {
+      // why a session revview started ended (the server read its last screen line). Kept by id (at most 8, newest
+      // last) for the end note; when that note was already made (a SessionEnd came first), it is made again with the reason.
+      const id = event.session_id;
+      const text = endReasonText(event.text) ?? 'no output';
+      if (!isStr(id) || id.length > 200) return b;
+      const kept = Object.entries(b.endReasons ?? {}).filter(([k]) => k !== id).slice(-7);
+      const endReasons = Object.fromEntries([...kept, [id, text]]);
+      const base = { ...b, endReasons };
+      return !has(b.sessions, id) && isEndedNote(b.note) ? { ...base, note: `${ENDED_PREFIX}${text}` } : base;
     }
     case 'RevviewNote': {
       const note = event.note;

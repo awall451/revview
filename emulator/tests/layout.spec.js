@@ -258,6 +258,20 @@ test('ended with the next-step note (r7b-02), worst case: an 80-character repo, 
   await expectFits(page);
 });
 
+test('ended with a reason (cycle 39), worst case: 80 wide characters after "Session ended: ", 1280x400, no overflow', async ({ openView, page }) => {
+  // the board cuts the reason at 80 characters ending in an ellipsis; W is the widest letter
+  const note = `Session ended: ${'W'.repeat(79)}…`;
+  await openView({ ...loadFixture('ended'), voice: 'no-session', note });
+  await expect(page.locator('#note2')).toHaveText(note);
+  await expectFits(page);
+  // text from a screen is shown as text, never parsed as markup
+  const markup = 'Session ended: <img src=x onerror=alert(1)> &amp;';
+  await openView({ ...loadFixture('ended'), voice: 'no-session', note: markup });
+  await expect(page.locator('#note2')).toHaveText(markup);
+  expect(await page.locator('#note2 img').count()).toBe(0);
+  await expectFits(page);
+});
+
 test('new looks: notes, repo and diff',async ({ openView, page }) => {
   await openView({ view: 'unknown', repo: 'r', branch: 'b', diff: { added: 1, removed: 1 } });
   await expect(page.locator('#note1')).toHaveText("Not known until Claude's next step");

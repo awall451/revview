@@ -19,6 +19,17 @@ const UNSAFE_TEXT_RE = /[#\u0000-\u001f\u007f-\u009f]/;
 // tmux expands formats and runs #(cmd): text with '#' or a control character must never reach it
 export const isUnsafeText = (s) => UNSAFE_TEXT_RE.test(s);
 
+// A captured screen is untrusted text: ANSI escapes and control characters go before it is logged or shown.
+// Returns the last `max` lines, trailing blanks and tmux's own "Pane is dead" line dropped.
+const ANSI_RE = /\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007\u001b]*(?:\u0007|\u001b\\)?|[@-Z\\-_])/g;
+const CTRL_RE = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g;
+export function cleanScreen(text, max = 20) {
+  const lines = String(text ?? '').replace(ANSI_RE, '').replace(CTRL_RE, '').split('\n')
+    .map((l) => l.replace(/\s+$/, '')).filter((l) => !/^Pane is dead \(/.test(l));
+  while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+  return lines.slice(-max).map((l) => l.slice(0, 300));
+}
+
 const errText = (e) => `${e?.stderr ?? ''} ${e?.message ?? ''}`;
 
 export function createSessionRunner({
@@ -38,7 +49,7 @@ export function createSessionRunner({
   async function list() {
     let out;
     try {
-      out = await run(['list-windows', '-a', '-F', '#{window_id}\t#{@revview_id}\t#{pane_current_path}\t#{window_name}']);
+      out = await run(['list-windows', '-a', '-F', '#{window_id}\t#{@revview_id}\t#{pane_current_path}\t#{window_name}\t#{pane_dead}']);
     } catch (e) {
       if (NO_SERVER_RE.test(errText(e))) return [];
       throw e;
@@ -48,6 +59,10 @@ export function createSessionRunner({
       if (!line) continue;
       const [window, id, cwd = '', ...rest] = line.split('\t');
       if (!WINDOW_RE.test(window) || !UUID_RE.test(id ?? '')) continue;
+      // the last field says whether Claude has exited (its window stays until `reap`): not a live session
+      if (rest.length >= 2 && (rest[rest.length - 1] === '0' || rest[rest.length - 1] === '1')) {
+        if (rest.pop() === '1') continue;
+      }
       rows.push({ id, window, cwd, name: rest.join('\t') });
     }
     return rows;
@@ -77,9 +92,12 @@ export function createSessionRunner({
     const winName = String(name || path.basename(cwd) || 'claude');
     const cmd = [...claude, '--session-id', id];
     const common = ['-d', '-P', '-F', '#{window_id}', '-c', cwd, '-n', winName];
+    // remain-on-exit (set in the same tmux command line, before Claude can exit) keeps a window whose Claude ended,
+    // so `reap` can read its last screen; reap then kills it
+    const keep = [';', 'set-option', '-g', 'remain-on-exit', 'on'];
     const out = (await serverHasSession())
-      ? await run(['new-window', ...common, '-t', `${SESSION}:`, '--', ...cmd])
-      : await run(['new-session', ...common, '-s', SESSION, '--', ...cmd]);
+      ? await run(['new-window', ...common, '-t', `${SESSION}:`, '--', ...cmd, ...keep])
+      : await run(['new-session', ...common, '-s', SESSION, '--', ...cmd, ...keep]);
     const window = out.trim();
     if (!WINDOW_RE.test(window)) throw new Error(`unexpected window id from tmux: ${JSON.stringify(window)}`);
     await run(['set-option', '-w', '-t', window, '@revview_id', id]);
@@ -114,6 +132,29 @@ export function createSessionRunner({
     return true;
   }
 
+  // Windows whose Claude has exited (kept by remain-on-exit): read the last screen lines, then kill the window, so
+  // none piles up. Returns [{ id, name, status, lines }] (lines already cleaned, at most `maxLines`). One failing
+  // window does not stop the others. A window revview stops itself (`stop`) is killed while alive and never shows here.
+  async function reap({ maxLines = 20 } = {}) {
+    let out;
+    try {
+      out = await run(['list-panes', '-a', '-F', '#{window_id}\t#{pane_id}\t#{pane_dead}\t#{pane_dead_status}\t#{@revview_id}\t#{window_name}']);
+    } catch (e) {
+      if (NO_SERVER_RE.test(errText(e))) return [];
+      throw e;
+    }
+    const done = [];
+    for (const line of out.split('\n')) {
+      const [window, pane, dead, status = '', id, ...rest] = line.split('\t');
+      if (dead !== '1' || !WINDOW_RE.test(window ?? '') || !/^%\d+$/.test(pane ?? '') || !UUID_RE.test(id ?? '')) continue;
+      let lines = [];
+      try { lines = cleanScreen(await run(['capture-pane', '-p', '-J', '-S', '-100', '-t', pane]), maxLines); } catch (e) { log(`capture of ${id} failed: ${errText(e).trim()}`); }
+      try { await run(['kill-window', '-t', window]); } catch (e) { log(`kill of ${window} failed: ${errText(e).trim()}`); }
+      done.push({ id, name: rest.join('\t'), status: /^\d+$/.test(status) ? Number(status) : null, lines });
+    }
+    return done;
+  }
+
   async function killServer() {
     try {
       await run(['kill-server']);
@@ -122,5 +163,5 @@ export function createSessionRunner({
     }
   }
 
-  return { start, list, target, send, stop, killServer };
+  return { start, list, target, send, stop, reap, killServer };
 }
