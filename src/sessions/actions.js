@@ -159,7 +159,8 @@ export function createActions({
       }
       // a permission prompt is waiting on the selected session (any agent): Space would land in the terminal dialog
       // as a keypress, not as push-to-talk. The dialog stays answerable by keys while the hook waits (fixtures/buttons).
-      if (b.sessions[selectedKey(b)]?.pending?.length > 0) {
+      // (without a runner nothing could be sent anyway: that stays "no sessions")
+      if (runner && b.sessions[selectedKey(b)]?.pending?.length > 0) {
         note(PROMPT_PTT_NOTE);
         return out('push-to-talk', false, 'permission prompt shown');
       }
