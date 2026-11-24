@@ -320,6 +320,15 @@ DECISIONS "Emulator on your laptop 3".
 | L5 | Native Linux laptop with Node 22+ and Chromium or Chrome, a fresh folder: follow `docs/EMULATOR-LAPTOP.md` word for word (clone with https or ssh, `cd revview`, `bash emulator/run.sh`, with no `npm ci`); then `--keys`, `--print-aliases` pasted into `~/.bashrc`, `revview`, and `revview-stop` from a second terminal | Every command in the guide works as written with no install step; the window opens; `--keys` fits your terminal screen and every key on it does what its row says; the aliases work in a new shell (also with a path that has a space); `revview-stop` prints `stopped (pid N)`, the window closes, `pgrep -af 'demo/player.js\|src/server/index.js'` shows nothing, and a second `revview-stop` prints `not running`. Note anything the guide got wrong or left out (a tiling window manager: is the window 1280x400?) | untested |
 | L6 | WSL2 on Windows 11, a fresh folder: follow the guide's WSL2 section: with a Linux browser under WSLg, then without one (Windows Chrome or Edge); `revview-stop` from a second WSL terminal | As the guide says, or note exactly what differs: which browser was picked, whether `localhost` reached the server, whether closing a Windows browser window ended the script, whether the `revview-emu.*` profile under the Windows `%TEMP%` is gone, whether `--stop` found the pid file under `XDG_RUNTIME_DIR` | untested |
 
+## Compaction note (2026-11-24)
+
+Proven only in the emulator and unit tests from a recording (Claude Code 2.1.330); never seen on a Pi with a real
+compaction. DECISIONS "Compaction note (cycle 38)".
+
+| # | Try | Should happen | State |
+|---|---|---|---|
+| C1 | On the Pi with hooks re-installed (`hooks/install.mjs`, so PreCompact/PostCompact are registered): in a long session let auto compaction happen mid-turn (or start one quickly with `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=1`), then type `/compact` at the prompt after a turn ends | Mid-turn: WORKING stays, the tool line says "Compacting context" with no file, and it goes away when the turn goes on. `/compact`: DONE stays with the same line until the compaction ends. The line never stays longer than 3 minutes. Note how long a real compaction took and whether the line was readable at a glance | untested |
+
 ## Emulator on your laptop 4: live sessions (2026-11-23)
 
 `bash emulator/run.sh --live [DIR]` now starts a real Claude Code session (a private tmux server, a per-run `--settings`

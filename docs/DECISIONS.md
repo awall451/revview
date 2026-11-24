@@ -374,6 +374,7 @@ Decisions:
 
 - **06**: `SessionStart` with `source: "compact"` is ignored (the activity before it stays: WORKING mid-turn,
   DONE after `/compact`). Only `startup`, `resume`, `clear` (and `fork`, or no source) mean "at the prompt".
+  (Cycle 38: the activity still stays; it now also ends the compacting mark, see "Compaction note (cycle 38)".)
 - **Async subagents**: `Stop` while `background_tasks` lists a running subagent is WORKING, not DONE (their
   results start a new turn by themselves; a background shell such as a dev server does not count). An
   injected `<task-notification>` prompt (or a `UserPromptSubmit.source` other than `user`) is not the driver
@@ -914,7 +915,7 @@ Code: `src/state/board.js`, `tests/unit/board-hardening.test.js`, `tests/unit/sp
   Registered with `event.mjs`: SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure,
   PermissionDenied, Notification, Stop, StopFailure, SubagentStop, SessionEnd (all in the 2.1.330 settings schema,
   checked in the binary). Not registered: SubagentStart, PreCompact, PostCompact (ignored by the core; each hook is a
-  node start). No `matcher` on the event hooks (the earlier recordings used none and fired for every tool);
+  node start). (Cycle 38: PreCompact and PostCompact are now registered, see "Compaction note (cycle 38)".) No `matcher` on the event hooks (the earlier recordings used none and fired for every tool);
   PermissionRequest keeps `matcher: "*"` and `timeout: 600`.
 - **event.mjs never posts PermissionRequest** (the press would do nothing with a duplicate pending entry) nor any
   `Revview*` name. Tests pin both, also end to end: the recorded `permission-prompt` session fed line by line through
@@ -1673,3 +1674,41 @@ the same branch:
 - **Tests.** `REVVIEW_EMU_CLAUDE_WINDOW` (default 10) exists only so the "ends later than the window" test can use a 3 s
   window against a 12 s stand-in; it is not a user option. The 1.5 s stand-ins accept either exit message (a slow server
   can hit "exited at once"); a new test ends a stand-in 1 s after the server is up and requires the within-window message.
+
+## 2026-11-24: Compaction note (cycle 38)
+
+A long session compacts its context; the bar said WORKING for a minute or two with nothing changing, which looks like a
+hang. Now the tool line says "Compacting context". Proven in the emulator and the unit suite only; nothing on a Pi
+(BENCH C1).
+
+- **Recording.** The existing `fixtures/sessions/compaction.jsonl` (Claude Code 2.1.330) was enough; no new recording.
+  The installed 2.1.331 binary has the same schemas (`PreCompact {trigger: manual|auto, custom_instructions}`,
+  `PostCompact {trigger, compact_summary}`). What it shows: a real compaction is `PreCompact`, then the summariser's own
+  `SubagentStop` (its `last_assistant_message` is the `<analysis>` summary), `SessionStart {source: "compact"}`,
+  `PostCompact`, and the turn goes on. Two of the five `PreCompact`s (one mid-turn, one just before `Stop`) were **not**
+  followed by any compaction: the next events were simply `PreToolUse` and `Stop`. There is no failure or interrupt
+  event; a compaction that does not happen just leaves the `PreCompact` alone. Durations (transcript timestamps from
+  the tool result to the `compact_boundary`): 7.0 s, 6.1 s auto, 5.4 s manual, at ~35k tokens with haiku.
+- **Mark.** The reducer keeps `compacting` per session. `PreCompact` (either trigger) sets it and changes nothing else.
+  Every other Claude hook event clears it, also those it otherwise ignores (`SessionStart` compact, `PostCompact`,
+  other `Notification`s), **except `SubagentStop`** (the summariser's arrives mid-compaction). `RevviewInterrupted` (Esc
+  sent by revview) and `RevviewStarting` clear it. `PreCompact` and `PostCompact` keep `failed` (a `/compact` after a
+  failed turn does not redo it). A `PreCompact` of a session the board does not know makes no session.
+- **Time limit: 180 s.** The server starts a per-session timer on each POSTed `PreCompact` (`COMPACT_LIMIT_MS`, option
+  `compactLimitMs`); when it runs out it applies the internal `RevviewCompactExpired`, which clears a mark still set
+  (not POSTable). The recorded 5-7 s were with a tiny context; the owner sees 1-2 min in long sessions, so 180 s
+  covers a real one and bounds a lost end event (the hook failing, the server restarting).
+- **No new main state.** `boardView` gains `compacting` (true only with no pending prompt, no failed turn, and activity
+  working, waiting or done). Mid-turn auto compaction: WORKING + "Compacting context". A manual `/compact` at the prompt
+  (the recording: after `Stop`): the session stays DONE (or WAITING) and shows the same line until `PostCompact`. The
+  four main states are untouched; PERMISSION always shows its prompt.
+- **View.** The words take the tool slot (same size, `data-compacting`), the file slot is empty, diff, command and
+  output stay. Also under OFFLINE over those three activities. They outrank the "Denied:/Allowed:" word (that call is
+  old news during a compaction). Not in the list or menu (they hide the tool line). Emulator fixture `compacting`
+  (recording events 0-8, `EXTRA_FIXTURE_IDS`), screenshot `shots/compacting.png`; `emulator/tests/compacting.spec.js`
+  checks that the line fits with every worst case over working/done/waiting/offline, alone and with the multi-session
+  extras.
+- **Hooks.** `hooks/settings.json` registers PreCompact and PostCompact (event.mjs). `event.mjs` drops
+  `compact_summary` and `custom_instructions` before posting (large and private); no RevviewContext follows them.
+- **Demo.** Keys 8 (`compaction`: events 0-8, WORKING + the line) and 9 (`compact-cmd`: events 9-20, the compaction ends,
+  Stop, `/compact`: DONE + the line), in one extra session `demo<loop>-compaction`. The `--keys` sheet stays at 24 lines.
