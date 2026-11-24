@@ -152,3 +152,9 @@ Proof: no test file changed; full check 1676; all 57 screenshots byte-identical 
 Review: `reviewer` (Opus, large diff): approve, nothing blocking. It read the old closure against the new modules: same start order, same `close()` order, no added await, no field read too early, no module-level state, same defaults, status codes and log text; 236 server tests pass on the branch; the program still starts and refuses an unknown option with exit 2. Two small points and four old oddities found by the area lead are in STATE "Next" (not fixed: the job was a pure move).
 
 Submitted `ready/server-split` and these notes stacked on it (`ready/lead-notes-49`). `tools/check` untouched. After this nothing is planned without the owner's bench. Cost: about $4.
+
+Gate: `server-split` (431a162) and `lead-notes-49` MERGED, main 0696a05, 1676 tests.
+
+## 2026-11-24: cycle 50 (idle: sync and notes)
+
+Sync: cycle 49's branches merged and deleted (ready/ and work/ for server-split and lead-notes-49); no worktree left. No open owner message, issue or escalation to act on; every approved backlog item is done or taken. No agent was started. Publish requested for main 0696a05 (the server file split, no change of behaviour). Nothing is left that is worth a cycle without the owner's bench (`docs/BENCH-TEST.md`): `owner-focus blocked` said. Note: `lead-notes-50`.

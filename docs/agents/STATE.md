@@ -1,6 +1,6 @@
 # STATE
 
-Detail and history: `HISTORY.md` (the old STATE, verbatim), `JOURNAL-archive.md` (journal before cycle 36), `docs/DECISIONS.md`, `docs/PI-FACTS.md`. Read them only when needed. The owner's console counts cycles (this file was last written in cycle 48); that number is used. Gate main: 1676 tests.
+Detail and history: `HISTORY.md` (the old STATE, verbatim), `JOURNAL-archive.md` (journal before cycle 36), `docs/DECISIONS.md`, `docs/PI-FACTS.md`. Read them only when needed. The owner's console counts cycles (this file was last written in cycle 50); that number is used. Gate main: 1676 tests.
 
 ## Status per charter stage
 
@@ -33,12 +33,12 @@ Nothing is proven on a Pi. The list is `docs/BENCH-TEST.md` (groups: First after
 
 ## In flight
 
-- Cycle 49 submitted: `ready/server-split` (431a162, backlog 20261124T165658Z-b-f9c0be taken; no owner issue was open for it) and `ready/lead-notes-49` (this note) stacked on it. Expected 1676 tests (no test changed). On merge: delete the `ready/` and `work/` branches (server-split, lead-notes-49), request a publish.
-- No worktree is left over. No held change. Published: main 0d9d762 (2026-11-24).
+- Nothing except `ready/lead-notes-50` (this note; delete `work/` and `ready/lead-notes-50` once merged). Cycle 49's `server-split` merged (main 0696a05, 1676 tests); publish requested in cycle 50.
+- No worktree is left over. No held change. Published: main 0d9d762 (2026-11-24); 0696a05 requested.
 
 ## Next
 
-- Nothing planned: every approved backlog item is done or taken. The team waits for the owner's bench (`docs/BENCH-TEST.md`). Next cycle: sync, verdict of `server-split`, publish request, then `owner-focus blocked` unless the owner has sent something.
+- Nothing planned: every approved backlog item is done or taken. The team waits for the owner's bench (`docs/BENCH-TEST.md`). `owner-focus blocked` was said in cycle 50. Next cycle: sync, inbox, stop, unless the owner has sent something.
 - Small `pi/` leftovers for the next `pi/` change: `readonly.sh --dry-run` exits 2 when overlayroot is missing (say so in the help); an fstab line where `ro` is not right after `defaults` makes `disable` give up after 3 calls; PI-FACTS E11 and E13 are only part-checked.
 - Small `src/server/` leftovers for the next change there (found during the split, not fixed, none visible to the user): the owned poll's "window ... disappeared" log line prints the window name raw (the "ended" line strips control characters); the SSE ping and the owned poll use the global `setInterval`, not the injected `timers`; `close()` does not clear the demo client set; `unlocked` in `monitors.js` is set and never read; the usage comment is in both `index.js` and `cli.js`; the README file table lacks `datalock.js`, `netmon.js`, `thermal.js`.
 - Open escalations: see `ESCALATIONS.md` (the cycle schedule only; the others are resolved).
