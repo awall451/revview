@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect, shotsDir } from './harness.js';
 import { FIXTURE_IDS, loadFixture } from '../fixtures.js';
+import { loadWorstCase, asPermission } from '../worst-case.js';
 import { expectFits, checkContrastAndFloor } from './checks.js';
 import { textSizeMm } from '../mm.js';
 import { RANGE_MM } from '../../src/view/type.js';
@@ -131,6 +132,29 @@ test('worst band (permission, 9+, voice, NO BUTTONS, HOT, LOW POWER, long repo a
   expect(await page.locator('#state-word').textContent()).toBe('NEEDS PERMISSION');
   expect(await page.locator('#others').textContent()).toBe('9+');
 });
+
+// the band-marks worst case (every band mark at once, long repo and branch) over each state with a band: nothing overflows
+// the band at 1280x400 and the state word is whole
+for (const id of FIXTURE_IDS.filter((v) => !NO_TAG.has(v))) {
+  test(`worst case band-marks in ${id}: nothing overflows the band, the state word is whole`, async ({ openView, page }) => {
+    const content = loadWorstCase('band-marks');
+    await openView({ ...loadFixture(id), ...(id === 'permission' ? asPermission(content) : content) });
+    await expectFits(page);
+    const word = page.locator('#state-word');
+    await expect(word).toBeVisible();
+    expect(await word.evaluate((e) => e.scrollWidth <= e.clientWidth)).toBe(true);
+    const band = await rect(page, '#band');
+    const inside = await page.evaluate(() => [...document.querySelectorAll('#band *')]
+      .filter((e) => e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden')
+      .map((e) => [e.id, e.getBoundingClientRect().right]));
+    for (const [eid, right] of inside) expect(right, `#${eid}`).toBeLessThanOrEqual(Math.min(band.right, 1280) + 0.5);
+    // HOT and LOW POWER only ever give way whole (shown with their words or hidden), NO BUTTONS stays
+    if (id !== 'starting') await expect(page.locator('#buttons-tag')).toBeVisible();
+    for (const t of TAGS) {
+      if (await page.locator(t.sel).isVisible()) await expect(page.locator(t.sel)).toHaveText(t.text);
+    }
+  });
+}
 
 test('screenshot thermal-tags is 1280x400', async ({ openView, page }) => {
   const file = path.join(shotsDir(), 'thermal-tags.png');

@@ -36,6 +36,15 @@ test('screenshot compacting (WORKING while Claude compacts its context) is 1280x
   expectPng1280x400(file);
 });
 
+test('screenshot thermal (WORKING with the HOT and LOW POWER tags) is 1280x400', async ({ openView, page }) => {
+  const file = path.join(shotsDir(), 'thermal.png');
+  await openView('thermal');
+  await expect(page.locator('#hot-tag')).toBeVisible();
+  await expect(page.locator('#power-tag')).toBeVisible();
+  await page.screenshot({ path: file });
+  expectPng1280x400(file);
+});
+
 test('screenshot more-sessions (others and a lower-bound diff) is 1280x400', async ({ openView, page }) => {
   const file = path.join(shotsDir(), 'more-sessions.png');
   await openView({ ...loadFixture('working'), others: 2, diffIncomplete: true });

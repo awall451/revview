@@ -36,7 +36,8 @@ test('fixture no-link is exactly the page-only view', () => {
 });
 
 // the extra fixtures are a state of one view (see EXTRA_FIXTURE_IDS), so they get the view's validity checks
-const VIEW_OF = { compacting: 'working' };
+const VIEW_OF = { compacting: 'working', thermal: 'working' };
+const FLAGS_OF = { compacting: { compacting: true }, thermal: { hot: true, lowPower: true } };
 for (const id of [...REDUCER_FIXTURE_IDS, ...EXTRA_FIXTURE_IDS]) {
   test(`fixture ${id} is the board view for its recipe`, () => {
     const actual = replayView(RECIPES[id], initialBoard()).at(-1) ?? boardView(initialBoard());
@@ -51,7 +52,7 @@ for (const id of [...REDUCER_FIXTURE_IDS, ...EXTRA_FIXTURE_IDS]) {
     const fx = loadFixture(id);
     assert.equal(fx.view, VIEW_OF[id] ?? id);
     assert.ok(isState(fx.view));
-    if (EXTRA_FIXTURE_IDS.includes(id)) assert.equal(fx.compacting, true);
+    if (EXTRA_FIXTURE_IDS.includes(id)) for (const [k, v] of Object.entries(FLAGS_OF[id])) assert.equal(fx[k], v, `${id}.${k}`);
     assert.ok(isState(fx.activity) && !['offline', 'insert-key'].includes(fx.activity));
     const ref = boardView(initialBoard());
     assert.deepEqual(Object.keys(fx).sort(), Object.keys(ref).sort());

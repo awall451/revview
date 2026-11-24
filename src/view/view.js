@@ -390,6 +390,7 @@ export function render(input) {
   if (others && el.where.hidden && str(s.repo) && !note) {
     set(el.session, str(s.repo));
     el.session.hidden = false;
+    fitFile(file); // #session now takes room in row A: fit the file again
   }
   renderNav(s.nav);
   document.documentElement.dataset.rendered = view;

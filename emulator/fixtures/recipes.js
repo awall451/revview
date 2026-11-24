@@ -51,9 +51,13 @@ const compacting = withContext(compaction.slice(0, 9));
 
 const working = withContext(upToLast(workingTurn, is('PostToolUse', { tool_name: 'Bash' })));
 
+// The working turn on a hot box with a weak supply: board-level marks (HOT and LOW POWER tags), the state stays WORKING.
+const thermal = [...working, { hook_event_name: 'RevviewThermal', hot: true, lowPower: true }];
+
 export const RECIPES = Object.freeze({
   working,
   compacting,
+  thermal,
   waiting: withContext(upTo(idlePrompt, is('Notification', { notification_type: 'idle_prompt' }))),
   permission: withContext(upTo(permissionPrompt, is('Notification', { notification_type: 'permission_prompt' }))),
   done: withContext(upTo(workingTurn, is('Stop'))),
