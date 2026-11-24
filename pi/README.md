@@ -46,7 +46,7 @@ ONE ordinary login user, the one the desktop logs in as automatically (you choos
 `pi`). That user runs the kiosk Chromium, the revview server (a systemd user unit, started at boot through
 "lingering") and the Claude sessions (in revview's own tmux server, `tmux -L revview`). Claude Code's sign-in, its
 settings and hooks and your repositories are in that user's home. The user is put in groups `input` (wheel buttons)
-and `audio`. The older set-up's `revview` system user is no longer used.
+`audio` and `video`. The older set-up's `revview` system user is no longer used.
 
 ## Steps
 
@@ -82,7 +82,7 @@ and `audio`. The older set-up's `revview` system user is no longer used.
    Options: `--rotate 270` if the panel is mounted the other way up (180 degrees), `--output HDMI-A-2` if the panel is
    on the other port, `--no-apt` to skip packages. It prints one line per thing it did. What it does:
    - packages (only the missing ones): `chromium tmux python3 espeak-ng wlr-randr sox` *(names from memory; `sox` records the microphone for `/voice`)*;
-   - groups `input` and `audio` for the user;
+   - groups `input`, `audio` and `video` for the user (`video`: `vcgencmd` for `--thermal`);
    - quiet boot: `/boot/firmware/config.txt` gets `disable_splash=1`; `/boot/firmware/cmdline.txt` loses `splash` and
      gets `quiet loglevel=0 logo.nologo vt.global_cursor_default=0` (kept on ONE line, CRLF becomes LF). It also
      drops `fbcon=rotate:N` and any earlier `video=<connector>:...` token that has `rotate=` (what an earlier run
@@ -291,7 +291,7 @@ need changing. The paths in that file are the ones above.
     and `/etc/systemd/system/multi-user.target.wants/revview-unlock.service`; `sudo systemctl daemon-reload`.
   - Files the installer edited and backed up (`cmdline.txt`, `config.txt`, `lightdm.conf`): put each
     `<file>.revview-backup` back over the file. Without a backup the file was not there before.
-  - `udevadm control --reload` (or reboot) afterwards. Packages and group memberships (`input`, `audio`) stay.
+  - `udevadm control --reload` (or reboot) afterwards. Packages and group memberships (`input`, `audio`, `video`) stay.
 
 ## How it fits together
 
@@ -309,14 +309,17 @@ need changing. The paths in that file are the ones above.
   row show OFFLINE; one success clears it.
 - **Thermal and power** (`--thermal`): every 5 s the server reads `vcgencmd get_throttled` and
   `/sys/class/thermal/thermal_zone0/temp`. A quiet outline tag `HOT` shows in the band when the CPU is throttled or
-  soft-limited now (bits 1, 2, 3) or at 80 C and above (until it is below 75 C); `LOW POWER` shows while the supply is
+  soft-limited now (bits 2, 3; bit 1, frequency capped, is not used because under-voltage is thought to set it too) or at 80 C and above (until it is below 75 C); `LOW POWER` shows while the supply is
   under-voltage now (bit 0). The "has occurred" bits show nothing (they are logged once). A missing `vcgencmd` or an
   unreadable value is quiet: one log line, no mark. Overrides (for tests and odd images): `REVVIEW_THERMAL_VCGENCMD`
   (the command), `REVVIEW_THERMAL_THROTTLED` and `REVVIEW_THERMAL_TEMP` (a value instead of reading). **From memory,
   untested on hardware** (bench PT-1 to PT-3). The unit is a user unit, so it has no `SupplementaryGroups=`: on
   Raspberry Pi OS `vcgencmd` is `/usr/bin/vcgencmd` and talks to `/dev/vcio`, which is group `video` (from memory).
-  The installer adds `input` and `audio` only. If the mark never appears with a Pi that is throttled, run
-  `vcgencmd get_throttled` as the kiosk user and, if it is denied, `sudo usermod -aG video NAME` and log in again.
+  The installer adds the user to `video` (with `input` and `audio`). If the mark never appears with a Pi that is
+  throttled, run `vcgencmd get_throttled` as the kiosk user (after a new login) and tell the bench (PT-3) if it is denied.
+  A `vcgencmd` that hangs is killed after 3 s and a read that gives no answer in 4 s counts as unreadable (the marks
+  clear after the 10 s hold). In the fullest band (NEEDS PERMISSION + 9+ + voice mark + NO BUTTONS) there is not room
+  for everything: `LOW POWER`, then `HOT`, can be absent.
 - **Buttons**: `src/input` finds the dongle by the USB ids in `/etc/revview/buttons.json` (the unit's `--input`; `config/buttons.json` is only the default it is created from); the user's `input` group lets the
   server read and grab it; a missing dongle shows NO BUTTONS and is retried.
 - **Read aloud**: `espeak-ng` is installed; Piper is optional (section Piper). The user unit runs inside the user's audio session.

@@ -10,6 +10,7 @@ import fs from 'node:fs';
 export const DEFAULT_TEMP_PATH = '/sys/class/thermal/thermal_zone0/temp';
 export const DEFAULT_VCGENCMD = 'vcgencmd';
 export const RUN_TIMEOUT_MS = 3000;
+export const READ_TIMEOUT_MS = 4000; // a source read that takes longer counts as unreadable
 const MAX_TEXT = 256;
 
 // "throttled=0x50005", "0x50005" or "327685" -> integer; anything else -> null. Never throws.
@@ -31,7 +32,9 @@ export function parseTempMilli(text) {
 }
 
 const BIT_UNDERVOLT = 0x1;
-const BIT_HOT = 0x2 | 0x4 | 0x8; // freq capped now, throttled now, soft temperature limit now
+// throttled now, soft temperature limit now. Bit 1 (ARM frequency capped) is left out: from memory it is also set by
+// under-voltage, so a weak adapter would show HOT and blame the wrong cause.
+const BIT_HOT = 0x4 | 0x8;
 
 // Pure. `prev` is the state this returned last time (or undefined); opts.now is the clock in ms.
 // Returns { hot, lowPower, hotByTemp, hotLast, lowLast }: the marks shown (hold included) and what to pass back.
@@ -53,7 +56,7 @@ const SINCE_BOOT = ['under-voltage occurred', 'frequency capping occurred', 'thr
 
 export function createThermalMonitor({
   readThrottled, readTemp, onChange, timers = { setTimeout, clearTimeout }, now = Date.now, intervalMs = 5000,
-  log = () => {}, hotOnC, hotOffC, holdMs,
+  log = () => {}, hotOnC, hotOffC, holdMs, readTimeoutMs = READ_TIMEOUT_MS,
 } = {}) {
   let stopped = false;
   let timer = null;
@@ -67,10 +70,23 @@ export function createThermalMonitor({
     logged.add(key);
     log(line);
   };
+  const inflight = new Set(); // sources whose last read has not settled: never start a second one
+  const guarded = (source, reader) => {
+    if (inflight.has(source)) return Promise.reject(new Error('previous read still stuck'));
+    inflight.add(source);
+    const p = (async () => reader())();
+    const done = () => inflight.delete(source);
+    p.then(done, done);
+    return new Promise((resolve, reject) => {
+      const t = timers.setTimeout(() => reject(new Error(`no answer in ${readTimeoutMs} ms`)), readTimeoutMs);
+      const end = () => timers.clearTimeout(t);
+      p.then((v) => { end(); resolve(v); }, (e) => { end(); reject(e); });
+    });
+  };
   const read = async (source, reader, parse) => {
     let text;
     try {
-      text = await reader();
+      text = await guarded(source, reader);
     } catch (e) {
       once(`${source}:unreadable`, `thermal: ${source} not readable (${e instanceof Error ? e.message : e}); no mark from it`);
       return null;
@@ -134,7 +150,7 @@ export function createDefaultReaders({
     readTemp: async () => String(await readFile(tempPath, 'utf8')),
     readThrottled: throttledPath
       ? async () => String(await readFile(throttledPath, 'utf8'))
-      : () => run(vcgencmd, ['get_throttled'], { timeout: RUN_TIMEOUT_MS, maxBuffer: 4096 }),
+      : () => run(vcgencmd, ['get_throttled'], { timeout: RUN_TIMEOUT_MS, killSignal: 'SIGKILL', maxBuffer: 4096 }),
   };
 }
 

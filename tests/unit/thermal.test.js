@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { setImmediate } from 'node:timers';
 import {
   parseThrottled, parseTempMilli, deriveMarks, createThermalMonitor, createDefaultReaders, thermalEnv,
   DEFAULT_TEMP_PATH, RUN_TIMEOUT_MS,
@@ -10,6 +11,14 @@ import {
 import { startLiveServer, parseArgs } from '../../src/server/index.js';
 
 const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+// Bounded poll (no fixed sleep): resolves when cond() holds, fails after about 10 s.
+async function until(cond) {
+  for (let i = 0; i < 2000; i++) {
+    if (cond()) return;
+    await new Promise((r) => setImmediate(r));
+  }
+  assert.fail('condition not reached');
+}
 function fakeTimers() {
   const pending = new Map();
   let n = 0;
@@ -49,8 +58,8 @@ const marks = (t, prev, now = 0, extra = {}) => deriveMarks(t, prev, { now, ...e
 
 test('deriveMarks: bits table', () => {
   const cases = [
-    [0x0, false, false], [0x1, false, true], [0x2, true, false], [0x4, true, false], [0x8, true, false],
-    [0x5, true, true], [0xf, true, true],
+    [0x0, false, false], [0x1, false, true], [0x2, false, false], [0x4, true, false], [0x8, true, false],
+    [0x5, true, true], [0xf, true, true], [0x3, false, true],
     [0x10000, false, false], [0x50000, false, false], [0xf0000, false, false], // "has occurred" bits show nothing
   ];
   for (const [t, hot, lowPower] of cases) {
@@ -163,7 +172,7 @@ test('monitor: since-boot bits are logged once per distinct value', async () => 
 });
 
 test('monitor: onChange throwing is logged, stop() clears the timer and ends the loop', async () => {
-  const r = rig({ throttled: ['0x2'], opts: { onChange: () => { throw new Error('x'); } } });
+  const r = rig({ throttled: ['0x4'], opts: { onChange: () => { throw new Error('x'); } } });
   await flush();
   assert.ok(r.logs.some((l) => l.includes('onChange failed')));
   assert.equal(r.timers.pending.size, 1);
@@ -195,6 +204,7 @@ test('default readers: temp from the file, throttled from the command', async ()
   assert.equal(runs[0][0], 'vcgencmd');
   assert.deepEqual(runs[0][1], ['get_throttled']);
   assert.equal(runs[0][2].timeout, RUN_TIMEOUT_MS);
+  assert.equal(runs[0][2].killSignal, 'SIGKILL');
   assert.ok(runs[0][2].maxBuffer <= 65536);
 });
 
@@ -249,13 +259,13 @@ test('server: --thermal marks reach the board, close() stops the monitor, HTTP R
   const thermal = { ...createDefaultReaders({ tempPath: tempFile, throttledPath: thrFile }), timers, now: () => clock.t };
   const live = await startLiveServer({ port: 0, thermal });
   t.after(() => live.close());
-  await new Promise((r) => setTimeout(r, 50));
+  await until(() => timers.pending.size === 1); // first tick done, next poll scheduled
   assert.equal(live.state().hot, false);
   assert.equal(live.state().lowPower, false);
   fs.writeFileSync(thrFile, 'throttled=0x50005\n');
   clock.t = 1000;
   await timers.fire();
-  await new Promise((r) => setTimeout(r, 50));
+  await until(() => live.state().hot === true && live.state().lowPower === true);
   assert.equal(live.state().hot, true);
   assert.equal(live.state().lowPower, true);
   assert.equal(timers.pending.size, 1);
@@ -264,4 +274,52 @@ test('server: --thermal marks reach the board, close() stops the monitor, HTTP R
   assert.equal(live.state().hot, true);
   await live.close();
   assert.equal(timers.pending.size, 0);
+});
+
+test('monitor: a reader that never answers counts as unreadable, marks clear after the hold, no second read piles up, late result ignored', async () => {
+  const timers = fakeTimers();
+  const clock = { t: 0 };
+  const changes = [];
+  const logs = [];
+  let calls = 0;
+  let release;
+  let mode = 'ok';
+  const readThrottled = () => {
+    calls++;
+    if (mode === 'ok') return Promise.resolve('throttled=0x5');
+    return new Promise((r) => { release = r; });
+  };
+  createThermalMonitor({
+    readThrottled, readTemp: async () => '40000', onChange: (m) => changes.push(m), timers, now: () => clock.t,
+    log: (m) => logs.push(m), holdMs: 10000, readTimeoutMs: 4000,
+  });
+  await flush();
+  assert.deepEqual(changes, [{ hot: true, lowPower: true }]);
+  mode = 'stuck';
+  // poll timer fires; the stuck read starts and arms its own timeout
+  clock.t = 5000;
+  await timers.fire();
+  assert.equal(calls, 2);
+  const stuckTimer = [...timers.pending.values()].find((x) => x.ms === 4000);
+  assert.ok(stuckTimer, 'read timeout armed');
+  await timers.fire(); // the read timeout fires: unreadable, polling goes on
+  assert.ok(logs.some((l) => /throttled not readable/.test(l)));
+  assert.equal([...timers.pending.values()].filter((x) => x.ms === 5000).length, 1, 'next poll scheduled');
+  // next polls: no second read while the first is stuck
+  clock.t = 9000;
+  await timers.fire();
+  assert.equal(calls, 2, 'no pile-up');
+  assert.equal(changes.length, 1, 'still held');
+  clock.t = 16000; // more than the hold since the last true reading (0)
+  await timers.fire();
+  assert.deepEqual(changes[1], { hot: false, lowPower: false });
+  release('throttled=0x5'); // late result is ignored
+  await flush();
+  assert.equal(changes.length, 2);
+  // after it settled a new read may start again
+  mode = 'ok';
+  clock.t = 20000;
+  await timers.fire();
+  assert.equal(calls, 3);
+  assert.deepEqual(changes[2], { hot: true, lowPower: true });
 });

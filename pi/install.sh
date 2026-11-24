@@ -26,7 +26,7 @@
 #   (the owner's files, the USB ids and key map, are edited there; server.env is only written if missing, buttons.json
 #   is created if missing and merged on an update, see below;
 #   the udev dongle rule is regenerated from the ids in /etc/revview/buttons.json on every run),
-#   ~/.config/labwc/autostart (kiosk, no desktop), the user's Claude Code hooks, packages, groups input and audio.
+#   ~/.config/labwc/autostart (kiosk, no desktop), the user's Claude Code hooks, packages, groups input, audio and video.
 #   A changed file that existed gets a copy once: <file>.revview-backup.
 # Key map on update: setup.mjs merges three versions of buttons.json per key (an array is one value): the shipped
 #   one it recorded at its last run (/var/lib/revview/buttons.shipped.json, root-owned 0644), the new config/buttons.json,
@@ -148,12 +148,12 @@ for need in python3 tmux; do
   command -v "$need" > /dev/null || echo "warning: $need not found" >&2
 done
 
-# Groups: input (buttons) and audio.
+# Groups: input (buttons), audio, and video (vcgencmd talks to /dev/vcio, group video; from memory).
 if [ "$real" -eq 1 ] && [ "$dry" -eq 0 ]; then
-  usermod --append --groups input,audio "$user"
-  echo "added $user to groups input,audio"
+  usermod --append --groups input,audio,video "$user"
+  echo "added $user to groups input,audio,video"
 else
-  echo "would add $user to groups input,audio"
+  echo "would add $user to groups input,audio,video"
 fi
 
 # Leftover of the old set-up: a system unit run as the user "revview".

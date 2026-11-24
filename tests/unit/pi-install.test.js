@@ -56,7 +56,7 @@ test('install.sh: fake root gets every file, the hooks, and the old unit goes', 
   assert.match(res.out, /removed the old system unit/);
   assert.match(res.out, /userdel revview/);
   assert.match(res.out, /skipped packages/);
-  assert.match(res.out, /would add alice to groups input,audio/);
+  assert.match(res.out, /would add alice to groups input,audio,video/);
   assert.match(res.out, /journalctl --user -u revview/);
   const settings = fs.readFileSync(p('home/alice/.claude/settings.json'), 'utf8');
   assert.match(settings, /# revview-hook/);

@@ -1807,8 +1807,15 @@ Tested in the unit suite only; nothing run on a Pi.
 
 - **Option `--thermal`, poll every 5 s.** Sources: `vcgencmd get_throttled` (default) and `/sys/class/thermal/thermal_zone0/temp`;
   overridable with `REVVIEW_THERMAL_VCGENCMD`, `REVVIEW_THERMAL_THROTTLED` and `REVVIEW_THERMAL_TEMP`. `pi/revview.service` has it.
-- **HOT** = throttle bits 1, 2 or 3 ("now") OR CPU temperature >= 80 C, with hysteresis: it stays until the CPU is below 75 C.
+- **HOT** = throttle bits 2 or 3 ("now": throttled, soft temperature limit) OR CPU temperature >= 80 C, with hysteresis: it stays until the CPU is below 75 C.
 - **LOW POWER** = bit 0 (under-voltage now).
+- **Bit 1 (ARM frequency capped) does not make HOT.** From memory it is also set by under-voltage, so a weak adapter would
+  show HOT and blame the wrong cause; bit 1 alone shows no mark. Unproven; bench PT-3 asks.
+- **Never stuck.** `vcgencmd` is killed with SIGKILL on its 3 s timeout; every source read is also raced against a 4 s timer,
+  and a read that gives no answer counts as unreadable (marks clear after the hold, polling goes on). A source with a read still
+  stuck is not read again, and its late result is ignored.
+- **Installer adds group `video`** (`vcgencmd` talks to `/dev/vcio`; from memory), next to `input` and `audio`.
+- **Fullest band.** With NEEDS PERMISSION + 9+ + voice mark + NO BUTTONS, LOW POWER, then HOT, can be absent.
 - **No mark for "has occurred".** Bits 16-19 show nothing: the bar says what is true now. They are logged once, so the journal
   keeps the history.
 - **Hold of 10 s.** A mark that turns off stays 10 s, so a short dip is seen. Events are posted only when the marks change.
@@ -1818,4 +1825,4 @@ Tested in the unit suite only; nothing run on a Pi.
 - **Why.** A throttled or under-powered Pi makes Claude and the bar slow with no visible cause; the mark says the box, not Claude,
   is the problem. 80 C because the Pi 4B starts soft-limiting about there (from memory).
 - **Not proven:** the sources, the bit meanings and that the service user may call `vcgencmd` (the unit is a user unit; `video`
-  group not added by the installer). BENCH PT-1 to PT-3; `docs/PI-FACTS.md` X08-X10.
+  group is added by the installer, from memory). BENCH PT-1 to PT-3; `docs/PI-FACTS.md` X08-X10.

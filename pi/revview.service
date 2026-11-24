@@ -5,7 +5,7 @@
 # the microphone work for Claude's /voice and for read aloud). The user's Claude sign-in and hooks live there too.
 #
 # ConditionUser: /etc/systemd/user is read by every user's manager; only the kiosk user runs it.
-# No User= and no SupplementaryGroups= (not allowed in user units): the user is in groups input and audio.
+# No User= and no SupplementaryGroups= (not allowed in user units): the user is in groups input, audio and video.
 #
 # Flags: --input (the wheel-button reader runs inside the server; its file is /etc/revview/buttons.json, the owner's
 # copy of config/buttons.json, written once by install.sh and never overwritten), --sessions (revview's own tmux sessions),

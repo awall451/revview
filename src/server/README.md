@@ -46,8 +46,8 @@ a default route nothing is sent at all. Nothing depends on Ethernet. Code: `src/
 ## Heat and weak supply: `--thermal`
 
 `--thermal` polls every 5 s and posts the internal `RevviewThermal` (`hot`, `lowPower`; 403 over HTTP) only when
-a mark changes. HOT = throttle flags "frequency capped now", "throttled now" or "soft temperature limit now"
-(bits 1, 2, 3), or a temperature of 80 C or more (stays until below 75 C). LOW POWER = "under-voltage now" (bit 0).
+a mark changes. HOT = throttle flags "throttled now" or "soft temperature limit now"
+(bits 2, 3; bit 1 is not used, under-voltage is thought to set it too), or a temperature of 80 C or more (stays until below 75 C). LOW POWER = "under-voltage now" (bit 0).
 A mark that goes off stays for 10 s so a short dip is still seen. The "has occurred since boot" bits (16-19) show no
 mark; they are logged once per distinct value (`thermal: since boot: ...`).
 
