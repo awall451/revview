@@ -17,6 +17,7 @@
     "removed"
   ],
   "failed": null,
+  "compacting": false,
   "others": 0,
   "diffIncomplete": false,
   "buttons": "unknown",

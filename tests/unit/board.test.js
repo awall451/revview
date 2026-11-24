@@ -33,7 +33,7 @@ test('initialBoard shape', () => {
 
 test('boardView always has exactly the same keys', () => {
   const keys = Object.keys(boardView(initialBoard())).sort();
-  assert.deepEqual(keys, ['activity', 'answered', 'branch', 'buttons', 'command', 'diff', 'diffIncomplete', 'elsewhere', 'failed', 'file', 'locked', 'nav', 'note',
+  assert.deepEqual(keys, ['activity', 'answered', 'branch', 'buttons', 'command', 'compacting', 'diff', 'diffIncomplete', 'elsewhere', 'failed', 'file', 'locked', 'nav', 'note',
     'offline', 'others', 'output', 'outputLines', 'position', 'repo', 'tool', 'view', 'voice']);
   const b = run([ev('SessionStart', A), ev('PreToolUse', { ...A, ...BASH })]);
   assert.deepEqual(Object.keys(boardView(b)).sort(), keys);
@@ -253,7 +253,7 @@ test('events without a usable session_id use one anonymous session', () => {
 
 test('same reference for ignored events; no session for ignored events', () => {
   const b = run([ev('SessionStart', A)]);
-  for (const e of [ev('SubagentStop', B), ev('Whatever', B), ev('PreCompact', A), null, 1, [], 'x', {}, { hook_event_name: 3 }]) {
+  for (const e of [ev('SubagentStop', B), ev('Whatever', B), ev('PreCompact', B), null, 1, [], 'x', {}, { hook_event_name: 3 }]) {
     assert.equal(reduceBoard(b, e), b);
   }
   assert.equal(Object.keys(reduceBoard(b, ev('SubagentStop', B)).sessions).length, 1);

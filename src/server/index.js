@@ -38,7 +38,9 @@ const BUTTON_RE = /^[a-z][a-z0-9-]{0,31}$/;
 const GESTURES = ['tap', 'hold', 'long-hold'];
 // made only by revview itself (the actions, the boot path): no POST may forge them, not even under --dev-bridge
 const LAUNCH_LIMIT_MS = 30000;
-const INTERNAL_EVENTS = ['RevviewInterrupted', 'RevviewAnswered', 'RevviewSelect', 'RevviewNav', 'RevviewOwned', 'RevviewProjects', 'RevviewNote', 'RevviewBootBegin', 'RevviewBootDone', 'RevviewLaunching', 'RevviewLaunchExpired', 'RevviewNoSessionPress'];
+// a compaction took 5-7 s in the recordings and 1-2 min in long sessions; this bounds a lost end event
+export const COMPACT_LIMIT_MS = 180000;
+const INTERNAL_EVENTS = ['RevviewInterrupted', 'RevviewAnswered', 'RevviewSelect', 'RevviewNav', 'RevviewOwned', 'RevviewProjects', 'RevviewNote', 'RevviewBootBegin', 'RevviewBootDone', 'RevviewLaunching', 'RevviewLaunchExpired', 'RevviewNoSessionPress', 'RevviewCompactExpired'];
 export const MAX_SSE_CLIENTS = 8;
 export const MAX_DEMO_CLIENTS = 2;
 // Browser codes the demo player owns under --dev-demo (the demo's keys: scene 1-9, pause, slower, faster).
@@ -85,7 +87,7 @@ function serveStatic(req, res, root) {
 export async function startLiveServer({
   port = 0, viewDir = DEFAULT_VIEW_DIR, reduce: reduceEvent = reduceBoard,
   input = null, devBridge = false, devKeys = null, devDemo = false, inputDeps, inputRetryMs, onGesture,
-  sessions = null, clock, permissionWaitMs, minShownMs, projects = [], timers, navTimeoutMs, ownedPollMs = 5000, speech = null, launchLimitMs = LAUNCH_LIMIT_MS,
+  sessions = null, clock, permissionWaitMs, minShownMs, projects = [], timers, navTimeoutMs, ownedPollMs = 5000, speech = null, launchLimitMs = LAUNCH_LIMIT_MS, compactLimitMs = COMPACT_LIMIT_MS,
   boot = false, netmon = null, dataLock = null,
 } = {}) {
   const root = path.resolve(viewDir);
@@ -152,6 +154,18 @@ export async function startLiveServer({
     }, launchLimitMs);
     t?.unref?.();
     launchTimers.set(id, t);
+  }
+  // a PreCompact marks the session as compacting; the mark ends with the next event, or after compactLimitMs
+  const compactTimers = new Map();
+  function compactStarted(id) {
+    if (closed) return;
+    if (compactTimers.has(id)) clearT(compactTimers.get(id));
+    const t = setT(() => {
+      compactTimers.delete(id);
+      if (!closed) apply({ hook_event_name: 'RevviewCompactExpired', session_id: id }, true);
+    }, compactLimitMs);
+    t?.unref?.();
+    compactTimers.set(id, t);
   }
   const marked = sessions ? {
     ...guarded,
@@ -344,6 +358,7 @@ export async function startLiveServer({
         return text(res, 403, `${event.hook_event_name} is not accepted over HTTP (dev bridge only)`);
       }
       if (!apply(event)) return text(res, 500, 'state core failed; event ignored');
+      if (event.hook_event_name === 'PreCompact' && typeof event.session_id === 'string') compactStarted(event.session_id);
       try {
         readAloud?.onEvent(event, board, selectedKey(board));
       } catch (e) {
@@ -605,6 +620,8 @@ export async function startLiveServer({
         actions.close();
         for (const t of launchTimers.values()) clearT(t);
         launchTimers.clear();
+        for (const t of compactTimers.values()) clearT(t);
+        compactTimers.clear();
         if (ownedTimer !== null) clearInterval(ownedTimer);
         registry.close(); // leaves the tmux server alone: sessions outlive a server restart
         clearInterval(timer);

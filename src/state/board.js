@@ -368,9 +368,14 @@ function reduceInner(b, event) {
       if (act(live) !== 'working' && act(live) !== 'permission') return b;
       // like an interrupt: waiting for the driver, last tool/command/file/diff kept, dialogs rejected by the Esc
       const st = live.state;
-      const state = { ...st, activity: 'waiting', view: st.locked ? 'insert-key' : st.offline ? 'offline' : 'waiting' };
+      const state = { ...st, activity: 'waiting', compacting: false, view: st.locked ? 'insert-key' : st.offline ? 'offline' : 'waiting' };
       const tick = b.tick + 1;
       return { ...b, tick, sessions: withSession(b.sessions, id, { ...live, state, open: [], pending: [], pre: [], touched: tick }) };
+    }
+    case 'RevviewCompactExpired': { // the server's limit for a compaction whose end event never came
+      if (!isStr(event.session_id) || live === null || live.state.compacting !== true) return b;
+      const tick = b.tick + 1;
+      return { ...b, tick, sessions: withSession(b.sessions, id, { ...live, state: { ...live.state, compacting: false }, touched: tick }) };
     }
     case 'RevviewAnswered': { // revview itself answered one permission request (allow or deny) through the hook
       // Clears exactly that prompt (session, agent, board tick `since`) so it leaves the bar now, not at
@@ -534,6 +539,8 @@ function reduceInner(b, event) {
   }
 
   if (name !== 'SessionStart' && b.ended.includes(tid)) return b;
+  // a PreCompact of a session the board does not know makes no session (a mark alone is nothing to show)
+  if (name === 'PreCompact' && tlive === null) return b;
   return applyToSession(b, tlive, tid, event);
 }
 
@@ -805,6 +812,7 @@ export function boardView(board) {
       output: null,
       outputLines: [],
       failed: null,
+      compacting: false,
       others: 0,
       diffIncomplete: false,
       buttons,
@@ -837,6 +845,8 @@ export function boardView(board) {
     output: failed !== null ? failed.message : ask !== null ? ask.output : ownOutput ? s.output : null,
     outputLines: failed !== null ? (failed.message === null ? [] : [failed.message]) : ask !== null ? ask.outputLines : ownOutput ? s.outputLines : [],
     failed: failed === null ? null : { error: failed.error, message: failed.message },
+    // compaction is under way: the view says so beside what it shows (it needs no prompt, no failure, a settled activity)
+    compacting: s.compacting === true && ask === null && failed === null && (activity === 'working' || activity === 'waiting' || activity === 'done'),
     others: Object.keys(b.sessions).filter((k) => k !== '').length - (shownKey === '' ? 0 : 1),
     diffIncomplete: shown.dropped,
     buttons,

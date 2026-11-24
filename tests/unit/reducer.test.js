@@ -23,7 +23,7 @@ function deepFreeze(o) {
 test('initialState', () => {
   assert.deepEqual(initialState(), {
     view: 'unknown', activity: 'unknown', offline: false, locked: false, repo: null, branch: null,
-    tool: null, file: null, diff: { added: 0, removed: 0 }, command: null, output: null, outputLines: [], failed: null,
+    tool: null, file: null, diff: { added: 0, removed: 0 }, command: null, output: null, outputLines: [], failed: null, compacting: false,
   });
   assert.notEqual(initialState(), initialState());
   assert.ok(isState(initialState().view));
@@ -143,7 +143,7 @@ test('StopFailure -> waiting; PermissionDenied -> working', () => {
 
 test('ignored events keep the same reference', () => {
   const s = run([e('UserPromptSubmit')]);
-  for (const name of ['SubagentStop', 'SubagentStart', 'SessionEnd', 'PreCompact', 'PostCompact', 'SomethingNew']) {
+  for (const name of ['SubagentStop', 'SubagentStart', 'SessionEnd', 'PostCompact', 'SomethingNew']) {
     assert.equal(reduce(s, e(name)), s, name);
   }
 });
@@ -374,7 +374,10 @@ test('SessionStart source compact (auto mid-turn or manual) keeps the activity',
   const working = run([e('SessionStart', { source: 'startup' }), e('UserPromptSubmit', { prompt: 'p' }),
     e('PreToolUse', { tool_name: 'Read', tool_input: { file_path: `${CWD}/a.txt` }, tool_use_id: 't1' })]);
   assert.equal(working.activity, 'working');
-  assert.equal(reduce(working, e('PreCompact', { trigger: 'auto', custom_instructions: null })), working);
+  // PreCompact is no longer ignored: it sets the compacting mark and nothing else (board-compaction.test.js)
+  const compacting = reduce(working, e('PreCompact', { trigger: 'auto', custom_instructions: null }));
+  assert.deepEqual(compacting, { ...working, compacting: true });
+  assert.deepEqual(reduce(compacting, e('SessionStart', { source: 'compact' })), working);
   assert.equal(reduce(working, e('SessionStart', { source: 'compact', model: 'claude-haiku-5-5' })), working);
   const done = reduce(working, e('Stop', { background_tasks: [] }));
   assert.equal(reduce(done, e('SessionStart', { source: 'compact' })), done);

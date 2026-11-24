@@ -20,10 +20,11 @@ export function initialState() {
     output: null,
     outputLines: [],
     failed: null,
+    compacting: false,
   };
 }
 
-const TURN_RESET = { tool: null, file: null, command: null, output: null, outputLines: [], diff: { added: 0, removed: 0 } };
+const TURN_RESET = { compacting: false, tool: null, file: null, command: null, output: null, outputLines: [], diff: { added: 0, removed: 0 } };
 
 function computeView(s) {
   // needing the driver outranks OFFLINE (the page shows offline as a secondary mark)
@@ -97,7 +98,8 @@ function failedOf(event) {
 function patchFor(event) {
   switch (event.hook_event_name) {
     case 'SessionStart':
-      // source "compact" follows a compaction (auto in the middle of a turn, or /compact): nothing changed
+      // source "compact" follows a compaction (auto in the middle of a turn, or /compact): the activity did not
+      // change (reduce() still clears the compacting mark, as it does for every event but SubagentStop)
       return event.source === 'compact' ? null : { activity: 'waiting' };
     case 'UserPromptSubmit':
       return isDriverPrompt(event) ? { activity: 'working', ...TURN_RESET } : { activity: 'working' };
@@ -135,6 +137,13 @@ function patchFor(event) {
         return { activity: 'permission' };
       }
       return event.notification_type === 'idle_prompt' ? { activity: 'waiting' } : null;
+    case 'PreCompact':
+      // compaction starts (auto in the middle of a turn, or /compact at the prompt): only the mark; the activity stays.
+      // Not always followed by a compaction (recorded), so the next event of any kind clears the mark again.
+      return { compacting: true };
+    case 'PostCompact':
+      // the compaction is over (the mark is cleared for every event but SubagentStop in reduce()); activity unchanged
+      return {};
     case 'Stop':
       return { activity: subagentsRunning(event) ? 'working' : 'done' };
     case 'StopFailure':
@@ -180,10 +189,16 @@ export function reduce(state, event) {
   let patch = syntheticPatch(event);
   if (patch === null) {
     patch = patchFor(event);
-    if (patch === null) return base;
-    // any event that changes the turn ends a failed turn; idle_prompt (Claude Code still idle ~60 s later) does not
-    const idle = event.hook_event_name === 'Notification' && event.notification_type === 'idle_prompt';
-    if (!('failed' in patch) && !idle) patch.failed = null;
+    // The compacting mark lasts until the next Claude hook event, whatever it is, except the summariser's own
+    // SubagentStop that arrives during the compaction (recorded); an event otherwise ignored still clears it.
+    const mid = event.hook_event_name === 'SubagentStop';
+    if (patch === null) return base.compacting === true && !mid ? { ...base, compacting: false } : base;
+    if (event.hook_event_name !== 'PreCompact') patch.compacting = false;
+    // any event that changes the turn ends a failed turn; idle_prompt (Claude Code still idle ~60 s later) and a
+    // compaction (a /compact after the failure: the turn is still not redone) do not
+    const keepsFailed = (event.hook_event_name === 'Notification' && event.notification_type === 'idle_prompt')
+      || event.hook_event_name === 'PreCompact' || event.hook_event_name === 'PostCompact';
+    if (!('failed' in patch) && !keepsFailed) patch.failed = null;
     // Only SessionStart sets repo; other events fill it in when still unknown.
     const repo = repoFromCwd(event.cwd);
     if (repo !== null && (event.hook_event_name === 'SessionStart' || base.repo === null)) patch.repo = repo;
