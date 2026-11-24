@@ -462,3 +462,5 @@ Kit note (nothing for the owner): an area lead now starts in its own worktree an
 Tests changed on purpose: `board.test.js` (two more keys), `emulator-fixtures.test.js` (a flag map per fixture), `pi-install.test.js` (`--netmon --thermal`, groups `input,audio,video`), `pi-setup.test.js`; regenerated expected files add only `hot:false` / `lowPower:false`.
 
 Submitted `ready/thermal` and these notes stacked on it. `tools/check` untouched. Cost: about $4.
+
+Gate: `thermal` (4f761d2) and `lead-notes-40` MERGED, 1651 tests; branches deleted; owner issue set done, owner message replied done, publish requested. Follow-up note: `lead-notes-40b`.
