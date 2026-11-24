@@ -44,10 +44,16 @@ const permissionPrompt = session('permission-prompt');
 const idlePrompt = session('idle-prompt');
 
 // The last Bash PostToolUse of the working turn: command and its output line are both on screen.
+// A recorded mid-turn compaction: the second auto compaction, up to the SubagentStop that arrives during it
+// (the Read of src/f2.txt is the last tool). The state stays WORKING; `compacting` is true.
+const compaction = session('compaction');
+const compacting = withContext(compaction.slice(0, 9));
+
 const working = withContext(upToLast(workingTurn, is('PostToolUse', { tool_name: 'Bash' })));
 
 export const RECIPES = Object.freeze({
   working,
+  compacting,
   waiting: withContext(upTo(idlePrompt, is('Notification', { notification_type: 'idle_prompt' }))),
   permission: withContext(upTo(permissionPrompt, is('Notification', { notification_type: 'permission_prompt' }))),
   done: withContext(upTo(workingTurn, is('Stop'))),

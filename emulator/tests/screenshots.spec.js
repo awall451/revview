@@ -28,6 +28,14 @@ for (const id of FIXTURE_IDS) {
   });
 }
 
+test('screenshot compacting (WORKING while Claude compacts its context) is 1280x400', async ({ openView, page }) => {
+  const file = path.join(shotsDir(), 'compacting.png');
+  await openView('compacting');
+  await expect(page.locator('#tool')).toHaveText('Compacting context');
+  await page.screenshot({ path: file });
+  expectPng1280x400(file);
+});
+
 test('screenshot more-sessions (others and a lower-bound diff) is 1280x400', async ({ openView, page }) => {
   const file = path.join(shotsDir(), 'more-sessions.png');
   await openView({ ...loadFixture('working'), others: 2, diffIncomplete: true });

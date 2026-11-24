@@ -217,10 +217,16 @@ export function render(input) {
 
   delete el.tool.dataset.answer;
   delete el.tool.dataset.failed;
+  delete el.tool.dataset.compacting;
   // a turn that ended with an API error (StopFailure): said in words, not by colour alone ("Turn failed: rate limit")
   const failedWord = (view === 'waiting' || (view === 'offline' && s.activity === 'waiting'))
     && s.failed && typeof s.failed === 'object' && typeof s.failed.error === 'string' && s.failed.error !== ''
     ? `Turn failed: ${s.failed.error.replaceAll('_', ' ')}` : '';
+  // Claude is compacting its context (PreCompact seen, end not yet): said in words in the tool slot, the file slot
+  // stays empty. Only over the working / waiting / done look (also under OFFLINE); the state core never sets it elsewhere.
+  const compactingWord = s.compacting === true && failedWord === ''
+    && (view === 'working' || view === 'waiting' || view === 'done' || (view === 'offline' && ['working', 'waiting', 'done'].includes(s.activity)))
+    ? 'Compacting context' : '';
   // revview's own answer to the shown call, in words (not by colour alone): "Denied: Bash" / "Allowed: Bash"
   const answerWord = (tool) => (tool !== '' && (s.answered === 'deny' || s.answered === 'allow') ? `${s.answered === 'deny' ? 'Denied' : 'Allowed'}: ${tool}` : '');
   if (note) {
@@ -236,7 +242,10 @@ export function render(input) {
     } else {
       // OFFLINE keeps the confirmation of a button answer (Denied/Allowed) before "Claude: ..." on row A
       const word = view === 'offline' ? answerWord(str(s.tool)) : '';
-      if (word !== '') {
+      if (compactingWord !== '') {
+        set(el.tool, compactingWord);
+        el.tool.dataset.compacting = '1';
+      } else if (word !== '') {
         set(el.tool, word);
         el.tool.dataset.answer = s.answered;
       } else if (failedWord !== '') {
@@ -257,7 +266,12 @@ export function render(input) {
       set(el.tool, failedWord);
       el.tool.dataset.failed = '1';
     }
-    file = str(s.file);
+    if (compactingWord !== '') {
+      set(el.tool, compactingWord);
+      delete el.tool.dataset.answer;
+      el.tool.dataset.compacting = '1';
+    }
+    file = compactingWord !== '' ? '' : str(s.file);
     el.cmdbox.hidden = !str(s.command);
     outRows = outputLines(s).reverse().map((line, i) => set(el[`out${3 - i}`], line)).length;
     // NEEDS PERMISSION while offline: a secondary row at the bottom (it takes one of the command's rows)

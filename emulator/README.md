@@ -73,6 +73,8 @@ the outline until it matches. Check the 100 mm ruler with a real ruler.
 
 ## Worst cases
 
+`fixtures/compacting.json` is an extra fixture (a state of the WORKING view with `compacting: true`, from a recorded mid-turn compaction): it has a recipe, a screenshot (`out/shots/compacting.png`) and `tests/compacting.spec.js`, but it is not a view (`EXTRA_FIXTURE_IDS` in `fixtures.js`).
+
 `worst-case/<id>.json` are hand-written CONTENT objects (repo, branch, tool, file, command, output, diff) that stress the renderer: far over the state core's limits, unbroken tokens, CJK and emoji, exactly at the limits in the widest letter, and a 999999999 diff. They are NOT reducer output and live outside `fixtures/` (every file there needs a screenshot). `worst-case.js` exports `WORST_CASE_IDS` and `loadWorstCase(id)`; the layout and screenshot specs merge each over every fixture state (`out/shots/worst-<id>.png`, `worst-<id>-permission.png`).
 
 ## WB4 looks (`emulator/wb4/`, `tests/wb4.spec.js`)

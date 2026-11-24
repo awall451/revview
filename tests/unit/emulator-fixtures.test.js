@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import {
   initialBoard, boardView, replayView, isState, STATES, PAGE_ONLY_VIEWS, VIEWS,
 } from '../../src/state/index.js';
-import { FIXTURE_IDS, REDUCER_FIXTURE_IDS, FIXTURE_DIR, fixtureUrl, loadFixture } from '../../emulator/fixtures.js';
+import { FIXTURE_IDS, EXTRA_FIXTURE_IDS, REDUCER_FIXTURE_IDS, FIXTURE_DIR, fixtureUrl, loadFixture } from '../../emulator/fixtures.js';
 import { RECIPES } from '../../emulator/fixtures/recipes.js';
 
 // The emulator fixtures are the board's view (replayView) for the event recipes in
@@ -22,10 +22,10 @@ const NULLABLE = ['repo', 'branch', 'tool', 'file', 'command', 'output'];
 
 test('one fixture per view, no extras', () => {
   const files = fs.readdirSync(FIXTURE_DIR).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5)).sort();
-  assert.deepEqual(files, [...FIXTURE_IDS].sort());
+  assert.deepEqual(files, [...FIXTURE_IDS, ...EXTRA_FIXTURE_IDS].sort());
   assert.deepEqual([...FIXTURE_IDS], [...VIEWS]);
   assert.deepEqual([...REDUCER_FIXTURE_IDS], [...STATES]);
-  assert.deepEqual(Object.keys(RECIPES).sort(), [...REDUCER_FIXTURE_IDS].sort());
+  assert.deepEqual(Object.keys(RECIPES).sort(), [...REDUCER_FIXTURE_IDS, ...EXTRA_FIXTURE_IDS].sort());
 });
 
 test('fixture no-link is exactly the page-only view', () => {
@@ -35,7 +35,9 @@ test('fixture no-link is exactly the page-only view', () => {
   assert.equal(isState('no-link'), false);
 });
 
-for (const id of REDUCER_FIXTURE_IDS) {
+// the extra fixtures are a state of one view (see EXTRA_FIXTURE_IDS), so they get the view's validity checks
+const VIEW_OF = { compacting: 'working' };
+for (const id of [...REDUCER_FIXTURE_IDS, ...EXTRA_FIXTURE_IDS]) {
   test(`fixture ${id} is the board view for its recipe`, () => {
     const actual = replayView(RECIPES[id], initialBoard()).at(-1) ?? boardView(initialBoard());
     if (UPDATE) {
@@ -47,8 +49,9 @@ for (const id of REDUCER_FIXTURE_IDS) {
 
   test(`fixture ${id} is a valid view of the state core`, () => {
     const fx = loadFixture(id);
-    assert.equal(fx.view, id);
+    assert.equal(fx.view, VIEW_OF[id] ?? id);
     assert.ok(isState(fx.view));
+    if (EXTRA_FIXTURE_IDS.includes(id)) assert.equal(fx.compacting, true);
     assert.ok(isState(fx.activity) && !['offline', 'insert-key'].includes(fx.activity));
     const ref = boardView(initialBoard());
     assert.deepEqual(Object.keys(fx).sort(), Object.keys(ref).sort());

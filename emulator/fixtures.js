@@ -7,6 +7,10 @@ import { STATES, VIEWS } from '../src/state/states.js';
 export const FIXTURE_IDS = VIEWS;
 export const REDUCER_FIXTURE_IDS = STATES;
 
+// Extra fixtures: not a view of their own, a state of one view with a flag set (`compacting`: WORKING while Claude
+// compacts its context). Each has a recipe and a screenshot (screenshots.spec.js), but they are not iterated with the views.
+export const EXTRA_FIXTURE_IDS = Object.freeze(['compacting']);
+
 export const FIXTURE_DIR = new URL('./fixtures/', import.meta.url);
 
 export function fixtureUrl(id) {
@@ -14,6 +18,6 @@ export function fixtureUrl(id) {
 }
 
 export function loadFixture(id) {
-  if (!FIXTURE_IDS.includes(id)) throw new Error(`unknown fixture: ${id}`);
+  if (!FIXTURE_IDS.includes(id) && !EXTRA_FIXTURE_IDS.includes(id)) throw new Error(`unknown fixture: ${id}`);
   return JSON.parse(fs.readFileSync(fixtureUrl(id), 'utf8'));
 }

@@ -1,0 +1,28 @@
+{
+  "view": "working",
+  "activity": "working",
+  "offline": false,
+  "locked": false,
+  "repo": "revview",
+  "branch": "main",
+  "tool": "Read",
+  "file": "src/f2.txt",
+  "diff": {
+    "added": 0,
+    "removed": 0
+  },
+  "command": null,
+  "output": null,
+  "outputLines": [],
+  "failed": null,
+  "compacting": true,
+  "others": 0,
+  "diffIncomplete": false,
+  "buttons": "unknown",
+  "voice": null,
+  "position": null,
+  "elsewhere": 0,
+  "nav": null,
+  "note": null,
+  "answered": null
+}
