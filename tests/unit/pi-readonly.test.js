@@ -16,21 +16,55 @@ const BOOT_RW = '/dev/mmcblk0p1 /boot/firmware vfat rw,relatime 0 0\n';
 const FSTAB_RO = 'proc /proc proc defaults 0 0\n/dev/mmcblk0p1 /boot/firmware vfat defaults,ro 0 2\n';
 const FSTAB_RW = 'proc /proc proc defaults 0 0\n/dev/mmcblk0p1 /boot/firmware vfat defaults 0 2\n';
 
-// opts: mounts (text), cmdline (text), fstab (text or null), stubAddsOverlay (bool)
+// opts: mounts (text), cmdline (text), fstab (text or null), noOverlayroot (bool: overlayroot package absent),
+// stub: 'real' (default; mirrors raspi-config-core 20261026+2) | 'nobootro' (do_overlayfs does not set bootro)
+//       | 'stuck' (disable_bootro never clears ro).
+// The stub mirrors the real raspi-config: do_overlayfs 0 PREPENDS "overlayroot=tmpfs " to cmdline.txt and, when the
+// overlay is not active now, applies enable_bootro (do_overlayfs 1: disable_bootro); enable_bootro / disable_bootro
+// are the real seds on etc/fstab and refuse (message, exit 1) when the overlay is active now. The fake root has no
+// /proc/cmdline, so "active now" is whether <root>/proc/mounts shows / as overlay.
 function setup(opts = {}) {
   const r = fs.mkdtempSync(path.join(os.tmpdir(), 'revview-ro-'));
   fs.mkdirSync(path.join(r, 'proc'));
   fs.mkdirSync(path.join(r, 'boot/firmware'), { recursive: true });
   fs.mkdirSync(path.join(r, 'etc'));
+  if (!opts.noOverlayroot) {
+    fs.mkdirSync(path.join(r, 'usr/share/initramfs-tools/scripts/init-bottom'), { recursive: true });
+    fs.writeFileSync(path.join(r, 'usr/share/initramfs-tools/scripts/init-bottom/overlayroot'), '#!/bin/sh\n');
+  }
   fs.writeFileSync(path.join(r, 'proc/mounts'), opts.mounts ?? (EXT4 + BOOT_RW));
   fs.writeFileSync(path.join(r, 'boot/firmware/cmdline.txt'), opts.cmdline ?? 'console=tty1 root=PARTUUID=1a2b3c4d-02 rootwait\n');
   if (opts.fstab !== null) fs.writeFileSync(path.join(r, 'etc/fstab'), opts.fstab ?? FSTAB_RW);
   const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'revview-ro-stub-'));
   const log = path.join(stubDir, 'calls.log');
   const stub = path.join(stubDir, 'raspi-config');
-  const addOverlay = `if [ "$2" = do_overlayfs ] && [ "$3" = 0 ]; then printf '%s overlayroot=tmpfs\\n' "$(tr -d '\\n' < '${r}/boot/firmware/cmdline.txt')" > '${r}/boot/firmware/cmdline.txt'; fi\n`;
-  fs.writeFileSync(stub, `#!/bin/bash\necho "$*" >> '${log}'\n${opts.stubAddsOverlay ? addOverlay : ''}`,
-  { mode: 0o755 });
+  const mode = opts.stub ?? 'real';
+  const body = `#!/bin/bash
+R='${r}'
+echo "$*" >> '${log}'
+active() { awk '$2 == "/" && $3 == "overlay" { f = 1 } END { exit !f }' "$R/proc/mounts"; }
+enable_bootro() {
+  if active; then echo "Overlay in use; cannot update fstab"; return 1; fi
+  sed -i "$R/etc/fstab" -e "s#\\(.*/boot/firmware.*\\)defaults\\(.*\\)#\\1defaults,ro\\2#"
+}
+disable_bootro() {
+  if active; then echo "Overlay in use; cannot update fstab"; return 1; fi
+  ${mode === 'stuck' ? 'return 0' : 'sed -i "$R/etc/fstab" -e "s#\\(.*/boot/firmware.*\\)defaults,ro\\(.*\\)#\\1defaults\\2#"'}
+}
+do_overlayfs() {
+  if [ "$1" = 0 ]; then
+    sed -i "$R/boot/firmware/cmdline.txt" -e "s/^/overlayroot=tmpfs /"
+    ${mode === 'nobootro' ? ':' : 'if ! active; then enable_bootro; fi'}
+  else
+    sed -i "$R/boot/firmware/cmdline.txt" -e "s/overlayroot=tmpfs *//"
+    if ! active; then disable_bootro; fi
+  fi
+}
+[ "$1" = nonint ] || exit 0
+shift
+"$@"
+`;
+  fs.writeFileSync(stub, body, { mode: 0o755 });
   return { r, stubDir, log, stub };
 }
 const calls = (e) => (fs.existsSync(e.log) ? fs.readFileSync(e.log, 'utf8').trim().split('\n') : []);
@@ -100,23 +134,52 @@ test('enable --dry-run prints the commands and calls nothing', withEnv({}, (e) =
   const res = run(e, ['enable', '--dry-run']);
   assert.equal(res.code, 0, res.out + res.err);
   assert.match(res.out, /would run: raspi-config nonint do_overlayfs 0/);
-  assert.match(res.out, /would run: raspi-config nonint enable_bootro/);
+  assert.match(res.out, /would run: raspi-config nonint enable_bootro \(only if fstab has no ro yet\)/);
   assert.deepEqual(calls(e), []);
 }));
 
-test('enable calls do_overlayfs 0 then enable_bootro, checks cmdline.txt, says reboot', withEnv({ stubAddsOverlay: true }, (e) => {
+test('enable: without the overlayroot package: exit 2, raspi-config not called, says how to install it', withEnv({ noOverlayroot: true }, (e) => {
+  const res = run(e, ['enable']);
+  assert.equal(res.code, 2);
+  assert.match(res.err, /overlayroot is not installed/);
+  assert.match(res.err, /raspi-config would apt-get it/);
+  assert.match(res.err, /needs a network/);
+  assert.match(res.err, /sudo apt-get install overlayroot/);
+  assert.deepEqual(calls(e), []);
+}));
+
+test('enable calls exactly do_overlayfs 0 (which sets bootro itself), fstab gets exactly one ro, says reboot', withEnv({}, (e) => {
   const res = run(e, ['enable']);
   assert.equal(res.code, 0, res.out + res.err);
-  assert.deepEqual(calls(e), ['nonint do_overlayfs 0', 'nonint enable_bootro']);
+  assert.deepEqual(calls(e), ['nonint do_overlayfs 0']);
+  assert.match(fs.readFileSync(path.join(e.r, 'etc/fstab'), 'utf8'), /vfat defaults,ro 0 2\n$/);
+  assert.match(fs.readFileSync(path.join(e.r, 'boot/firmware/cmdline.txt'), 'utf8'), /^overlayroot=tmpfs console=tty1/);
   assert.match(res.out, /reboot to make the root read-only/);
 }));
 
+test('enable: when do_overlayfs does not set bootro, enable_bootro is called once', withEnv({ stub: 'nobootro' }, (e) => {
+  const res = run(e, ['enable']);
+  assert.equal(res.code, 0, res.out + res.err);
+  assert.deepEqual(calls(e), ['nonint do_overlayfs 0', 'nonint enable_bootro']);
+  assert.match(fs.readFileSync(path.join(e.r, 'etc/fstab'), 'utf8'), /vfat defaults,ro 0 2\n$/);
+}));
+
 test('enable: raspi-config that leaves no overlayroot= in cmdline.txt gives a warning and exit 1', withEnv({}, (e) => {
+  // a raspi-config that does nothing at all
+  fs.writeFileSync(e.stub, `#!/bin/bash\necho "$*" >> '${e.log}'\n`, { mode: 0o755 });
   const res = run(e, ['enable']);
   assert.equal(res.code, 1);
   assert.deepEqual(calls(e), ['nonint do_overlayfs 0', 'nonint enable_bootro']);
   assert.match(res.err, /did not do what we expected/);
+  assert.match(res.err, /P2 Overlay File System/);
   assert.match(res.out, /reboot to make the root read-only/);
+}));
+
+test('enable: raspi-config that never sets ro in fstab gives a warning and exit 1', withEnv({}, (e) => {
+  fs.writeFileSync(e.stub, `#!/bin/bash\necho "$*" >> '${e.log}'\nif [ "$2" = do_overlayfs ]; then sed -i '${e.r}/boot/firmware/cmdline.txt' -e 's/^/overlayroot=tmpfs /'; fi\n`, { mode: 0o755 });
+  const res = run(e, ['enable']);
+  assert.equal(res.code, 1);
+  assert.match(res.err, /raspi-config did not set ro on \/boot\/firmware in fstab/);
 }));
 
 test('disable, round 1: overlay on and boot ro: remount rw (would, fake root), do_overlayfs 1, reboot hint', withEnv({
@@ -151,6 +214,22 @@ test('disable, round 2 when only fstab says ro: disable_bootro, no remount', wit
   assert.equal(res.code, 0);
   assert.deepEqual(calls(e), ['nonint disable_bootro']);
   assert.doesNotMatch(res.out, /remount/);
+}));
+
+test('disable, round 2 starting from defaults,ro,ro: disable_bootro until no ro is left (twice)', withEnv({
+  fstab: 'proc /proc proc defaults 0 0\n/dev/mmcblk0p1 /boot/firmware vfat defaults,ro,ro 0 2\n',
+}, (e) => {
+  const res = run(e, ['disable']);
+  assert.equal(res.code, 0, res.out + res.err);
+  assert.deepEqual(calls(e), ['nonint disable_bootro', 'nonint disable_bootro']);
+  assert.match(fs.readFileSync(path.join(e.r, 'etc/fstab'), 'utf8'), /vfat defaults 0 2\n$/);
+}));
+
+test('disable, round 2 where ro never clears: at most 3 calls, warning, exit 1', withEnv({ fstab: FSTAB_RO, stub: 'stuck' }, (e) => {
+  const res = run(e, ['disable']);
+  assert.equal(res.code, 1);
+  assert.equal(calls(e).length, 3);
+  assert.match(res.err, /still has ro/);
 }));
 
 test('disable --dry-run calls nothing', withEnv({ mounts: OVERLAY + BOOT_RO }, (e) => {

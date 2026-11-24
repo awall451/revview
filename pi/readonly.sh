@@ -1,8 +1,11 @@
 #!/bin/bash
 # Turn the Pi's read-only root (raspi-config's overlay file system) on or off, or show its state.
 # UNTESTED on a Pi; tested only against a fake root and a stub raspi-config (tests/unit/pi-readonly.test.js).
-# EVERY raspi-config command below is FROM MEMORY (no documentation reachable, no Pi): `nonint do_overlayfs 0|1`
-# (on|off) and `nonint enable_bootro` / `nonint disable_bootro` (the boot partition read-only option). Bench item.
+# The raspi-config command names and file layout were checked against the real raspi-config-core 20261026+2 and
+# overlayroot 0.18.debian14 packages: `nonint do_overlayfs 0|1` (on|off; on also installs overlayroot with apt-get if
+# missing, prepends overlayroot=tmpfs to cmdline.txt, and when the overlay is not active now also applies
+# enable_bootro / disable_bootro itself), `nonint enable_bootro` / `nonint disable_bootro` (fstab ro on
+# /boot/firmware; each adds or removes ONE ,ro). Behaviour on a Pi is still untested (bench item).
 # Usage: sudo bash pi/readonly.sh status|enable|disable [--root DIR] [--dry-run]
 #   status   overlay now, boot partition now, and what the next boot will do (from cmdline.txt and fstab)
 #   enable   turn the overlay and the read-only boot partition on (takes effect at the next boot). Run it LAST.
@@ -91,23 +94,46 @@ case "$cmd" in
       echo "readonly.sh: the overlay is already on" >&2
       exit 2
     fi
+    if [ ! -e "$root/usr/share/initramfs-tools/scripts/init-bottom/overlayroot" ]; then
+      echo "readonly.sh: overlayroot is not installed; raspi-config would apt-get it (needs a network). Install it while online: sudo apt-get install overlayroot" >&2
+      exit 2
+    fi
     run_rc do_overlayfs 0
-    run_rc enable_bootro
-    if [ "$dry" -eq 1 ]; then exit 0; fi
+    # do_overlayfs 0 already sets ro in fstab when the overlay is not active now; a second enable_bootro would give ,ro,ro.
+    if [ "$dry" -eq 1 ]; then
+      echo "would run: raspi-config nonint enable_bootro (only if fstab has no ro yet)"
+      exit 0
+    fi
+    if [ "$(next_bootro)" != on ]; then run_rc enable_bootro; fi
     if [ "$(next_overlay)" != on ]; then
-      echo "warning: raspi-config did not do what we expected: no overlayroot= in $cmdline (its commands are from memory); check Performance Options, Overlay File System by hand" >&2
+      echo "warning: raspi-config did not do what we expected: no overlayroot= in $cmdline; check raspi-config: Performance Options, P2 Overlay File System by hand" >&2
       echo "reboot to make the root read-only (only once the overlay is confirmed on)"
+      exit 1
+    fi
+    if [ "$(next_bootro)" != on ]; then
+      echo "warning: raspi-config did not set ro on /boot/firmware in fstab ($fstab)" >&2
       exit 1
     fi
     echo "reboot to make the root read-only"
     ;;
   disable)
     if [ "$overlay" = on ]; then
+      # raspi-config's disable_overlayfs also remounts /boot/firmware rw itself; our remount is kept, harmless.
       if [ "$bootfs" = ro ]; then remount_boot_rw; fi
       run_rc do_overlayfs 1
       echo "reboot, then run \`sudo bash pi/readonly.sh disable\` once more"
     elif [ "$bootfs" = ro ] || [ "$(next_bootro)" = on ]; then
+      # disable_bootro removes ONE ,ro: repeat while fstab still has ro (an old ,ro,ro), at most 3 calls.
       run_rc disable_bootro
+      tries=1
+      while [ "$dry" -eq 0 ] && [ "$(next_bootro)" = on ] && [ "$tries" -lt 3 ]; do
+        run_rc disable_bootro
+        tries=$((tries + 1))
+      done
+      if [ "$dry" -eq 0 ] && [ "$(next_bootro)" = on ]; then
+        echo "warning: fstab ($fstab) still has ro on /boot/firmware after $tries calls of disable_bootro; edit it by hand" >&2
+        exit 1
+      fi
       if [ "$bootfs" = ro ]; then remount_boot_rw; fi
       echo "now update (pi/README.md Updating), then enable"
     else

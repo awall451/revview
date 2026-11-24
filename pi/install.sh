@@ -114,7 +114,8 @@ case "$home" in /*) ;; *) die "home of $user is not absolute: $home" ;; esac
 echo "user $user ($uid:$gid), home $home, repo $dir, rotate $rotate, output $output, root $root"
 
 # Packages.
-pkgs="chromium tmux python3 espeak-ng wlr-randr sox"
+# overlayroot: raspi-config's overlay would otherwise apt-get it at `readonly.sh enable` time (needs a network).
+pkgs="chromium tmux python3 espeak-ng wlr-randr sox overlayroot"
 if [ "$real" -eq 1 ] && [ "$apt" -eq 1 ]; then
   missing=()
   for p in $pkgs; do
@@ -148,7 +149,7 @@ for need in python3 tmux; do
   command -v "$need" > /dev/null || echo "warning: $need not found" >&2
 done
 
-# Groups: input (buttons), audio, and video (vcgencmd talks to /dev/vcio, group video; from memory).
+# Groups: input (buttons), audio, and video (vcgencmd, package raspi-utils-core, talks to /dev/vcio_gencmd, which raspberrypi-sys-mods' 10-vc.rules gives group video).
 if [ "$real" -eq 1 ] && [ "$dry" -eq 0 ]; then
   usermod --append --groups input,audio,video "$user"
   echo "added $user to groups input,audio,video"

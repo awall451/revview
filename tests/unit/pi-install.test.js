@@ -170,7 +170,7 @@ test('install.sh: runs with a normal ext4 root in proc/mounts', withRoot((r) => 
 
 test('install.sh: overlayroot= in cmdline.txt (overlay not active yet) is a note, not an error', withRoot((r) => {
   const f = path.join(r, 'boot/firmware/cmdline.txt');
-  fs.writeFileSync(f, `${fs.readFileSync(f, 'utf8').trim()} overlayroot=tmpfs\n`);
+  fs.writeFileSync(f, `overlayroot=tmpfs ${fs.readFileSync(f, 'utf8').trim()}\n`);
   const res = run(base(r));
   assert.equal(res.code, 0, res.out + res.err);
   assert.match(res.out, /the read-only root is turned on for the next boot: what this run writes is kept/);
