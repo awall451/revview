@@ -18,6 +18,7 @@ Nothing is proven on a Pi. The list is `docs/BENCH-TEST.md` (groups: First after
 
 - Trust boundary (DECISIONS, cycle 47): processes of the same user are trusted; forged local events (for example a `SessionEnd` for an id not in the owned listing) are accepted, not defended. The owner was asked to add the one line to `docs/DESIGN.md`.
 - "Answer the prompt first" now clears itself when the selected session has no pending prompt left (cycle 48). It still shows when the selected session's prompt is not the one the bar shows; an automatic focus move to another session with a prompt leaves it (kept).
+- The server is split (cycle 49): `src/server/index.js` only re-exports and runs `main()`; `live.js` holds `startLiveServer` and builds one `ctx` per server (all shared state; no module-level state); file map in `src/server/README.md`.
 - Board notes have kinds (cycle 48; table at the top of the note code in `src/state/board.js`: plain, too-early, starting-ptt, answer-prompt, ended, ended-last, no-session). A new note that needs a clearing or hiding rule gets a kind there; never match on text. A plain note ending in ": open the menu for New session" is no longer hidden while locked (only ended-last and no-session are).
 - `netmon.check()`: pokes during a real outage reach OFFLINE faster than the 2-probe debounce (real probes only; same-user, accepted). Under `--netmon` the dev bridge cannot force OFFLINE either. No test for "failing probe after a poke".
 - Hold-mode push-to-talk is not built (tap is the charter's mode).
@@ -32,13 +33,14 @@ Nothing is proven on a Pi. The list is `docs/BENCH-TEST.md` (groups: First after
 
 ## In flight
 
-- Nothing except `ready/lead-notes-48b` (this note; delete `work/` and `ready/lead-notes-48b` once merged). Cycle 48's `note-kinds` merged (main 198a55f, 1676 tests); owner issue #24 set `done`; publish requested.
-- No worktree is left over. No held change. Published: main 406d255 (2026-11-24); 198a55f requested.
+- Cycle 49 submitted: `ready/server-split` (431a162, backlog 20261124T165658Z-b-f9c0be taken; no owner issue was open for it) and `ready/lead-notes-49` (this note) stacked on it. Expected 1676 tests (no test changed). On merge: delete the `ready/` and `work/` branches (server-split, lead-notes-49), request a publish.
+- No worktree is left over. No held change. Published: main 0d9d762 (2026-11-24).
 
 ## Next
 
-- Next cycle: backlog item 20261124T165658Z-b-f9c0be (approved; Opus `area-lead-core`): split `src/server/index.js`. No owner issue is open for it (the open list was empty at the end of cycle 48), so take it with `owner-backlog taken` as a normal-cycle item unless an issue #25 appears. Looped run under CPU load of the server timer tests; reviewer.
-- After those: nothing planned; the team waits for the owner's bench (`docs/BENCH-TEST.md`). Small `pi/` leftovers for the next `pi/` change: `readonly.sh --dry-run` exits 2 when overlayroot is missing (say so in the help); an fstab line where `ro` is not right after `defaults` makes `disable` give up after 3 calls; PI-FACTS E11 and E13 are only part-checked.
+- Nothing planned: every approved backlog item is done or taken. The team waits for the owner's bench (`docs/BENCH-TEST.md`). Next cycle: sync, verdict of `server-split`, publish request, then `owner-focus blocked` unless the owner has sent something.
+- Small `pi/` leftovers for the next `pi/` change: `readonly.sh --dry-run` exits 2 when overlayroot is missing (say so in the help); an fstab line where `ro` is not right after `defaults` makes `disable` give up after 3 calls; PI-FACTS E11 and E13 are only part-checked.
+- Small `src/server/` leftovers for the next change there (found during the split, not fixed, none visible to the user): the owned poll's "window ... disappeared" log line prints the window name raw (the "ended" line strips control characters); the SSE ping and the owned poll use the global `setInterval`, not the injected `timers`; `close()` does not clear the demo client set; `unlocked` in `monitors.js` is set and never read; the usage comment is in both `index.js` and `cli.js`; the README file table lacks `datalock.js`, `netmon.js`, `thermal.js`.
 - Open escalations: see `ESCALATIONS.md` (the cycle schedule only; the others are resolved).
 
 ## Standing rules

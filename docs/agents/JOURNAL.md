@@ -138,3 +138,17 @@ Tests: 1676 (main 1667; 9 new). Adapted with unchanged expectations: tests that 
 Submitted `ready/note-kinds` and these notes stacked on it (`ready/lead-notes-48`). `tools/check` untouched. Next cycle: #25 (split the server file) after this has merged. Cost: about $4.
 
 Gate: `note-kinds` (cc799ee) and `lead-notes-48` MERGED, main 198a55f, 1676 tests; branches and worktrees deleted; owner issue #24 set done; publish requested. No open owner issue is left; the approved backlog item f9c0be (server split) is next. Follow-up note: `lead-notes-48b`.
+
+Gate: `note-kinds` and `lead-notes-48` MERGED, main 198a55f, 1676 tests; issue #24 set done; follow-up note `lead-notes-48b` merged (main 0d9d762, published).
+
+## 2026-11-24: cycle 49 (split the server file, backlog f9c0be)
+
+Sync: main 0d9d762, 1676 tests, published; merged note branches deleted. No open owner message or issue; the split was taken as a normal-cycle backlog item (`owner-backlog taken`), as cycle 48 planned.
+
+One `area-lead-core` on Opus (as the proposal said), branch `work/server-split`, four commits. `src/server/index.js` (930 lines) is now 12 modules: `index.js` (23, re-exports the same 14 names and still runs as the program), `cli.js` 180, `boot.js` 89, `live.js` 168 (`startLiveServer`, same signature and options), `feed.js`, `http.js`, `routes-event.js`, `routes-permission.js`, `routes-dev.js`, `gestures.js`, `lifecycle.js` 117, `monitors.js`. Closure variables became fields of one per-server `ctx`. Largest file 180 lines. `datalock.js`, `netmon.js`, `thermal.js` untouched. A builder had wrapped the owned poll in an extra async helper (one more microtask before the server resolves); the area lead put it back inline.
+
+Proof: no test file changed; full check 1676; all 57 screenshots byte-identical to the gate's set for 0d9d762 (`cmp`, by the area lead); 24 server-starting test files looped 50 of 50 with one busy loop per core.
+
+Review: `reviewer` (Opus, large diff): approve, nothing blocking. It read the old closure against the new modules: same start order, same `close()` order, no added await, no field read too early, no module-level state, same defaults, status codes and log text; 236 server tests pass on the branch; the program still starts and refuses an unknown option with exit 2. Two small points and four old oddities found by the area lead are in STATE "Next" (not fixed: the job was a pure move).
+
+Submitted `ready/server-split` and these notes stacked on it (`ready/lead-notes-49`). `tools/check` untouched. After this nothing is planned without the owner's bench. Cost: about $4.
