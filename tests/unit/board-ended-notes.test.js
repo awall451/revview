@@ -93,3 +93,32 @@ test('a plain note ending in ": open the menu for New session" is still shown wh
   b = reduceBoard(b, ev('RevviewDataLock', { locked: true }));
   assert.equal(boardView(b).note, 'alpha ended: open the menu for New session');
 });
+
+const NS = 'No session yet: open the menu for New session';
+const booted = (extra) => reduceBoard(reduceBoard(initialBoard(), ev('RevviewBootBegin')), ev('RevviewBootDone', extra));
+
+test('the boot "No session yet" note (kind no-session): hidden while the data is locked, shown otherwise, not cleared by a push-to-talk tap', () => {
+  const b = booted({ note: NS, kind: 'no-session' });
+  assert.equal(boardView(b).note, NS);
+  assert.equal(boardView(reduceBoard(b, ev('RevviewDataLock', { locked: true }))).note, null);
+  assert.equal(boardView(reduceBoard(b, ev('RevviewNoSessionPress'))).note, NS);
+});
+
+test('RevviewNote with kind ended or ended-last is ignored; a malformed kind leaves the board unchanged, no throw', () => {
+  const b = fold(initialBoard(), ev('RevviewNote', { note: 'first' }));
+  for (const kind of ['ended', 'ended-last', 'no-session', null, {}, [], '__proto__', 'constructor', 5, 'nope']) {
+    assert.equal(reduceBoard(b, ev('RevviewNote', { note: 'x', kind })), b, String(kind));
+  }
+});
+
+test('RevviewBootDone with an unknown kind drops the note but still ends booting; kind ended makes a note a push-to-talk tap clears', () => {
+  for (const kind of ['ended-last', '__proto__', null, 5, {}]) {
+    const b = booted({ note: 'x', kind });
+    assert.equal(b.booting, false);
+    assert.equal(b.phase, 'unknown');
+    assert.equal(b.note, null);
+  }
+  const e = booted({ note: 'Key-on session ended at once: see the server log', kind: 'ended' });
+  assert.equal(e.note.kind, 'ended');
+  assert.equal(reduceBoard(e, ev('RevviewNoSessionPress')).note, null);
+});

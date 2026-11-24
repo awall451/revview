@@ -216,3 +216,17 @@ test('r6-04: the server with --netmon and a bad REVVIEW_NETMON_HOST starts anywa
   assert.match(out, /netmon: online = default route \+ TCP connect to api\.anthropic\.com:443/);
   assert.match(err, /using api\.anthropic\.com:443/);
 });
+
+test('bootSessions passes kind ended only when the key-on Claude is gone, no-session for an empty start', async () => {
+  const run = async (r, dirs) => {
+    const calls = [];
+    await bootSessions({ runner: r, live: { select() {}, launched() {}, refreshOwned: async () => {}, bootDone: (...a) => calls.push(a) }, dirs, log: () => {} });
+    return calls[0];
+  };
+  const fail = (m) => ({ list: async () => [], start: async () => { throw new Error(m); } });
+  assert.deepEqual(await run(fail("can't find window: @1"), ['/tmp']), ['Key-on session ended at once: see the server log', 'ended']);
+  assert.deepEqual(await run(fail('tmux gone'), ['/tmp']), [NOTE.other, undefined]);
+  assert.deepEqual(await run(fail('cwd is not an existing directory: /x'), ['/x']), [NOTE.missing, undefined]);
+  assert.deepEqual(await run(runner(), []), [NOTE.none, 'no-session']);
+  assert.deepEqual(await run(runner(), ['rel']), [NOTE.rel, undefined]);
+});

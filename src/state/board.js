@@ -194,7 +194,12 @@ function withContext(board, patch) {
 //                 that exited at once (BootDone)             (RevviewNoSessionPress); RevviewEndReason replaces it
 //   ended-last    the last session ended: "<name> ended:     as ended; hidden while the data is locked
 //                 open the menu for New session"
-const NOTE_RULES = { plain: {}, 'too-early': {}, 'starting-ptt': {}, 'answer-prompt': {}, ended: { ended: true }, 'ended-last': { ended: true } };
+//   no-session    the server's boot (BootDone): "No session    hidden while the data is locked; not an ended note
+//                 yet: open the menu for New session"         (a push-to-talk tap does not clear it)
+const NOTE_RULES = {
+  plain: {}, 'too-early': {}, 'starting-ptt': {}, 'answer-prompt': {}, 'no-session': { hiddenLocked: true },
+  ended: { ended: true }, 'ended-last': { ended: true, hiddenLocked: true },
+};
 export const NOTE_KINDS = Object.freeze(Object.keys(NOTE_RULES));
 // the kinds a RevviewNote may carry (absent = plain); the ended kinds are made by the board and BootDone only
 const POSTED_NOTE_KINDS = ['plain', 'too-early', 'starting-ptt', 'answer-prompt'];
@@ -451,9 +456,9 @@ function reduceInner(b, event) {
       // the key-on boot is over (a session came, or none will: nothing to start, or the start failed): the bar
       // leaves STARTING for the initial phase so its buttons work. Outside the boot STARTING it changes nothing.
       if (b.booting !== true) return b;
-      // the note's kind: plain (absent), or ended (the key-on Claude exited at once); another kind drops the note
+      // the note's kind: plain (absent), ended (the key-on Claude exited at once) or no-session; another kind drops the note
       const kind = event.kind === undefined ? 'plain' : event.kind;
-      const ok = isNoteText(event.note) && (kind === 'plain' || kind === 'ended');
+      const ok = isNoteText(event.note) && (kind === 'plain' || kind === 'ended' || kind === 'no-session');
       return { ...b, booting: false, phase: b.phase === 'starting' ? 'unknown' : b.phase, note: ok ? noteOf(kind, event.note) : b.note };
     }
     case 'RevviewLaunching': {
@@ -844,7 +849,7 @@ function extrasOf(b, shownKey) {
     position: b.owned === null || i < 0 ? null : { index: i + 1, count: order.length },
     elsewhere: order.filter((k) => k !== shownKey && b.sessions[k].pending.length > 0).length,
     nav: navView(b),
-    note: isObj(b.note) ? (b.locked && b.note.kind === 'ended-last' ? null : b.note.text) : voice !== 'none' && shownKey !== null && b.sessions[shownKey].quiet === true && !startingOf(b, b.sessions[shownKey], shownKey) ? 'No events from this session yet' : null,
+    note: isObj(b.note) ? (b.locked && NOTE_RULES[b.note.kind]?.hiddenLocked === true ? null : b.note.text) : voice !== 'none' && shownKey !== null && b.sessions[shownKey].quiet === true && !startingOf(b, b.sessions[shownKey], shownKey) ? 'No events from this session yet' : null,
     answered: answeredOf(shownKey === null ? null : b.sessions[shownKey]),
   };
 }

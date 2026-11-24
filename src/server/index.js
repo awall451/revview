@@ -769,6 +769,7 @@ export async function bootSessions({ runner, live, dirs = [], log = () => {}, ti
       }
     } else if (dirs.length === 0) {
       note = 'No session yet: open the menu for New session';
+      noteKind = 'no-session';
     } else {
       const relative = dirs.find((d) => !path.isAbsolute(d));
       if (relative !== undefined) {
