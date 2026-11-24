@@ -1,6 +1,6 @@
 # STATE
 
-Detail and history: `HISTORY.md` (the old STATE, verbatim), `JOURNAL-archive.md` (journal before cycle 36), `docs/DECISIONS.md`, `docs/PI-FACTS.md`. Read them only when needed. The owner's console counts cycles (this file was last written in cycle 42); that number is used. Gate main: 1656 tests.
+Detail and history: `HISTORY.md` (the old STATE, verbatim), `JOURNAL-archive.md` (journal before cycle 36), `docs/DECISIONS.md`, `docs/PI-FACTS.md`. Read them only when needed. The owner's console counts cycles (this file was last written in cycle 47); that number is used. Gate main: 1656 tests (1667 once the cycle 47 stack merges).
 
 ## Status per charter stage
 
@@ -16,8 +16,9 @@ Nothing is proven on a Pi. The list is `docs/BENCH-TEST.md` (groups: First after
 
 ## Leftovers (open, none blocking; the rest: HISTORY.md, sections "Small follow-ups", "QA issues", "Wheel buttons", "Next")
 
-- `board.js` `targetOf` routes an id-less event to a sole placeholder, so a local process can show a forged NEEDS PERMISSION there (WB4 reviewer, not done).
-- A posted `SessionEnd` for a placeholder hides a live owned session until `RevviewStarting` (WB4 reviewer, not done).
+- Trust boundary (DECISIONS, cycle 47): processes of the same user are trusted; forged local events (for example a `SessionEnd` for an id not in the owned listing) are accepted, not defended. The owner was asked to add the one line to `docs/DESIGN.md`.
+- "Answer the prompt first" (push-to-talk refused while the selected session has a prompt) has no auto-clear: answered in the terminal, it stays until the next gesture. Do it by kind in the typed-notes job (#24). It also shows when the selected session's prompt is not the one the bar shows.
+- `netmon.check()`: pokes during a real outage reach OFFLINE faster than the 2-probe debounce (real probes only; same-user, accepted). Under `--netmon` the dev bridge cannot force OFFLINE either. No test for "failing probe after a poke".
 - Hold-mode push-to-talk is not built (tap is the charter's mode).
 - No script installs Piper (written steps only; its command line is from memory; neither archive has a TTS piper package, Debian's `piper` is a mouse tool).
 - The Pi session starts `labwc -m`, so our autostart runs after the system one: desktop, panel and kanshi still start under the kiosk (kept, DECISIONS; bench P4-P6 look for anything showing around the kiosk; the desktop's Screen Configuration tool can override our rotation).
@@ -30,15 +31,15 @@ Nothing is proven on a Pi. The list is `docs/BENCH-TEST.md` (groups: First after
 
 ## In flight
 
-- Nothing is in flight except `ready/lead-notes-42b` (this note; delete `work/` and `ready/lead-notes-42b` once merged). Cycle 42's `pi-facts-check` merged (main c59bf47, 1656 tests); owner message and issue closed `done`; publish requested.
-- No other branch or worktree is left over.
-- No held change. Published: main e98c85d (2026-11-24).
+- Cycle 47 submitted one stack: `ready/ptt-prompt` (9e62b64, owner issue #22), `ready/trust-boundary` (30220cf, #23), `ready/test-names` (0e94fdd, #26), `ready/lead-notes-47` (this note). Expected 1667 tests. On merge: delete the `ready/` and `work/` branches (`work/ptt-prompt`, `trust-boundary`, `test-names`, `stack-47b`, `trust-stacked`, `names-stacked`, `lead-notes-47`), set issues #22, #23, #26 `done` with `--commit` (give a note on stdin, the command hangs without one), request a publish.
+- No worktree is left over. No held change. Published: main 689813e (2026-11-24).
 
 ## Next
 
-- Nothing is planned: the team waits for the owner's bench and `owner-focus blocked` was said at the end of cycle 42. A next cycle with no new owner message: sync, verdicts, stop. Small leftovers of its review (not worth a cycle alone; do them with the next `pi/` change): `readonly.sh --dry-run` exits 2 when overlayroot is missing (say so in the help); an fstab line where `ro` is not right after `defaults` makes `disable` give up after 3 calls (message could say how to edit by hand); PI-FACTS E11 (`stat -c`) and E13 (argon2id default) are only part-checked; DECISIONS near line 841 still says espeak-ng 1.51 (a newer line says 1.52.0).
-- Otherwise idle: the team waits for the owner's bench (`docs/BENCH-TEST.md`). Do not invent work; say `owner-focus blocked` when in focus and nothing is left.
-- Open escalations: see `ESCALATIONS.md` (wheel buttons beyond stage 3; the cycle schedule). The archive-domain entry is resolved.
+- Owner issue #24 (backlog 20261124T165646Z-b-a926ba, Opus `area-lead-core`): board notes get a kind. Alone in its cycle. Use the new test file names (table in `tests/unit/README.md`). Include a clearing rule for the "Answer the prompt first" note. Guard: view output and all 57 screenshots byte-identical; reviewer; looped run of the board tests.
+- Then owner issue #25 (backlog 20261124T165658Z-b-f9c0be, Opus): split `src/server/index.js`. After #24 has merged, never in the same cycle. Looped run under CPU load of the server timer tests; reviewer.
+- After those: nothing planned; the team waits for the owner's bench (`docs/BENCH-TEST.md`). Small `pi/` leftovers for the next `pi/` change: `readonly.sh --dry-run` exits 2 when overlayroot is missing (say so in the help); an fstab line where `ro` is not right after `defaults` makes `disable` give up after 3 calls; PI-FACTS E11 and E13 are only part-checked.
+- Open escalations: see `ESCALATIONS.md` (the cycle schedule only; the others are resolved).
 
 ## Standing rules
 

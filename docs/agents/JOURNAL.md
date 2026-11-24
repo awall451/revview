@@ -104,3 +104,19 @@ Review: `reviewer` on Sonnet: approve, no blocking finding; it read `readonly.sh
 Submitted `ready/pi-facts-check` and these notes stacked on it (`ready/lead-notes-42`). `tools/check` untouched. Publish requested. Every bench item stays `untested`. Cost: about $7.
 
 Gate: `pi-facts-check` (903f804) and `lead-notes-42` MERGED, main c59bf47, 1656 tests; branches deleted; owner issue set done, owner message replied done, publish requested. Nothing is left that is worth a cycle without the owner's bench: `owner-focus blocked` said. Follow-up note: `lead-notes-42b`. Kit note: `owner-issues update <id> done` reads a note from stdin and hangs without one.
+
+## 2026-11-24: cycle 47 (owner issues #22, #23, #26)
+
+Count: the console calls this cycle 47 (43-46 were planning and other console cycles with no journal entry here). Earlier entries are not renumbered.
+
+Three approved backlog items taken, run in parallel, each on its own branch from main, then stacked.
+
+- #22 push-to-talk while a permission prompt is open (`area-lead-core`, Opus, `work/ptt-prompt`). Recorded with real Claude Code 2.1.331 in tmux (`fixtures/buttons`, section f): one Space on the dialog with "1. Yes" highlighted did nothing, both while the hook waited and after its 5 s timeout. Not tried: another option highlighted, Space held, other versions. The owner's rule was kept anyway: while the selected session has a pending prompt, a tap sends no key and the bar says "Answer the prompt first". 7 new tests; two existing tests in `sessions-actions.test.js` now start from a working board (the default board has a prompt), assertions unchanged. Bench item PP-1, `untested`.
+- #23 trust boundary (`area-lead-core`, Sonnet, `work/trust-boundary`). DECISIONS and `src/server/README.md` say it: same-user processes are trusted, web pages and accidents are defended. Under `--netmon` a posted `RevviewNetwork` only makes the monitor probe again; without `--netmon` outside the dev bridge it is 403 (not asked for, mirrors `RevviewDataLock`; kept). 4 new tests, 100 of 100 under CPU load. DECISIONS got an index (43 lines) and three "superseded" pointers; nothing deleted. STATE: the `targetOf` leftover was already fixed (board.js 80-86); the `SessionEnd` leftover is no longer true for an owned id (`stillOwned`, board.js 555-559) and what remains is accepted forgery.
+- #26 test names (`area-lead-platform`, Sonnet, `work/test-names`). 16 files renamed (not 15), no test body changed, table old to new in `tests/unit/README.md`. 79 test files before and after.
+
+Stacking: a Sonnet `area-lead-platform` cherry-picked the three into one line (`work/stack-47b`), resolved the one conflict (both appended to DECISIONS) and added the index line. Full check at the tip: 1667 (1656 + 7 + 4), all 57 screenshots identical to the gate's set for main.
+
+Review: one `reviewer` on Sonnet for #22 and #23: approve both, nothing blocking. Left for later (in STATE): the new note has no auto-clear (goes into #24); pokes can shorten the offline debounce during a real outage; two small test gaps.
+
+Submitted `ready/ptt-prompt`, `ready/trust-boundary`, `ready/test-names`, `ready/lead-notes-47`. `tools/check` untouched. Next cycle: #24 (typed notes) alone, then #25. Cost: about $5.
