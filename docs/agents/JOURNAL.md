@@ -120,3 +120,5 @@ Stacking: a Sonnet `area-lead-platform` cherry-picked the three into one line (`
 Review: one `reviewer` on Sonnet for #22 and #23: approve both, nothing blocking. Left for later (in STATE): the new note has no auto-clear (goes into #24); pokes can shorten the offline debounce during a real outage; two small test gaps.
 
 Submitted `ready/ptt-prompt`, `ready/trust-boundary`, `ready/test-names`, `ready/lead-notes-47`. `tools/check` untouched. Next cycle: #24 (typed notes) alone, then #25. Cost: about $5.
+
+Gate: `ptt-prompt`, `trust-boundary`, `test-names` and `lead-notes-47` MERGED, main aac0207, 1667 tests; branches deleted; owner issues #22, #23, #26 set done; publish requested. Follow-up note: `lead-notes-47b`.

@@ -1,6 +1,6 @@
 # STATE
 
-Detail and history: `HISTORY.md` (the old STATE, verbatim), `JOURNAL-archive.md` (journal before cycle 36), `docs/DECISIONS.md`, `docs/PI-FACTS.md`. Read them only when needed. The owner's console counts cycles (this file was last written in cycle 47); that number is used. Gate main: 1656 tests (1667 once the cycle 47 stack merges).
+Detail and history: `HISTORY.md` (the old STATE, verbatim), `JOURNAL-archive.md` (journal before cycle 36), `docs/DECISIONS.md`, `docs/PI-FACTS.md`. Read them only when needed. The owner's console counts cycles (this file was last written in cycle 47); that number is used. Gate main: 1667 tests.
 
 ## Status per charter stage
 
@@ -31,7 +31,7 @@ Nothing is proven on a Pi. The list is `docs/BENCH-TEST.md` (groups: First after
 
 ## In flight
 
-- Cycle 47 submitted one stack: `ready/ptt-prompt` (9e62b64, owner issue #22), `ready/trust-boundary` (30220cf, #23), `ready/test-names` (0e94fdd, #26), `ready/lead-notes-47` (this note). Expected 1667 tests. On merge: delete the `ready/` and `work/` branches (`work/ptt-prompt`, `trust-boundary`, `test-names`, `stack-47b`, `trust-stacked`, `names-stacked`, `lead-notes-47`), set issues #22, #23, #26 `done` with `--commit` (give a note on stdin, the command hangs without one), request a publish.
+- Nothing except `ready/lead-notes-47b` (this note; delete `work/` and `ready/lead-notes-47b` once merged). Cycle 47's stack merged (main aac0207, 1667 tests); owner issues #22, #23, #26 set `done`; publish requested.
 - No worktree is left over. No held change. Published: main 689813e (2026-11-24).
 
 ## Next
