@@ -81,3 +81,24 @@ Count: the owner's console counts this as cycle 41 (normal cycles, one-shot jobs
 Done by one `area-lead-platform` on Sonnet (the owner's choice), branch `work/notes-trim`: old STATE.md moved whole and unchanged to `HISTORY.md`; STATE.md rewritten to one page (status per charter stage, unproven, leftovers, in flight, next, standing rules); journal entries before cycle 36 moved unchanged to `JOURNAL-archive.md`. Checked mechanically: every line of the old STATE.md is in HISTORY.md and every line of the old JOURNAL.md is in JOURNAL.md or JOURNAL-archive.md. No reviewer (notes only). Submitted as `ready/notes-trim`.
 
 Sizes: STATE.md 46614 -> 6158 bytes; JOURNAL.md 70802 -> about 10900 bytes.
+
+## 2026-11-24: cycle 42 (Pi facts checked against the real packages)
+
+Proxy retest: `http://deb.debian.org/debian/dists/trixie/Release` 200, `http://archive.raspberrypi.com/debian/dists/trixie/Release` 200, https 200 for both (one first request to `http://archive.raspberrypi.com/` timed out, the repeat gave 200). Escalation of 2026-11-24 marked resolved; owner note 20261124T021916Z-o-575c89 answered `done`. Leftover merged branches of cycles 36-41 deleted.
+
+Job: owner message 20261123T223057Z-o-c4f87f (backlog f59dbf), owner issue 20261123T223054Z-i-7afd33, steps 3-6. One `area-lead-platform` on Opus (the owner's choice), three Sonnet builders, branch `work/pi-facts-check` (5391458, 69256dc, 903f804), full check 1656 (main 1651). Indexes verified against the `Release` checksums; about 32 packages unpacked under `/tmp/pfc-deb-*`, nothing installed or run. The Pi archive has no `Packages.xz` and no `binary-all`.
+
+Result: 93 rows (not 85): 61 checked (names/layout only), 9 fixed, 23 still from memory. Wrong and fixed:
+- O02/O05 (the dangerous ones): `raspi-config nonint do_overlayfs 0` already calls `enable_bootro` itself, so our second call wrote `defaults,ro,ro` and one `disable_bootro` left the boot partition read-only; it also runs `apt-get install overlayroot` (needs a network, rebuilds the initramfs). Now `install.sh` installs overlayroot at set-up, `readonly.sh enable` refuses without it and calls `enable_bootro` only when fstab has no `ro`, `disable` repeats `disable_bootro` up to 3 times.
+- O03: `overlayroot=tmpfs` is prepended to cmdline.txt (stubs only).
+- L06/L08: the Pi session runs `labwc -m`, so our autostart is merged after the system one (desktop, panel, kanshi still start under the kiosk). Kept, written in DECISIONS; bench P4-P6 look for it.
+- L04: the raspi-config menu is System Options, S5 Boot, B4 Desktop Autologin. L03: lightdm.conf fixture follows the real file.
+- C05: `--disable-session-crashed-bubble` is not a string in Chromium 156 (Pi build); removed from `kiosk.sh`.
+- X08: `vcgencmd` is in `raspi-utils-core` and uses `/dev/vcio_gencmd` (comment and README).
+Confirmed: `chromium` (no `chromium-browser` binary), `apt install cryptsetup` pulls `cryptsetup-bin`, `autologin-user=` in `[Seat:*]`, `/var/lib/systemd/linger`, `sox` provides `rec`, Trixie nodejs is 20.19.2 (NodeSource still needed).
+
+Tests changed on purpose (each held a wrong fact): `pi-readonly.test.js` (only `do_overlayfs 0`, one `ro`; stub behaves like the real raspi-config; 6 tests added), `pi-install.test.js` (overlayroot at the front), `pi-setup.test.js` ("runs after", S5/B4 hint), `pi-kiosk.test.js` (the flag is asserted absent).
+
+Review: `reviewer` on Sonnet: approve, no blocking finding; it read `readonly.sh` against the unpacked raspi-config and confirmed `labwc -m`. It doubted C05 (it thought both strings were in the binary); I counted them myself: `disable-session-crashed-bubble` 0, `hide-crash-restore-bubble` 1, so the removal stands. It first ran the tests on main by mistake, then on the branch (236 pass). Three small points left in STATE "Next".
+
+Submitted `ready/pi-facts-check` and these notes stacked on it (`ready/lead-notes-42`). `tools/check` untouched. Publish requested. Every bench item stays `untested`. Cost: about $7.

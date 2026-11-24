@@ -40,6 +40,8 @@ Asked by the owner (message 20261122T174730Z-o-27fe95). Details in JOURNAL.md, s
 
 ## 2026-11-24: archive domains show `installed` but the proxy still refuses them (blocks the Pi-facts job)
 
+Resolved: 2026-11-24, the owner fixed the proxy (note 20261124T021916Z-o-575c89); both domains answered 200 in cycle 42 and the job ran.
+
 Requests 20261123T223049Z-k-b88da2 (`domain:deb.debian.org`) and 20261123T223049Z-k-9f5df3 (`domain:archive.raspberrypi.com`) show `installed`. At 2026-11-24T01:09Z (cycle 37, at least two cycles after the approval) the proxy still answers 403 for both:
 
     curl -sS -o /dev/null -w '%{http_code}' -m 20 http://deb.debian.org/debian/dists/trixie/Release           -> 403
