@@ -1,5 +1,51 @@
 # Decisions
 
+Index (one entry per line, in file order; a "superseded" mark points to the newer entry):
+
+- 2026-11-21: stack and skeleton (set by the owner, recorded here)
+- 2026-11-21: canonical view states
+- 2026-11-21: state core, hook fixtures and synthetic events
+- 2026-11-21: panel emulator
+- 2026-11-21: glance view (the real 1280x400 renderer) and the live path [superseded in part, see the note under its heading]
+- 2026-11-22: honest states (the bar never shows a state it does not know)
+- Detail lines polish (QA round 1: 06 07 08 09 12)
+- 2026-11-22: several sessions and subagents (QA round 2: 01 02 04 05 06 07)
+- View and server polish (QA round 2026-11-22: 03 08 09 10 11 12 13 14)
+- 2026-11-22: dense layout (owner: smaller type, more lines)
+- 2026-11-22: wheel buttons (design, not built) [superseded in part, see the note under its heading]
+- 2026-11-22: wheel buttons 2, the input layer (built, not tried on hardware)
+- 2026-11-22: QA round 3 (01 03 04 06 09 10)
+- 2026-11-22: wheel buttons 3, sessions and actions (built; real Claude Code here, not on hardware)
+- 2026-11-22: wheel buttons 4, the driver's selection, list and menu (built; emulator only, not on hardware)
+- 2026-11-22: wheel buttons 6, dongle and pod set-up (written, nothing run on hardware)
+- 2026-11-22: wheel buttons 5, read aloud (built; stand-in engine only, no engine or audio device here) [superseded in part, see the note under its heading]
+- 2026-11-22: core hardening (WB4 follow-ups, real espeak-ng, QA r3-07 and r3-08)
+- 2026-11-22: stage 2 hook wiring (built; real Claude Code 2.1.330 here, not on the Pi)
+- 2026-11-22: failed turn (StopFailure, QA r3-05)
+- 2026-11-22: owned window gone, ended-session note (QA r5-03, r5-04)
+- 2026-11-22: a window must be missing twice (QA r5b blocking)
+- 2026-11-22: stage 4A, the Pi appliance set-up (written; tested against a fake root only, nothing run on a Pi)
+- core small run (cycle 14)
+- 2026-11-22: stage 4B, power cuts and the locked data (decided before building; nothing run on a Pi)
+- 2026-11-22: QA round 6, STARTING always ends; part D (STARTING until the first hook); installer exit codes
+- 2026-11-23: QA round 6b (small fixes on the r6 branch)
+- 2026-11-23: QA round 7 (the owner's walk-through, fresh Pi to first drive)
+- QA round 7b
+- 2026-11-23: Emulator on your laptop 1 (`emulator/run.sh`)
+- 2026-11-23: Emulator on your laptop 2 (demo mode)
+- 2026-11-23: Emulator on your laptop 3 (the guide, the key sheet, aliases, stop)
+- 2026-11-23: Emulator on your laptop 3: review round 2 (`--stop`, wording)
+- 2026-11-23: Emulator on your laptop 4 (`--live`: real sessions)
+- 2026-11-23: QA round 9 (--live: r9-01 .. r9-06)
+- 2026-11-23: Pi facts inventory (backlog f59dbf), part A only
+- 2026-11-24: Live emulator gaps (cycle 36)
+- 2026-11-24: Compaction note (cycle 38)
+- Pi leftovers (cycle 39)
+- Thermal and power mark (cycle 40)
+- Pi facts checked against the trixie packages (cycle 42)
+- Push-to-talk while a permission prompt is open (cycle 47)
+- 2026-11-24: Trust boundary (cycle 47, owner issue #23)
+
 ## 2026-11-21: stack and skeleton (set by the owner, recorded here)
 
 **Stack.** Node 22 (VM: v22.23.5, npm 10.9.9), plain JavaScript ES modules (`"type": "module"`), no build
@@ -159,6 +205,8 @@ keeps updating underneath, so when the network returns the view shows the curren
   monitor diagonal or credit card (stored in localStorage), state picker over `STATES`.
 
 ## 2026-11-21: glance view (the real 1280x400 renderer) and the live path
+
+> Superseded in part by "2026-11-22: dense layout" (layout and type sizes; marked inline below) and by "2026-11-22: honest states" (the lines about unknown and stale states).
 
 ### Layout
 
@@ -490,6 +538,8 @@ for every fixture and every worst case, plus the wrapped and cut command and 1 t
 in `emulator/tests/checks.js` now checks text boxes too.
 
 ## 2026-11-22: wheel buttons (design, not built)
+
+> Superseded in part by "wheel buttons 2, the input layer" below: keyd is replaced by revview's own reader, and the reader runs inside the server (see the lines marked "superseded" in both entries).
 
 Owner request 20261122T060852Z-p-dcd34d. Full note: `docs/BUTTONS.md`. Nothing here is built, and nothing was
 tried on hardware. Scope beyond charter stage 3 is an open escalation (`docs/agents/ESCALATIONS.md`); until
@@ -826,6 +876,8 @@ Code: `src/state/board.js`, `src/sessions/actions.js`, `src/server/index.js`, `s
   with suggested defaults. Bench items D1-D12.
 
 ## 2026-11-22: wheel buttons 5, read aloud (built; stand-in engine only, no engine or audio device here)
+
+> Superseded in part: the espeak-ng version (1.51, "as far as I remember") is 1.52.0+dfsg-5 on Trixie; see "Pi facts checked against the trixie packages (cycle 42)", P05 (at the end of this file).
 
 Code: `src/speech/`, `config/speech.json`, `src/sessions/actions.js`, `src/server/index.js`; the READMEs of those
 folders. Bench R1-R14. Everything is tested with a stand-in engine (`tests/unit/fixtures/speech/fake-engine.sh`).
@@ -1871,3 +1923,30 @@ starting), even while that session's permission dialog was on the pane, and that
   says the hook ended), so the tap stays refused until the prompt is answered or dismissed (the events the board
   already uses); a terminal answer leaves the note until the next gesture. Emulator and unit tests only;
   bench PP-1 `untested`.
+
+## 2026-11-24: Trust boundary (cycle 47, owner issue #23)
+
+**Decision (owner-approved).** Local processes of the same user are trusted. Reason: anything running as that user
+can already type into the tmux sessions directly (`tmux send-keys`), so no gate in our server can stop it; the server
+binds 127.0.0.1 only.
+
+- **Defended:** web pages (the `Origin` and `Host` checks, 403) and accidents (a stale or hand-posted event must not
+  leave a false state on the bar).
+- **Not defended:** a process of the same user. Forging events, presses of the dev bridge, or typing into tmux are all
+  possible for it and stay possible.
+- **The existing gates stay**: internal events 403, `RevviewButton`/`RevviewInput` dev bridge only, `RevviewStarting`
+  and `RevviewDataLock` dev bridge only, the quiet-placeholder rules in `board.js`. They are tested and free. They are
+  accident guards, not a security claim, and none is added for same-user forgery.
+- **Closed as out of scope:** a shared secret between the hook and the server (the hook-port question). The secret
+  would have to sit in a file the same user can read.
+- **Network event gap closed.** `RevviewNetwork` was not internal, so a local POST could show OFFLINE until the
+  monitor's next change. Now, under `--netmon`, a posted `RevviewNetwork` is only a poke: the monitor probes again
+  (`createNetMonitor().check()`, mirroring a posted `RevviewDataLock` under `--data-lock`) and answers 204; without
+  `--netmon` it is 403 outside the dev bridge. Test: `tests/unit/server-netmon-poke.test.js`.
+- **Accepted, same-user forgery:** a posted `SessionEnd` for a placeholder. As written in the old note it hid a live
+  owned session until `RevviewStarting`; checked in cycle 47: while the window is still in the owned listing
+  (`board.js` `SessionEnd`, the `stillOwned` guard) a placeholder ignores the end, so only an id that is not (or no
+  longer) owned can be ended this way. What remains is the same-user case and is accepted.
+- **Checked:** `targetOf` (`board.js`) already ignores quiet placeholders for id-less events (fixed in "core hardening").
+- **Notes:** this entry comes with an index at the top of this file and "superseded" notes under three older headings
+  (nothing deleted, no text rewritten).

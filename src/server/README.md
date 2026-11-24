@@ -180,6 +180,13 @@ else `config/speech.json`) is loaded at start. A bad config is logged and the se
 
 ## Security notes
 
+- **Trust boundary (decided, owner-approved).** Local processes of the same user are trusted: anything running as that
+  user can already type into the tmux sessions directly, so no gate in this server could stop it, and the server binds
+  127.0.0.1 only. What is defended: web pages (the Origin and Host checks below) and accidents (a hand-posted or stale
+  event must not leave a wrong state on the bar: internal events, `RevviewStarting`, `RevviewDataLock` and `RevviewNetwork`
+  are refused or are only a poke). The existing gates stay (they are tested and cost nothing), but they are not a defence
+  against a same-user process, and none is to be added for that. No shared secret between hook and server: closed as out
+  of scope. See `docs/DECISIONS.md`, "Trust boundary".
 - Loopback only, so nothing on the network can reach it.
 - Any request with an `Origin` header that is not `http://127.0.0.1:<port>` or `http://localhost:<port>`
   gets 403, so a web page open in the browser cannot POST events. curl sends no `Origin` and is allowed.
