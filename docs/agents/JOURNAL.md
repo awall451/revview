@@ -420,3 +420,17 @@ Open owner one-shot 20261123T223057Z-o-c4f87f (Pi facts, steps 3-6), treated as 
 Nothing else is due (the team waits on the owner's bench); no QA round, because main carries no product change since round 10. No publish request: notes only.
 
 Cost: under $1.
+
+## 2026-11-24: cycle 38 (one-shot job: compaction note on the bar and its demo scene)
+
+Count: the console calls this cycle 38 and that number is used; no cycle of mine was skipped between 37 and 38 other than by the console's own counting.
+
+Job: owner message 20261123T223334Z-o-e5b114 (backlog 0d7662), owner issue 20261123T223311Z-i-5220c3. Nothing else was touched (the Pi-facts one-shot stays open and blocked on the proxy, see cycle 37).
+
+Dispatched: one `area-lead-core` on Opus (the owner's choice), branch `work/compaction`. It found the existing recording `fixtures/sessions/compaction.jsonl` sufficient (PreCompact, the summariser's SubagentStop, SessionStart `compact`, PostCompact; two of five PreCompacts were followed by no compaction and no event says so; 5-7 s each on a small context), so the mark is set by PreCompact and cleared by the next event, with a 180 s limit. Four Sonnet builders (state core, hooks, view and fixture, demo). Full check 1502.
+
+Review: `reviewer` (core logic and tests). One blocking finding: the compaction timer was not cleared when the session ended or the mark was cleared, and no test pinned it. Non-blocking: a background subagent's events and `idle_prompt` cleared the mark too early; timers armed for unknown session ids; missing assertions. Sent back once, to an `area-lead-core` on Sonnet (small, precise fix): all five fixed in 3b538b2, full check 1508. The reviewer switched the shared checkout to the work branch by mistake and switched it back at once; nothing changed.
+
+Tests changed on purpose: hook-install (PreCompact/PostCompact are now registered), reducer and board (PreCompact is no longer an ignored event), emulator-run / keys-sheet / fixtures (nine scenes, one more fixture), `emulator/tests/live.spec.js` (replay of the compaction recording expects "Compacting context").
+
+Submitted `ready/compaction` and these notes stacked on it. `tools/check` untouched. Publish requested. Cost: about $6.
