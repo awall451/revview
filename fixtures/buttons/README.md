@@ -87,6 +87,32 @@ The long command was `node -e "setTimeout(()=>{},40000)"` (allowed by `Bash(node
 - Cleanup: `claude stop` then `claude rm` for both ids (`stopped`, `removed`); `claude agents --json --all`
   then printed `[]`.
 
+## (f) Space on an open permission dialog (push-to-talk's key), cycle 47
+Recorded 2026-11-24 with Claude Code **2.1.331** (model haiku; the banner says `Haiku 5.5`), same setup, scripts and
+config dir as above (`hook.sh`, `mkset.py`, `permhook.sh` unchanged; a fresh tmux server per run, killed after). Prompt
+`Run date > f1.txt with the Bash tool, nothing else.` (`f2.txt` in the second run); `date > fN.txt` is not on the
+allow list, so the dialog `Do you want to proceed? ❯ 1. Yes / 2. Yes, and always allow access to /tmp/rvbtn-repo
+from this project / 3. Yes, and switch to auto mode / 4. No` came up with `1. Yes` highlighted. Then ONE
+`tmux send-keys Space`, captures 2 s and 5 s after it. Sanitised as above (nothing matched; the session ids are
+the random ones).
+- `events-f1-space-hook-waiting.jsonl`, `pane-f1-space-hook-waiting-1-before-space.txt` (2 s after the dialog
+  showed), `-2-after-space-2s.txt`, `-3-after-space-5s.txt`, `-4-after-deny-file.txt`: wait hook with no
+  `timeout` field, polling. Space 2 s after the dialog appeared, hook still waiting (its log: `start` only).
+  **Result: Space did nothing.** The dialog stayed as it was with `1. Yes` highlighted, `f1.txt` was not written,
+  no hook event followed (events: SessionStart, UserPromptSubmit, PreToolUse, PermissionRequest). Then `deny` in
+  the answer file (hook log `answer deny` 14 s after start): `Denied by PermissionRequest hook`, Stop; the
+  input line was empty afterwards (cursor at column 2 right after `❯ `, the text there is Claude's dim
+  suggestion), so the Space was not queued into the prompt either.
+- `events-f2-space-after-hook-timeout5.jsonl`, `pane-f2-space-after-hook-timeout5-1-before-space.txt` (8 s after
+  the dialog showed, i.e. after the 5 s hook timeout), `-2-after-space-2s.txt`, `-3-after-space-5s.txt`,
+  `-4-after-terminal-4.txt`: wait hook with `"timeout": 5` that never answered (its log: `start` only, killed by
+  the timeout as in (c)). Events before Space: ..., PermissionRequest, Notification (`Claude needs your
+  permission`). **Result: Space did nothing** here too: same dialog, `f2.txt` not written, no new event. `4`
+  typed afterwards answered it at once (`Did not run 1 call`, `Interrupted · What should Claude do instead?`),
+  which shows the dialog was taking keys; input line empty afterwards.
+- Not tried: Space with another option highlighted (after an arrow key), Space held (auto-repeat), Space during
+  the dialog's first moments before it is drawn, other Claude Code versions. The source was not read for this.
+
 # WB3 (revview-owned sessions, real hook, real server): `wb3/`
 
 Recorded 2026-11-22 with Claude Code 2.1.330 (`--model haiku`) started by revview's real session runner

@@ -80,7 +80,7 @@ break with an update), **missing** (Claude Code offers nothing).
 
 | Button | Route | Verdict | Evidence |
 |---|---|---|---|
-| Push-to-talk, tap mode | `tmux send-keys -t <window> Space` with the input empty | workaround | Default `space` -> `voice:pushToTalk` **[source]**. Keys reach only the chosen pane **[recorded]** (`pane-e-3-attached-after-esc.txt`). Voice itself not recorded. |
+| Push-to-talk, tap mode | `tmux send-keys -t <window> Space` with the input empty | workaround | Default `space` -> `voice:pushToTalk` **[source]**. Keys reach only the chosen pane **[recorded]** (`pane-e-3-attached-after-esc.txt`). Voice itself not recorded. **Not sent while the selected session has a pending permission prompt:** the bar note says "Answer the prompt first" (cycle 47). |
 | Push-to-talk, hold mode | Space repeatedly (about every 50 ms) while held, imitating auto-repeat | workaround that an update can break; **not built in WB3** | Hold is detected from terminal key repeat, with timers in the minified code **[source]**. A terminal has no key-up. Not recorded. |
 | Cancel, tap | Esc by send-keys | workaround | **[recorded]** `events-a-esc.jsonl`, `pane-a-2-after-esc.txt` |
 | Cancel, hold 1 s | One Ctrl+C by send-keys | workaround | **[recorded]** `events-b-ctrlc-once.jsonl` |
@@ -124,6 +124,10 @@ break with an update), **missing** (Claude Code offers nothing).
   `events-c1-hook-timeout5.jsonl`, `pane-c1-2-after-timeout-8s.txt`, `pane-c1-3-after-terminal-1.txt`
 - An answer in the terminal while the hook waits wins at once. The hook is not killed and its late answer has no
   effect. **[recorded]** `pane-d2-1-after-terminal-1-while-hook-waits.txt`, `permhook-log.txt`
+- Space on the open dialog (push-to-talk's key), Claude Code 2.1.331: did nothing, both while the hook waited and
+  after a 5 s hook timeout. `1. Yes` stayed highlighted, nothing ran, no hook event, and no space was left in the
+  input afterwards. **[recorded]** `fixtures/buttons` (f). Even so revview sends no Space while a prompt is
+  pending (cycle 47 rule below): the dialog does take keys, and a later version could map Space to select.
 - Decision schema: `{"behavior":"allow", updatedInput?}` or `{"behavior":"deny","message":"..."}`, with an
   optional `interrupt: true` that aborts the turn. The hook `timeout` is in seconds. There seems to be an
   overall cap of 20 min on hook run time. **[source]**

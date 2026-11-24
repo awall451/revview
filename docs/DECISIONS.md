@@ -1844,3 +1844,30 @@ installed or run), 2026-11-24. This proves names and file layouts only; every be
 - **X08** `vcgencmd` is `/usr/bin/vcgencmd` from `raspi-utils-core` 20260626-1 (`libraspberrypi-bin` is gone from the Pi archive), talking to `/dev/vcio_gencmd`, group `video` (raspberrypi-sys-mods `10-vc.rules`), not `/dev/vcio`. Docs and installer comment fixed; the output and bit meanings are still bench PT-3.
 - **P05** espeak-ng is 1.52.0+dfsg-5 on Trixie. The line in stage 4B (~841) that says "Debian 12 ... 1.51" is outdated; it is left as written.
 - **P08** The `cryptsetup` command is shipped by `cryptsetup-bin`; the package `cryptsetup` depends on it, so `apt install cryptsetup` (the message in `data-setup.sh`) does provide it. `overlayroot` now depends on `cryptsetup` too, so after `install.sh` it is on the Pi.
+
+## Push-to-talk while a permission prompt is open (cycle 47)
+
+Owner issue #22. Before this a push-to-talk tap sent Space to the selected session with one guard only (session still
+starting), even while that session's permission dialog was on the pane, and that dialog takes keys while the hook waits
+(`fixtures/buttons` d2).
+
+- **Recording** (`fixtures/buttons` (f), real Claude Code 2.1.331, haiku, tmux, 2026-11-24, throwaway repo, command
+  `date > fN.txt`): one Space on the open dialog with `1. Yes` highlighted **did nothing**, both while the waiting hook
+  was polling (f1) and after a 5 s hook timeout had killed the hook (f2). Nothing ran, no hook event followed, the dialog
+  was unchanged, and no space was left in the input afterwards. The dialog was still answerable (`deny` by the hook in
+  f1, `4` typed in f2). Not tried: Space with another option highlighted, Space held, other versions.
+- **Rule** (the owner's default, kept: the recording gives no reason against it, a key into an open dialog is never
+  what the driver meant, and a later version could map Space to select): while the SELECTED session has a pending
+  permission prompt (any agent, main thread or subagent), a push-to-talk tap sends no key and the bar note says
+  "Answer the prompt first"; the action log says `push-to-talk: not done (permission prompt shown)`. A prompt in a
+  session that is not selected does not block. Everything else is unchanged (the starting guard comes first; speech is
+  still stopped first; an open list still only navigates).
+- **Where:** `src/sessions/actions.js` (`PROMPT_PTT_NOTE`), the note made like the other notes (`RevviewNote`); it goes
+  with the next gesture or a wheel answer. Tests: `tests/unit/ptt-permission-prompt.test.js`. Two tests in
+  `tests/unit/sessions-actions.test.js` that tapped push-to-talk on their default board (which has a pending prompt)
+  now use the working board; their assertions are unchanged.
+- **Limits:** "pending" is revview's board view. A subagent prompt has no dialog on the main pane (WB3), so there the
+  refusal is stricter than needed. After a hook timeout the dialog stays and the board keeps the prompt too (no event
+  says the hook ended), so the tap stays refused until the prompt is answered or dismissed (the events the board
+  already uses); a terminal answer leaves the note until the next gesture. Emulator and unit tests only;
+  bench PP-1 `untested`.
