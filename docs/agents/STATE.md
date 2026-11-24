@@ -1,6 +1,6 @@
 # STATE
 
-Detail and history: `HISTORY.md` (the old STATE, verbatim), `JOURNAL-archive.md` (journal before cycle 36), `docs/DECISIONS.md`, `docs/PI-FACTS.md`. Read them only when needed. The owner's console counts cycles (this file was last written in cycle 42); that number is used. Gate main: 1651 tests.
+Detail and history: `HISTORY.md` (the old STATE, verbatim), `JOURNAL-archive.md` (journal before cycle 36), `docs/DECISIONS.md`, `docs/PI-FACTS.md`. Read them only when needed. The owner's console counts cycles (this file was last written in cycle 42); that number is used. Gate main: 1656 tests.
 
 ## Status per charter stage
 
@@ -30,13 +30,13 @@ Nothing is proven on a Pi. The list is `docs/BENCH-TEST.md` (groups: First after
 
 ## In flight
 
-- Cycle 42: `work/pi-facts-check` (903f804, full check 1656) submitted as `ready/pi-facts-check`, notes stacked as `ready/lead-notes-42`. When `gate-status` shows both merged: delete the four branches, `owner-issues update 20261123T223054Z-i-7afd33 done`, `owner-inbox reply 20261123T223057Z-o-c4f87f done` (now `planned`), check `owner-publish status` (requested in cycle 42). If it failed: log path to an `area-lead-platform` as a fix task.
+- Nothing is in flight except `ready/lead-notes-42b` (this note; delete `work/` and `ready/lead-notes-42b` once merged). Cycle 42's `pi-facts-check` merged (main c59bf47, 1656 tests); owner message and issue closed `done`; publish requested.
 - No other branch or worktree is left over.
 - No held change. Published: main e98c85d (2026-11-24).
 
 ## Next
 
-- After the Pi-facts merge nothing is planned. Small leftovers of its review (not worth a cycle alone; do them with the next `pi/` change): `readonly.sh --dry-run` exits 2 when overlayroot is missing (say so in the help); an fstab line where `ro` is not right after `defaults` makes `disable` give up after 3 calls (message could say how to edit by hand); PI-FACTS E11 (`stat -c`) and E13 (argon2id default) are only part-checked; DECISIONS near line 841 still says espeak-ng 1.51 (a newer line says 1.52.0).
+- Nothing is planned: the team waits for the owner's bench and `owner-focus blocked` was said at the end of cycle 42. A next cycle with no new owner message: sync, verdicts, stop. Small leftovers of its review (not worth a cycle alone; do them with the next `pi/` change): `readonly.sh --dry-run` exits 2 when overlayroot is missing (say so in the help); an fstab line where `ro` is not right after `defaults` makes `disable` give up after 3 calls (message could say how to edit by hand); PI-FACTS E11 (`stat -c`) and E13 (argon2id default) are only part-checked; DECISIONS near line 841 still says espeak-ng 1.51 (a newer line says 1.52.0).
 - Otherwise idle: the team waits for the owner's bench (`docs/BENCH-TEST.md`). Do not invent work; say `owner-focus blocked` when in focus and nothing is left.
 - Open escalations: see `ESCALATIONS.md` (wheel buttons beyond stage 3; the cycle schedule). The archive-domain entry is resolved.
 

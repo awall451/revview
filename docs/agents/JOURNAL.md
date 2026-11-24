@@ -102,3 +102,5 @@ Tests changed on purpose (each held a wrong fact): `pi-readonly.test.js` (only `
 Review: `reviewer` on Sonnet: approve, no blocking finding; it read `readonly.sh` against the unpacked raspi-config and confirmed `labwc -m`. It doubted C05 (it thought both strings were in the binary); I counted them myself: `disable-session-crashed-bubble` 0, `hide-crash-restore-bubble` 1, so the removal stands. It first ran the tests on main by mistake, then on the branch (236 pass). Three small points left in STATE "Next".
 
 Submitted `ready/pi-facts-check` and these notes stacked on it (`ready/lead-notes-42`). `tools/check` untouched. Publish requested. Every bench item stays `untested`. Cost: about $7.
+
+Gate: `pi-facts-check` (903f804) and `lead-notes-42` MERGED, main c59bf47, 1656 tests; branches deleted; owner issue set done, owner message replied done, publish requested. Nothing is left that is worth a cycle without the owner's bench: `owner-focus blocked` said. Follow-up note: `lead-notes-42b`. Kit note: `owner-issues update <id> done` reads a note from stdin and hangs without one.
