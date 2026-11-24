@@ -410,3 +410,13 @@ What QA learned that the docs had wrong: Claude 2.1.330/331 starts in "auto mode
 Process notes for the kit's maintainer: tech leads run in their own isolated worktree and are refused a `cd` into another one, so a second lead on the same branch needs the first worktree removed (one $0.20 false start this cycle). The other open one-shot (20261123T223057Z-o-c4f87f, Pi facts steps 3-6; both archive domains now show `installed`) was left for a normal cycle, as this job's rules say.
 
 Cost: about $6.
+
+## 2026-11-24: cycle 37 (normal cycle: blocked on the proxy, notes only)
+
+Sync: gate main 317ebdd; `live-gaps` (de1b547) and `lead-notes-36` MERGED, 1429 tests, published. `ready/` and `work/lead-notes-26` deleted. No worktree left, no held change.
+
+Open owner one-shot 20261123T223057Z-o-c4f87f (Pi facts, steps 3-6), treated as priority: both archive domains show `installed`, but the proxy still gives 403 `ERR_ACCESS_DENIED` for `deb.debian.org` and `archive.raspberrypi.com` (http and https; `registry.npmjs.org` gives 200). Without the archives nothing of steps 3-6 can be done, and step 2 is merged. No agent was started and no other route to the packages was tried. Escalated (ESCALATIONS.md, 2026-11-24) and replied `planned`. The owner issue stays `in_progress`.
+
+Nothing else is due (the team waits on the owner's bench); no QA round, because main carries no product change since round 10. No publish request: notes only.
+
+Cost: under $1.

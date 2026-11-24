@@ -37,3 +37,17 @@ Asked by the owner (message 20261122T174730Z-o-27fe95). Details in JOURNAL.md, s
 - The cap's day is the UTC day; the schedule's day is the `tz` day. In New York the count resets at 19:00 local.
 - Saving the schedule marks slots of the last 10 minutes as used with no log line (`daily@01:00` on 2026-11-22).
 - Slots closer together than a cycle lasts (cycles here took 12-114 minutes) are skipped while the earlier cycle runs.
+
+## 2026-11-24: archive domains show `installed` but the proxy still refuses them (blocks the Pi-facts job)
+
+Requests 20261123T223049Z-k-b88da2 (`domain:deb.debian.org`) and 20261123T223049Z-k-9f5df3 (`domain:archive.raspberrypi.com`) show `installed`. At 2026-11-24T01:09Z (cycle 37, at least two cycles after the approval) the proxy still answers 403 for both:
+
+    curl -sS -o /dev/null -w '%{http_code}' -m 20 http://deb.debian.org/debian/dists/trixie/Release           -> 403
+    curl -sS -o /dev/null -w '%{http_code}' -m 20 http://archive.raspberrypi.com/debian/dists/trixie/Release  -> 403
+    (https: "CONNECT tunnel failed, response 403"; header `X-Squid-Error: ERR_ACCESS_DENIED`, from `agent-gw`)
+
+Other allowed domains work (`registry.npmjs.org` gives 200). So the allow-list the proxy reads does not contain the two domains, or the proxy was not reloaded.
+
+Blocked by this: steps 3-6 of owner message 20261123T223057Z-o-c4f87f (backlog f59dbf, owner issue 20261123T223054Z-i-7afd33). The team does not use another route to the packages.
+
+Ask: make the two domains really reachable through the proxy (http and https). The team tests them at the start of every cycle and runs the job in the first cycle where both give 200.
