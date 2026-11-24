@@ -446,3 +446,5 @@ Review: `reviewer` (installer, core state, tests). Sent back: a flaky real-tmux 
 Tests changed on purpose: `pi-data.test.js` (refusals now exit 4), `pi-install.test.js` (an edited key map is merged silently, base recorded), `sessions-runner.test.js` (new tmux argv).
 
 Submitted `ready/pi-leftovers` and these notes stacked on it. `tools/check` untouched. Cost: about $8.
+
+Gate: `pi-leftovers` (66fff51) and `lead-notes-39` MERGED, 1559 tests; branches deleted; owner issue set done, owner message replied done, publish requested. Follow-up note: `lead-notes-39b`.
