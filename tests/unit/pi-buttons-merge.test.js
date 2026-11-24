@@ -337,3 +337,25 @@ test('backups: the one just written is never pruned, even when its name sorts ol
   assert.ok(left.some((n) => get(r, `etc/revview/${n}`) === ser(old)), 'the backup of the file just replaced survives');
   assert.ok(!left.some((n) => get(r, `etc/revview/${n}`) === 'earlier 0'), 'the oldest by file time went');
 }));
+
+test('backups: a symlink or directory named like a backup is skipped (never followed or deleted), the run goes on', withRoot((r) => {
+  const old = oldShipped((b) => { b.timing.holdMs = 111; });
+  setup(r, old, old);
+  const dir = path.join(r, 'etc/revview');
+  const outside = path.join(r, 'outside.txt');
+  fs.writeFileSync(outside, 'keep me');
+  fs.symlinkSync(path.join(r, 'nowhere'), path.join(dir, 'buttons.json.revview-backup-00000000-000000'));
+  fs.symlinkSync(outside, path.join(dir, 'buttons.json.revview-backup-00000000-000001'));
+  fs.mkdirSync(path.join(dir, 'buttons.json.revview-backup-00000000-000002'));
+  for (let i = 0; i < 4; i++) fs.writeFileSync(path.join(dir, `buttons.json.revview-backup-00000001-00000${i}`), `earlier ${i}`);
+  const res = cli(r);
+  assert.equal(res.code, 0, res.err + res.out);
+  assert.equal(fs.lstatSync(path.join(dir, 'buttons.json.revview-backup-00000000-000000')).isSymbolicLink(), true);
+  assert.equal(fs.readlinkSync(path.join(dir, 'buttons.json.revview-backup-00000000-000001')), outside);
+  assert.equal(get(r, 'outside.txt'), 'keep me');
+  assert.equal(fs.lstatSync(path.join(dir, 'buttons.json.revview-backup-00000000-000002')).isDirectory(), true);
+  assert.match(res.out + res.err, /not a regular file/);
+  // the regular backups are still pruned to 3 (the new one and the 2 newest earlier ones)
+  const regular = backups(r).filter((n) => fs.lstatSync(path.join(dir, n)).isFile());
+  assert.equal(regular.length, 3, regular.join(' '));
+}));

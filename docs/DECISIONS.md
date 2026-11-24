@@ -1797,3 +1797,6 @@ Tested in the unit suite only; nothing run on a Pi.
 - **Key map:** keys are compared with `Object.hasOwn` and results built with `defineProperty`, so `__proto__` and `constructor`
   are ordinary keys (kept, added, removed). `--adopt-buttons-base` is refused (exit 4) when a valid base exists. Backups are ordered
   by file time (the Pi has no real-time clock) and the one just written is never pruned.
+- **Second review:** the missing status is a lost SIGCHLD (the pane stays a zombie, 4 of 12 side by side, none came in 20 s);
+  `reap` now runs `run-shell true` once per reap when a status is unknown, which makes tmux collect it (4 of 4), so the real-tmux test expects status 3 strictly (56/56 runs, 4 in parallel; 6/24 fail without it); `null` stays the fallback.
+- **Hangs and odd names:** every tmux command times out after 5 s (child killed, an error for every caller, `has-session` too); the server runs one owned refresh at a time (callers meanwhile share one later run); a backup-named entry that is not a regular file (`lstat`) is noted and left alone.

@@ -109,7 +109,19 @@ export async function startLiveServer({
     apply({ hook_event_name: 'RevviewProjects', paths: projects, missing }, true);
   }
   let lastOwned = new Map(); // id -> name of the windows the last listing had (only to log the ones that vanish)
-  async function refreshOwned() {
+  // One refresh at a time: a caller that comes while one runs shares a single later run (it then sees what changed
+  // meanwhile), so a slow or hung tmux never piles up one pending refresh per poll.
+  let ownedRun = null;
+  let ownedAgain = null;
+  function refreshOwned() {
+    if (!ownedRun) {
+      ownedRun = refreshOwnedOnce().finally(() => { ownedRun = null; });
+      return ownedRun;
+    }
+    ownedAgain ??= ownedRun.then(() => { ownedAgain = null; return refreshOwned(); });
+    return ownedAgain;
+  }
+  async function refreshOwnedOnce() {
     applyProjects();
     if (!sessions) return;
     try {
@@ -119,7 +131,7 @@ export async function startLiveServer({
         lastOwned.delete(r.id); // its end is logged below: not a second "disappeared" line
         console.error(`owned sessions: Claude of session ${r.id}${r.name ? ` (${r.name.replace(/[\u0000-\u001f\u007f-\u009f]/g, '')})` : ''} ended${r.status === null ? '' : ` with status ${r.status}`}; ${r.lines.length === 0 ? 'its screen was empty' : `last ${r.lines.length} screen line(s):`}`);
         for (const l of r.lines) console.error(`  | ${l}`);
-        apply({ hook_event_name: 'RevviewEndReason', session_id: r.id, text: [...r.lines].reverse().find((l) => l.trim() !== '') ?? '' }, true);
+        if (!closed) apply({ hook_event_name: 'RevviewEndReason', session_id: r.id, text: [...r.lines].reverse().find((l) => l.trim() !== '') ?? '' }, true);
       }
       const list = await sessions.list();
       const now = new Map(list.map((x) => [x.id, x.name]));

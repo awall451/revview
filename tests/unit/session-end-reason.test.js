@@ -51,8 +51,9 @@ test('tmux: a claude that prints and exits is reaped once, with its last lines a
   assert.equal(got.length, 1);
   assert.equal(got[0].id, A);
   assert.equal(got[0].name, 'dead');
-  // tmux sometimes never fills in the exit status of a pane that ended (seen 3 times in 8 runs side by side)
-  assert.ok([3, null].includes(got[0].status), String(got[0].status));
+  // strict: tmux 3.4 can miss the SIGCHLD of a pane started with the server (its status then never comes); reap makes the
+  // server wait for one more child (run-shell true), which collects the zombie and fills in pane_dead_status
+  assert.equal(got[0].status, 3);
   assert.deepEqual(got[0].lines.slice(-2), ['first line', 'Authentication failed: run claude to sign in']);
   assert.deepEqual(await runner.list(), []);
   assert.deepEqual(await runner.reap(), [], 'nothing is left to reap: no dead window piles up');
@@ -251,4 +252,94 @@ test('server: a reaped session is logged once (no extra "disappeared" line)', as
   await live.refreshOwned();
   assert.equal(logs.filter((l) => /disappeared/.test(l)).length, 0, logs.join('\n'));
   assert.equal(logs.filter((l) => /ended with status 1/.test(l)).length, 1);
+});
+
+// ---- review round 2: a lost SIGCHLD (the dead pane's status never comes until the server reaps another child) ----
+test('reap: an unknown status makes tmux run one child (run-shell true) before asking again, once per reap', async () => {
+  const calls = [];
+  let nudged = false;
+  const exec = async (bin, args) => {
+    const cmd = args.find((a) => ['list-panes', 'display-message', 'capture-pane', 'kill-window', 'run-shell'].includes(a));
+    calls.push(cmd);
+    if (cmd === 'run-shell') { assert.deepEqual(args.slice(args.indexOf('run-shell')), ['run-shell', 'true']); nudged = true; }
+    if (cmd === 'list-panes') return { stdout: `@1\t%1\t1\t\t${A}\tw\n@2\t%2\t1\t\t${B}\tx\n` };
+    if (cmd === 'display-message') return { stdout: nudged ? '3\n' : '\n' };
+    return { stdout: '' };
+  };
+  const runner = createSessionRunner({ exec, sleep: async () => {} });
+  const got = await runner.reap();
+  assert.deepEqual(got.map((g) => g.status), [3, 3]);
+  assert.equal(calls.filter((c) => c === 'run-shell').length, 1);
+  assert.ok(calls.indexOf('run-shell') < calls.indexOf('display-message'));
+});
+
+// ---- review round 2: a tmux command that hangs ----
+test('runner: a tmux command that never answers times out and is a failure for every caller, and later calls still run', async () => {
+  let hang = true;
+  const exec = () => (hang ? new Promise(() => {}) : Promise.resolve({ stdout: '' }));
+  const runner = createSessionRunner({ exec, timeoutMs: 50, sleep: async () => {} });
+  await assert.rejects(runner.reap(), /timed out/);
+  await assert.rejects(runner.list(), /timed out/);
+  await assert.rejects(runner.killServer(), /timed out/);
+  await assert.rejects(runner.send('Escape', A), /timed out/);
+  await assert.rejects(runner.start({ cwd: os.tmpdir() }), /timed out/, 'has-session timing out is not "no server"');
+  const pending = [runner.reap(), runner.reap(), runner.reap()];
+  for (const p of pending) await assert.rejects(p, /timed out/);
+  hang = false;
+  assert.deepEqual(await runner.reap(), [], 'the reap queue is not stuck');
+  assert.deepEqual(await runner.list(), []);
+});
+
+test('runner: a stand-in tmux that sleeps is killed at the timeout', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rv-hang-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const bin = path.join(dir, 'tmux');
+  const pidFile = path.join(dir, 'pid');
+  fs.writeFileSync(bin, `#!/bin/sh\necho $$ > '${pidFile}'\nexec sleep 30\n`, { mode: 0o755 });
+  const runner = createSessionRunner({ tmux: bin, socket: { path: path.join(dir, 'sock') }, timeoutMs: 300 });
+  const t0 = Date.now();
+  await assert.rejects(runner.list(), /timed out/);
+  assert.ok(Date.now() - t0 < 5000);
+  const pid = Number(fs.readFileSync(pidFile, 'utf8'));
+  const gone = await until(async () => { try { process.kill(pid, 0); return null; } catch { return true; } }, 3000);
+  assert.ok(gone, `the hung child ${pid} was killed`);
+});
+
+test('server: owned polls do not pile up behind a reap that hangs (one running, at most one more waiting)', async (t) => {
+  let calls = 0;
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const runner = { list: async () => [], reap: async () => { calls++; if (calls === 2) await gate; return []; } };
+  const live = await startLiveServer({ port: 0, boot: true, sessions: runner });
+  t.after(() => live.close());
+  assert.equal(calls, 1, 'the first refresh at start');
+  const first = live.refreshOwned();
+  await wait(20);
+  const more = Array.from({ length: 10 }, () => live.refreshOwned());
+  await wait(20);
+  assert.equal(calls, 2);
+  release();
+  await Promise.all([first, ...more]);
+  assert.equal(calls, 3, 'the waiting callers share one later run');
+});
+
+test('server: no end reason is applied once the server is closing', async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  let hang = false;
+  let listed = [{ id: A, window: '@0', cwd: '/x', name: 'alpha' }];
+  const runner = { list: async () => listed, reap: async () => { if (!hang) return []; await gate; return [{ id: A, name: 'alpha', status: 1, lines: ['late'] }]; } };
+  const live = await startLiveServer({ port: 0, boot: true, sessions: runner });
+  live.select(A);
+  listed = [];
+  await live.refreshOwned();
+  assert.match(String(live.state().note), /^alpha ended/, 'the end note is A\'s: a reason for A would replace it');
+  hang = true;
+  const p = live.refreshOwned();
+  await wait(20);
+  await live.close();
+  const before = JSON.stringify(live.state());
+  release();
+  await p;
+  assert.equal(JSON.stringify(live.state()), before, 'the board did not change after close');
 });

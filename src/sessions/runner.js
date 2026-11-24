@@ -7,7 +7,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const execFileP = promisify(execFile);
-const defaultExec = (bin, args) => execFileP(bin, args, { encoding: 'utf8' });
+const TIMEOUT_MS = 5000; // a tmux command that takes longer is killed and counts as failed (see `run`)
+// timeoutMs: execFile kills the child (SIGKILL) when it runs too long
+const defaultExec = (bin, args, { timeoutMs = TIMEOUT_MS } = {}) =>
+  execFileP(bin, args, { encoding: 'utf8', timeout: timeoutMs, killSignal: 'SIGKILL' });
 
 export const SEND_KEYS = Object.freeze(['Escape', 'C-c', 'Space']);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -42,11 +45,25 @@ export function createSessionRunner({
   log = () => {},
   now = Date.now,
   sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
+  timeoutMs = TIMEOUT_MS,
 } = {}) {
   const socketArgs = socket.path ? ['-S', socket.path] : ['-L', socket.name ?? 'revview'];
+  // Every tmux command has a time limit: one that hangs must not stop the reap queue (and the owned list) for good.
+  // A timeout is an error with timedOut set and no stderr, so no caller mistakes it for "no server" or empty output;
+  // the default exec kills the child, and an injected exec that never settles is given up on a little later.
+  const timedOut = (args) => Object.assign(new Error(`tmux ${args[0]} timed out after ${timeoutMs} ms`), { timedOut: true });
   const run = async (args) => {
-    const r = await exec(tmux, ['-f', '/dev/null', ...socketArgs, ...args]);
-    return String(r?.stdout ?? '');
+    let timer;
+    const limit = new Promise((_, reject) => { timer = setTimeout(() => reject(timedOut(args)), timeoutMs + 250); });
+    try {
+      const r = await Promise.race([exec(tmux, ['-f', '/dev/null', ...socketArgs, ...args], { timeoutMs }), limit]);
+      return String(r?.stdout ?? '');
+    } catch (e) {
+      if (e?.timedOut || (e?.killed && e?.signal === 'SIGKILL')) throw timedOut(args);
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
   };
 
   async function list() {
@@ -75,7 +92,8 @@ export function createSessionRunner({
     try {
       await run(['has-session', '-t', `=${SESSION}`]);
       return true;
-    } catch {
+    } catch (e) {
+      if (e?.timedOut) throw e; // not an answer: do not try new-session on a server that may well be there
       return false;
     }
   }
@@ -164,6 +182,7 @@ export function createSessionRunner({
     const t = now();
     const seenNow = new Set();
     const done = [];
+    let nudged = false;
     for (const line of out.split('\n')) {
       const [window, pane, dead, status0 = '', id, ...rest] = line.split('\t');
       if (dead !== '1' || !WINDOW_RE.test(window ?? '') || !/^%\d+$/.test(pane ?? '')) continue;
@@ -175,6 +194,13 @@ export function createSessionRunner({
         continue;
       }
       let status = status0;
+      if (!/^\d+$/.test(status) && !nudged) {
+        // tmux 3.4 can miss the SIGCHLD of a pane (seen with a pane started together with the server: 4 in 12 side by
+        // side): the child stays a zombie and pane_dead_status never comes. Any other child the server waits for makes
+        // its waitpid loop collect the zombie too, so one fixed, harmless child per reap (no text of ours in it).
+        nudged = true;
+        try { await run(['run-shell', 'true']); } catch { /* the asks below still run */ }
+      }
       for (let i = 0; i < 3 && !/^\d+$/.test(status); i++) {
         await sleep(100);
         try { status = (await run(['display-message', '-p', '-t', pane, '#{pane_dead_status}'])).trim(); } catch { break; }

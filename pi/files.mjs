@@ -104,8 +104,16 @@ export function createWriter({ dry = false, owner, homeAbs = '', root = '/', say
       // The Pi has no real-time clock, so a name's stamp can be older than earlier backups: order by file time, and never
       // remove the backup just written (it counts as one of the kept).
       const dir = path.dirname(p);
+      // lstat, not stat: an entry of that name that is not a regular file (a symlink, dangling or not, a directory) is
+      // not a backup this writer made: it is skipped with a note, never followed, counted or deleted.
       const others = fs.readdirSync(dir).filter((n) => n.startsWith(prefix) && n !== path.basename(rb))
-        .map((n) => ({ n, t: fs.statSync(path.join(dir, n)).mtimeMs }))
+        .map((n) => {
+          let st = null;
+          try { st = fs.lstatSync(path.join(dir, n)); } catch { /* gone meanwhile */ }
+          if (st && !st.isFile()) say(`note: ${path.join(dir, n)} is not a regular file; left alone`);
+          return st?.isFile() ? { n, t: st.mtimeMs } : null;
+        })
+        .filter(Boolean)
         .sort((x, y) => (x.t - y.t) || (x.n < y.n ? -1 : 1));
       for (const { n } of others.slice(0, Math.max(0, others.length - Math.max(0, (opts.keep ?? 3) - 1)))) fs.rmSync(path.join(dir, n), { force: true });
     }
