@@ -167,6 +167,15 @@ export async function startLiveServer({
     t?.unref?.();
     compactTimers.set(id, t);
   }
+  // after every posted event: arm the timer only when the board's session really is compacting, drop it otherwise
+  function compactSync(id, started) {
+    const on = board.sessions?.[id]?.state?.compacting === true;
+    if (on && started) compactStarted(id);
+    else if (!on && compactTimers.has(id)) {
+      clearT(compactTimers.get(id));
+      compactTimers.delete(id);
+    }
+  }
   const marked = sessions ? {
     ...guarded,
     start: async (...a) => {
@@ -358,7 +367,7 @@ export async function startLiveServer({
         return text(res, 403, `${event.hook_event_name} is not accepted over HTTP (dev bridge only)`);
       }
       if (!apply(event)) return text(res, 500, 'state core failed; event ignored');
-      if (event.hook_event_name === 'PreCompact' && typeof event.session_id === 'string') compactStarted(event.session_id);
+      if (typeof event.session_id === 'string') compactSync(event.session_id, event.hook_event_name === 'PreCompact');
       try {
         readAloud?.onEvent(event, board, selectedKey(board));
       } catch (e) {

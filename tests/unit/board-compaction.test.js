@@ -101,3 +101,84 @@ test('a /compact after a failed turn keeps the failure (PreCompact and PostCompa
   assert.equal(s.compacting, false);
   assert.equal(s.failed.error, 'rate_limit');
 });
+
+// cycle 38 fix round
+const mkTimers = () => {
+  const timers = { list: [], cleared: [] };
+  timers.setTimeout = (fn, ms) => { const h = { fn, ms, unref() {} }; timers.list.push(h); return h; };
+  timers.clearTimeout = (h) => timers.cleared.push(h);
+  return timers;
+};
+const seqOf = async (live) => (await (await fetch(`${live.url}/state`)).json()).seq;
+
+test('server: SessionEnd after PreCompact clears the timer; the old timer fn then changes nothing', async (t) => {
+  const timers = mkTimers();
+  const live = await startLiveServer({ port: 0, timers, compactLimitMs: 4321 });
+  t.after(() => live.close());
+  await post(live, ev('SessionStart', { session_id: A, cwd: '/w/a' }));
+  await post(live, ev('PreCompact', { session_id: A, trigger: 'auto' }));
+  const h = timers.list.find((x) => x.ms === 4321);
+  assert.ok(h);
+  await post(live, ev('SessionEnd', { session_id: A }));
+  assert.ok(timers.cleared.includes(h));
+  const before = JSON.stringify(live.state());
+  const seq = await seqOf(live);
+  h.fn();
+  assert.equal(JSON.stringify(live.state()), before);
+  assert.equal(await seqOf(live), seq);
+});
+
+test('server: a later event that clears the mark clears the timer too; close() clears a pending one', async () => {
+  const timers = mkTimers();
+  const live = await startLiveServer({ port: 0, timers, compactLimitMs: 4321 });
+  await post(live, ev('SessionStart', { session_id: A, cwd: '/w/a' }));
+  await post(live, ev('UserPromptSubmit', { session_id: A }));
+  await post(live, ev('PreCompact', { session_id: A }));
+  const h = timers.list.find((x) => x.ms === 4321);
+  await post(live, ev('PostCompact', { session_id: A }));
+  assert.ok(timers.cleared.includes(h));
+  await post(live, ev('PreCompact', { session_id: A }));
+  const h2 = timers.list.filter((x) => x.ms === 4321).at(-1);
+  await live.close();
+  assert.ok(timers.cleared.includes(h2));
+});
+
+test('server: a PreCompact of an unknown session arms no timer', async (t) => {
+  const timers = mkTimers();
+  const live = await startLiveServer({ port: 0, timers, compactLimitMs: 4321 });
+  t.after(() => live.close());
+  await post(live, ev('PreCompact', { session_id: A, trigger: 'auto' }));
+  assert.equal(timers.list.filter((x) => x.ms === 4321).length, 0);
+});
+
+const SUB = 'a8e992f6aa7859249';
+const compactingBoard = () => fold(initialBoard(), ev('SessionStart', { session_id: A, cwd: '/w/a' }), ev('UserPromptSubmit', { session_id: A }),
+  ev('PreCompact', { session_id: A, trigger: 'manual' }));
+const marked = (b) => boardView(b).compacting;
+
+test('the mark: kept by idle_prompt and by a subagent event, cleared by a permission Notification, the next main event and RevviewStarting', () => {
+  const b = compactingBoard();
+  assert.equal(marked(b), true);
+  assert.equal(marked(reduceBoard(b, ev('Notification', { session_id: A, notification_type: 'idle_prompt' }))), true);
+  assert.equal(marked(reduceBoard(b, ev('PreToolUse', { session_id: A, agent_id: SUB, tool_name: 'Read', tool_input: { file_path: '/x' }, tool_use_id: 't1' }))), true);
+  assert.equal(marked(reduceBoard(b, ev('PostToolUse', { session_id: A, agent_id: SUB, tool_name: 'Read', tool_input: { file_path: '/x' }, tool_use_id: 't1' }))), true);
+  assert.equal(marked(reduceBoard(b, ev('Notification', { session_id: A, notification_type: 'permission_prompt' }))), false);
+  assert.equal(marked(reduceBoard(b, ev('PreToolUse', { session_id: A, tool_name: 'Read', tool_input: { file_path: '/x' }, tool_use_id: 't2' }))), false);
+  assert.equal(marked(reduceBoard(b, ev('PostCompact', { session_id: A }))), false);
+  assert.equal(marked(reduceBoard(b, ev('RevviewStarting', { session_id: A }))), false);
+});
+
+test('a real subagent SubagentStop keeps the mark until the next main event', () => {
+  let b = reduceBoard(compactingBoard(), ev('SubagentStop', { session_id: A, agent_id: SUB, agent_type: 'general-purpose' }));
+  assert.equal(marked(b), true);
+  b = reduceBoard(b, ev('PostToolUse', { session_id: A, tool_name: 'Read', tool_input: { file_path: '/x' }, tool_use_id: 't3' }));
+  assert.equal(marked(b), false);
+});
+
+test('reducer: an agent_id event and idle_prompt keep the mark; a permission Notification clears it', () => {
+  const s = reduce(reduce(initialState(), ev('UserPromptSubmit', { session_id: A })), ev('PreCompact', { session_id: A }));
+  assert.equal(s.compacting, true);
+  assert.equal(reduce(s, ev('PreToolUse', { agent_id: SUB, tool_name: 'Read', tool_input: { file_path: '/x' } })).compacting, true);
+  assert.equal(reduce(s, ev('Notification', { notification_type: 'idle_prompt' })).compacting, true);
+  assert.equal(reduce(s, ev('Notification', { notification_type: 'permission_prompt' })).compacting, false);
+});

@@ -189,11 +189,14 @@ export function reduce(state, event) {
   let patch = syntheticPatch(event);
   if (patch === null) {
     patch = patchFor(event);
-    // The compacting mark lasts until the next Claude hook event, whatever it is, except the summariser's own
-    // SubagentStop that arrives during the compaction (recorded); an event otherwise ignored still clears it.
-    const mid = event.hook_event_name === 'SubagentStop';
+    // The compacting mark lasts until the next main-thread Claude hook event, whatever it is; an event otherwise
+    // ignored still clears it. Kept by: the summariser's own SubagentStop (recorded), any event of a subagent
+    // (it carries agent_id; one may still run during a main-thread compaction) and an idle_prompt Notification
+    // (a /compact typed at an idle prompt that runs long).
+    const mid = event.hook_event_name === 'SubagentStop' || isStr(event.agent_id)
+      || (event.hook_event_name === 'Notification' && event.notification_type === 'idle_prompt');
     if (patch === null) return base.compacting === true && !mid ? { ...base, compacting: false } : base;
-    if (event.hook_event_name !== 'PreCompact') patch.compacting = false;
+    if (event.hook_event_name !== 'PreCompact' && !mid) patch.compacting = false;
     // any event that changes the turn ends a failed turn; idle_prompt (Claude Code still idle ~60 s later) and a
     // compaction (a /compact after the failure: the turn is still not redone) do not
     const keepsFailed = (event.hook_event_name === 'Notification' && event.notification_type === 'idle_prompt')

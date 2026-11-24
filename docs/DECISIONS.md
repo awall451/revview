@@ -1691,10 +1691,16 @@ hang. Now the tool line says "Compacting context". Proven in the emulator and th
   the tool result to the `compact_boundary`): 7.0 s, 6.1 s auto, 5.4 s manual, at ~35k tokens with haiku.
 - **Mark.** The reducer keeps `compacting` per session. `PreCompact` (either trigger) sets it and changes nothing else.
   Every other Claude hook event clears it, also those it otherwise ignores (`SessionStart` compact, `PostCompact`,
-  other `Notification`s), **except `SubagentStop`** (the summariser's arrives mid-compaction). `RevviewInterrupted` (Esc
+  permission `Notification`s), **except `SubagentStop`** (the summariser's arrives mid-compaction), **any event
+  carrying `agent_id`** (a background subagent still running during a main-thread compaction; recorded only on
+  `SubagentStop`, so the recording is unchanged) and **an `idle_prompt` Notification** (a long `/compact` typed at an idle
+  prompt). The mark cannot stick: the main thread's next event, PostCompact, SessionStart compact or the limit clear it.
+  `RevviewInterrupted` (Esc
   sent by revview) and `RevviewStarting` clear it. `PreCompact` and `PostCompact` keep `failed` (a `/compact` after a
   failed turn does not redo it). A `PreCompact` of a session the board does not know makes no session.
-- **Time limit: 180 s.** The server starts a per-session timer on each POSTed `PreCompact` (`COMPACT_LIMIT_MS`, option
+- **Time limit: 180 s.** The server starts a per-session timer on each POSTed `PreCompact` after which the board's
+  session really is compacting, and clears it as soon as the session no longer is (any clearing event, SessionEnd,
+  close) (`COMPACT_LIMIT_MS`, option
   `compactLimitMs`); when it runs out it applies the internal `RevviewCompactExpired`, which clears a mark still set
   (not POSTable). The recorded 5-7 s were with a tiny context; the owner sees 1-2 min in long sessions, so 180 s
   covers a real one and bounds a lost end event (the hook failing, the server restarting).
