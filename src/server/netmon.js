@@ -100,6 +100,7 @@ export function createNetMonitor({
   let timer = null;
   let reported = null; // null = unknown
   let failures = 0;
+  let ticking = false;
 
   const report = (online) => {
     if (reported === online) return;
@@ -113,12 +114,14 @@ export function createNetMonitor({
 
   async function tick() {
     timer = null;
+    ticking = true;
     let ok = false;
     try {
       ok = (await probe()) === true;
     } catch (e) {
       log(`netmon: probe failed: ${e instanceof Error ? e.message : e}`);
     }
+    ticking = false;
     if (stopped) return;
     if (ok) {
       failures = 0;
@@ -132,6 +135,12 @@ export function createNetMonitor({
 
   tick();
   return {
+    // Probe again now (a posted RevviewNetwork is only this). A probe already running is that probe.
+    check() {
+      if (stopped || ticking) return;
+      if (timer !== null) timers.clearTimeout(timer);
+      tick();
+    },
     stop() {
       stopped = true;
       if (timer !== null) timers.clearTimeout(timer);

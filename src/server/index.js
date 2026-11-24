@@ -5,7 +5,7 @@
 //   --boot: key-on start: show STARTING until the first session is on the board; with no tmux windows, start one session in $REVVIEW_START (or each --start dir)
 //   --data-lock [dir]: the data is locked until the topmost mount on dir (default /srv/revview-data, or $REVVIEW_DATA_MOUNT) is ext4 from /dev/mapper/revview-data;
 //     locked shows INSERT KEY, no session starts (key-on and New session wait); a posted RevviewDataLock is only a poke to re-read the mount table
-//   --netmon: watch the network (default route + TCP connect to $REVVIEW_NETMON_HOST, default api.anthropic.com:443); offline after 2 failures, online after 1 success
+//   --netmon: watch the network (default route + TCP connect to $REVVIEW_NETMON_HOST, default api.anthropic.com:443); offline after 2 failures, online after 1 success; a posted RevviewNetwork is only a poke to probe again
 //   --thermal: watch temperature and the Pi throttle flags: HOT and LOW POWER marks (sources: $REVVIEW_THERMAL_TEMP file, default /sys/class/thermal/thermal_zone0/temp;
 //     `vcgencmd get_throttled`, command path $REVVIEW_THERMAL_VCGENCMD, or a file $REVVIEW_THERMAL_THROTTLED instead of the command); a missing source is logged once
 import http from 'node:http';
@@ -383,10 +383,16 @@ export async function startLiveServer({
         dataMonitor?.check();
         return res.writeHead(204).end();
       }
-      // the server makes both states itself (--boot, --data-lock): outside the dev bridge nothing may post them
+      // with --netmon the probe decides: a posted RevviewNetwork is only a poke to probe again
+      if (monitor && event.hook_event_name === 'RevviewNetwork') {
+        monitor.check();
+        return res.writeHead(204).end();
+      }
+      // the server makes these states itself (--boot, --data-lock, --netmon): outside the dev bridge nothing may post them
       // (a posted RevviewStarting with no session would stay on screen, a posted RevviewDataLock without --data-lock
-      // would show INSERT KEY while New session still starts)
-      if (!devBridge && (event.hook_event_name === 'RevviewStarting' || event.hook_event_name === 'RevviewDataLock')) {
+      // would show INSERT KEY while New session still starts, a posted RevviewNetwork without --netmon would show OFFLINE
+      // with nothing to bring it back)
+      if (!devBridge && ['RevviewStarting', 'RevviewDataLock', 'RevviewNetwork'].includes(event.hook_event_name)) {
         return text(res, 403, `${event.hook_event_name} is not accepted over HTTP (dev bridge only)`);
       }
       if (!apply(event)) return text(res, 500, 'state core failed; event ignored');
