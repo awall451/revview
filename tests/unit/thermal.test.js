@@ -11,9 +11,10 @@ import {
 import { startLiveServer, parseArgs } from '../../src/server/index.js';
 
 const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
-// Bounded poll (no fixed sleep): resolves when cond() holds, fails after about 10 s.
-async function until(cond) {
-  for (let i = 0; i < 2000; i++) {
+// Bounded poll (no fixed sleep): resolves when cond() holds, fails after 15 s of wall time (real file I/O on a loaded machine).
+async function until(cond, ms = 15000) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
     if (cond()) return;
     await new Promise((r) => setImmediate(r));
   }
@@ -26,8 +27,11 @@ function fakeTimers() {
     setTimeout: (fn, ms) => { pending.set(++n, { fn, ms }); return n; },
     clearTimeout: (id) => { pending.delete(id); },
     pending,
-    async fire() {
-      const [id, p] = [...pending.entries()][0];
+    // Poll timers (the monitor's interval, 5000 ms) as opposed to per-read timeouts (4000 ms).
+    polls: () => [...pending.values()].filter((x) => x.ms === 5000).length,
+    // fire(): the oldest pending timer; fire(ms): the oldest one armed with that delay (throws if none).
+    async fire(ms) {
+      const [id, p] = [...pending.entries()].find(([, x]) => ms === undefined || x.ms === ms);
       pending.delete(id);
       p.fn();
       await flush();
@@ -259,12 +263,12 @@ test('server: --thermal marks reach the board, close() stops the monitor, HTTP R
   const thermal = { ...createDefaultReaders({ tempPath: tempFile, throttledPath: thrFile }), timers, now: () => clock.t };
   const live = await startLiveServer({ port: 0, thermal });
   t.after(() => live.close());
-  await until(() => timers.pending.size === 1); // first tick done, next poll scheduled
+  await until(() => timers.polls() === 1); // first tick done, next poll scheduled (read timeouts do not count)
   assert.equal(live.state().hot, false);
   assert.equal(live.state().lowPower, false);
   fs.writeFileSync(thrFile, 'throttled=0x50005\n');
   clock.t = 1000;
-  await timers.fire();
+  await timers.fire(5000);
   await until(() => live.state().hot === true && live.state().lowPower === true);
   assert.equal(live.state().hot, true);
   assert.equal(live.state().lowPower, true);
