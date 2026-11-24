@@ -61,8 +61,10 @@ async function expectShows(page, state) {
 
   // the tool is shown for every tool (Bash too); the command wraps over 3 rows and is cut with an ellipsis
   // beyond that, so the whole command is in data-full and the shown text is a prefix of it
-  await expect(page.locator('#tool')).toHaveText(state.tool || '');
-  await expect(page.locator('#file')).toHaveText(state.file || '');
+  // while Claude compacts (cycle 38) the tool slot says so and the file slot is empty; the rest is shown as always
+  const compacting = state.compacting === true;
+  await expect(page.locator('#tool')).toHaveText(compacting ? 'Compacting context' : state.tool || '');
+  await expect(page.locator('#file')).toHaveText(compacting ? '' : state.file || '');
   const command = state.command || '';
   await expect(page.locator('#command')).toHaveAttribute('data-full', command);
   // the displayed command has a U+2060 after each '-' (no line break after "--"); data-full does not
