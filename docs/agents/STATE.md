@@ -1,6 +1,6 @@
 # STATE
 
-Detail and history: `HISTORY.md` (the old STATE, verbatim), `JOURNAL-archive.md` (journal before cycle 36), `docs/DECISIONS.md`, `docs/PI-FACTS.md`. Read them only when needed. The owner's console counts cycles (this file was last written in cycle 48); that number is used. Gate main: 1667 tests (1676 once `note-kinds` merges).
+Detail and history: `HISTORY.md` (the old STATE, verbatim), `JOURNAL-archive.md` (journal before cycle 36), `docs/DECISIONS.md`, `docs/PI-FACTS.md`. Read them only when needed. The owner's console counts cycles (this file was last written in cycle 48); that number is used. Gate main: 1676 tests.
 
 ## Status per charter stage
 
@@ -32,12 +32,12 @@ Nothing is proven on a Pi. The list is `docs/BENCH-TEST.md` (groups: First after
 
 ## In flight
 
-- Cycle 48 submitted: `ready/note-kinds` (cc799ee, owner issue #24, backlog a926ba taken) and `ready/lead-notes-48` (this note) stacked on it. Expected 1676 tests. On merge: delete `ready/` and `work/` branches (note-kinds, lead-notes-48), set issue #24 (20261124T172325Z-i-58af4c) done with `--commit` and a note on stdin, request a publish.
-- No worktree is left over. No held change. Published: main 406d255 (2026-11-24).
+- Nothing except `ready/lead-notes-48b` (this note; delete `work/` and `ready/lead-notes-48b` once merged). Cycle 48's `note-kinds` merged (main 198a55f, 1676 tests); owner issue #24 set `done`; publish requested.
+- No worktree is left over. No held change. Published: main 406d255 (2026-11-24); 198a55f requested.
 
 ## Next
 
-- Next cycle, once `note-kinds` has merged: owner issue #25 (backlog 20261124T165658Z-b-f9c0be, Opus): split `src/server/index.js`. After #24 has merged, never in the same cycle. Looped run under CPU load of the server timer tests; reviewer. If issue #25 is not in the lead's open list, take the backlog item 20261124T165658Z-b-f9c0be with `owner-backlog taken` as a normal-cycle item.
+- Next cycle: backlog item 20261124T165658Z-b-f9c0be (approved; Opus `area-lead-core`): split `src/server/index.js`. No owner issue is open for it (the open list was empty at the end of cycle 48), so take it with `owner-backlog taken` as a normal-cycle item unless an issue #25 appears. Looped run under CPU load of the server timer tests; reviewer.
 - After those: nothing planned; the team waits for the owner's bench (`docs/BENCH-TEST.md`). Small `pi/` leftovers for the next `pi/` change: `readonly.sh --dry-run` exits 2 when overlayroot is missing (say so in the help); an fstab line where `ro` is not right after `defaults` makes `disable` give up after 3 calls; PI-FACTS E11 and E13 are only part-checked.
 - Open escalations: see `ESCALATIONS.md` (the cycle schedule only; the others are resolved).
 

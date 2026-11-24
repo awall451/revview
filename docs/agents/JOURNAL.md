@@ -136,3 +136,5 @@ Changes of behaviour, on purpose: a plain note whose text ends in " ended" is no
 Tests: 1676 (main 1667; 9 new). Adapted with unchanged expectations: tests that read the raw board's note now read `.note?.text`, and events in `board-ended-notes`, `board-missing-projects`, `sessions-actions` carry `kind`. No expected fixture file changed. All 57 screenshots byte-identical to the gate's set for 406d255 (compared by the lead with `cmp`, both rounds). Loops under CPU load: 50 of 50 (350 tests each: board, sessions, server, emulator-looks) on the first round, 30 of 30 board tests after the fix.
 
 Submitted `ready/note-kinds` and these notes stacked on it (`ready/lead-notes-48`). `tools/check` untouched. Next cycle: #25 (split the server file) after this has merged. Cost: about $4.
+
+Gate: `note-kinds` (cc799ee) and `lead-notes-48` MERGED, main 198a55f, 1676 tests; branches and worktrees deleted; owner issue #24 set done; publish requested. No open owner issue is left; the approved backlog item f9c0be (server split) is next. Follow-up note: `lead-notes-48b`.
