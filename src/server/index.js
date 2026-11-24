@@ -781,6 +781,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     process.exit(2);
   }
   let runner = null;
+  const startedIds = []; // sessions --start made without --boot: marked STARTING like a menu New session (live.launched)
   let selectId = null; // the session the buttons act on at boot: the last one started, else the only one there is
   if (args.sessions) {
     runner = createSessionRunner({
@@ -792,7 +793,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       try {
         const existing = await runner.list();
         if (existing.length === 1) selectId = existing[0].id;
-        for (const dir of args.start) selectId = (await runner.start({ cwd: path.resolve(dir) })).id;
+        for (const dir of args.start) {
+          selectId = (await runner.start({ cwd: path.resolve(dir) })).id;
+          startedIds.push(selectId);
+        }
       } catch (e) {
         console.error(`sessions: ${e instanceof Error ? e.message : String(e)}`);
         process.exit(2);
@@ -827,7 +831,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     bootAfterUnlock({ live, runner, dirs: args.start, log }).then(() => log('boot: key-on session step done'));
   } else if (args.boot && runner) selectId = await bootSessions({ runner, live, dirs: args.start, log: (m) => console.error(m) });
   else if (args.boot) live.bootDone(); // no runner: nothing will ever start a session, so the boot STARTING ends now
-  else if (selectId !== null) live.select(selectId);
+  else {
+    for (const id of startedIds) live.launched(id); // the same mark and the same 30 s limit as menu -> New session (not the Pi's key-on mark)
+    if (selectId !== null) live.select(selectId);
+  }
   const selectedNow = selectId !== null && live.selected() === selectId;
   const { url } = live;
   installShutdown(live);

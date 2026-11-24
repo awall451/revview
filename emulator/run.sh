@@ -353,7 +353,20 @@ while :; do
   sleep 0.1
 done
 
+# --live: Claude ending within the first claude_window seconds after the server is up is a start failure (not signed in, a
+# first run that quits, a crash): say so and stop, exit 1 (as when it ends before the server is up). Later the run goes on
+# as before: a session the user ends normally is not an error.
+claude_window=10
+claude_until=$((SECONDS + claude_window))
+check_claude() {
+  [ "$mode" = live ] && [ "$SECONDS" -le "$claude_until" ] || return 0
+  tmux -S "$sock" has-session -t revview 2> /dev/null && return 0
+  echo "run.sh: Claude exited within $claude_window s of starting, so there is no session. Run \`claude\` once in a normal terminal to see why (is it signed in?)." >&2
+  exit 1
+}
+
 if [ "$mode" = live ]; then
+  check_claude # it may have ended while the server came up
   echo "live mode: no demo; Claude Code runs in $live_dir and sends its real Claude Code hook events to 127.0.0.1:$actual"
   printf 'attach: tmux -S %q attach -t revview\n' "$sock"
   if [ -n "${TMUX:-}" ]; then echo "(you are inside tmux: run the attach line from a shell outside tmux, or prefix it with TMUX=)"; fi
@@ -400,6 +413,7 @@ serve_on() {
   echo "Serving until Ctrl+C."
   while kill -0 "$spid" 2> /dev/null; do
     note_player
+    check_claude
     sleep 0.2 &
     wait $!
   done
@@ -437,6 +451,7 @@ bpid=$!
 # watch the server as well as the browser
 while kill -0 "$bpid" 2> /dev/null && kill -0 "$spid" 2> /dev/null; do
   note_player
+  check_claude
   sleep 0.2 &
   wait $!
 done

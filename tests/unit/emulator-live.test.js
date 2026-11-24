@@ -493,3 +493,58 @@ test('r9-06: the pid directory under TMPDIR is removed when empty after the run;
 test('r9-05: the guide says what "Too early: press again" means', () => {
   assert.match(REPO_DOC('docs/EMULATOR-LAPTOP.md'), /Too early: press again/);
 });
+
+// ---- cycle 36: the known gaps of --live ----
+test('c36-01: the first session of a --live run shows STARTING (not UNKNOWN) until its first hook', async () => {
+  const fx = liveFixture();
+  // a claude that stays up and sends no hook: only the STARTING mark can explain the view
+  fs.writeFileSync(path.join(fx.shim, 'claude'), '#!/bin/bash\nwhile :; do sleep 0.1; done\n', { mode: 0o755 });
+  const run = startLive(['--live', '--no-browser'], { fx });
+  try {
+    const { sock } = await run.attach();
+    const origin = await run.origin();
+    const s = await until(async () => { const st = await stateOf(origin); return st.position?.count === 1 ? st : null; }, 'the first session on the bar');
+    assert.equal(s.view, 'starting');
+    process.kill(-run.child.pid, 'SIGTERM');
+    assert.equal((await run.exit()).code, 0);
+    assert.notEqual(tmux(sock, 'list-sessions').status, 0);
+  } finally { run.finish(); }
+});
+
+for (const [name, body] of [
+  ['exits after 1.5 s', 'sleep 1.5\necho "not signed in" >&2\nexit 1'],
+  ['is killed after 1.5 s', 'sleep 1.5\nkill -9 $$'],
+]) {
+  for (const browser of [false, true]) {
+    test(`c36-02: a claude that ${name}, after the server is up (browser ${browser}), gives the Claude exited message, exit 1, nothing left`, async () => {
+      const fx = liveFixture();
+      fs.writeFileSync(path.join(fx.shim, 'claude'), `#!/bin/bash\n${body}\n`, { mode: 0o755 });
+      const run = startLive(browser ? ['--live'] : ['--live', '--no-browser'], { fx, browser });
+      try {
+        assert.equal((await run.exit()).code, 1);
+        assert.match(run.err, /run\.sh: Claude exited within \d+ s of starting/);
+        assert.match(run.err, /Run `claude` once in a normal terminal/);
+        assert.doesNotMatch(run.err, /server stopped/);
+        assert.deepEqual(procsInDirs(run.tmp), []);
+        assert.deepEqual(fs.readdirSync(run.tmp), []);
+        assert.deepEqual(run.pidFiles(), []);
+        assert.equal(fs.existsSync(path.join(run.xdg, 'revview-emu')), false, 'the pid directory is removed');
+      } finally { run.finish(); }
+    });
+  }
+}
+
+test('c36-03: a claude that ends later than the window is not reported as an error (the run goes on as before)', async () => {
+  const fx = liveFixture();
+  fs.writeFileSync(path.join(fx.shim, 'claude'), '#!/bin/bash\nsleep 12\nexit 0\n', { mode: 0o755 });
+  const run = startLive(['--live', '--no-browser'], { fx });
+  try {
+    await run.attach();
+    await sleep(14500);
+    assert.equal(run.exited, null, 'still serving');
+    assert.doesNotMatch(run.err, /Claude exited/);
+    process.kill(-run.child.pid, 'SIGTERM');
+    assert.equal((await run.exit()).code, 0);
+    assert.deepEqual(fs.readdirSync(run.tmp), []);
+  } finally { run.finish(); }
+});
