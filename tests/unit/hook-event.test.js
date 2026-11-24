@@ -197,6 +197,34 @@ test('context also follows UserPromptSubmit, Stop and PostToolUse Bash, not othe
   fs.rmSync(top, { recursive: true, force: true });
 });
 
+function fixtureEvents(name) {
+  return fs.readFileSync(new URL('compaction.jsonl', FIX), 'utf8').split('\n').filter(Boolean)
+    .map((l) => JSON.parse(l)).filter((e) => e.hook_event_name === name);
+}
+
+test('PreCompact and PostCompact: trigger kept, compact_summary and custom_instructions not sent, no context', async () => {
+  const pre = fixtureEvents('PreCompact')[0];
+  const post = fixtureEvents('PostCompact')[0];
+  assert.ok(pre && post && post.compact_summary.length > 100);
+  const s = await stub();
+  for (const e of [{ ...pre, custom_instructions: 'secret focus' }, post]) {
+    const r = await runHook(s.port, JSON.stringify({ ...e, cwd: process.cwd() }));
+    assert.equal(r.code, 0);
+    assert.equal(r.out, '');
+  }
+  s.close();
+  assert.equal(s.seen.length, 2); // no RevviewContext
+  const [b1, b2] = bodies(s);
+  assert.equal(b1.hook_event_name, 'PreCompact');
+  assert.equal(b1.trigger, pre.trigger);
+  assert.equal('custom_instructions' in b1, false);
+  assert.equal(b2.hook_event_name, 'PostCompact');
+  assert.equal(b2.trigger, post.trigger);
+  assert.equal('compact_summary' in b2, false);
+  assert.equal(b2.session_id, post.session_id);
+  assert.ok(!s.seen[1].raw.toString().includes(post.compact_summary.slice(0, 40)));
+});
+
 test('detached HEAD gives branch null', async () => {
   const top = tmpRepo();
   git(top, 'checkout', '-q', '--detach');

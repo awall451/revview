@@ -12,7 +12,7 @@ const INSTALL = path.join(ROOT, 'hooks/install.mjs');
 const TEMPLATE = JSON.parse(fs.readFileSync(path.join(ROOT, 'hooks/settings.json'), 'utf8'));
 const MARK = ' # revview-hook';
 const EVENTS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PostToolUseFailure',
-  'PermissionDenied', 'Notification', 'Stop', 'StopFailure', 'SubagentStop', 'SessionEnd'];
+  'PermissionDenied', 'Notification', 'Stop', 'StopFailure', 'SubagentStop', 'SessionEnd', 'PreCompact', 'PostCompact'];
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'revview-inst-'));
 
@@ -54,7 +54,8 @@ test('template: every consumed event runs event.mjs with a short timeout; $REVVI
     assert.match(hs[0].command, /event\.mjs/, ev);
     assert.ok(hs[0].timeout <= 10, ev);
   }
-  for (const ev of ['SubagentStart', 'PreCompact', 'PostCompact']) assert.equal(TEMPLATE.hooks[ev], undefined);
+  assert.equal(TEMPLATE.hooks.SubagentStart, undefined);
+  for (const ev of ['PreCompact', 'PostCompact']) assert.equal(TEMPLATE.hooks[ev][0].matcher, undefined, ev);
   for (const c of commands(TEMPLATE)) {
     assert.match(c.command, /^node "\$REVVIEW_DIR\/hooks\/[a-z-]+\.mjs" # revview-hook$/);
   }
@@ -137,6 +138,23 @@ test('idempotent: two runs give identical bytes, one entry per event', () => {
   assert.deepEqual(evs, [...EVENTS, 'PermissionRequest'].sort());
 });
 
+test('re-install over an older install without PreCompact/PostCompact adds them, once', () => {
+  const { home, file, read } = setup();
+  run([], { home });
+  const s0 = read();
+  delete s0.hooks.PreCompact;
+  delete s0.hooks.PostCompact;
+  fs.writeFileSync(file, JSON.stringify(s0));
+  const r = run([], { home });
+  assert.equal(r.code, 0, r.err);
+  const s = read();
+  for (const ev of ['PreCompact', 'PostCompact']) {
+    assert.equal(s.hooks[ev].length, 1, ev);
+    assert.match(s.hooks[ev][0].hooks[0].command, /event\.mjs" # revview-hook$/);
+  }
+  assert.equal(mine(s).length, EVENTS.length + 1);
+});
+
 test('old snippet-style entry is replaced, not duplicated; backup made once', () => {
   const { home, file, read } = setup();
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -153,7 +171,8 @@ test('old snippet-style entry is replaced, not duplicated; backup made once', ()
   assert.ok(!JSON.stringify(s).includes(`node ${ROOT.replace(/\/$/, '')}/hooks/permission-request.mjs`));
   assert.equal(s.hooks.PermissionRequest.length, 1);
   assert.equal(s.hooks.SubagentStart[0].hooks[0].command, 'node /old/place/hooks/event.mjs'); // foreign: kept
-  assert.equal(s.hooks.PreCompact[0].hooks[0].command, 'node "/y/hooks/permission-request.mjs"');
+  assert.equal(s.hooks.PreCompact[0].hooks[0].command, 'node "/y/hooks/permission-request.mjs"'); // foreign: kept next to ours
+  assert.equal(s.hooks.PreCompact.length, 2);
   assert.equal(mine(s).length, EVENTS.length + 1);
   const bak = fs.readFileSync(`${file}.revview-backup`, 'utf8');
   assert.ok(bak.includes('/old/place'));

@@ -38,13 +38,17 @@ server's default too).
 
 | Event | Hook | Why |
 | --- | --- | --- |
-| SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, PermissionDenied, Notification, Stop, StopFailure, SubagentStop, SessionEnd | `event.mjs`, timeout 5 s | the state core (`src/state/`) uses them |
+| SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, PermissionDenied, Notification, Stop, StopFailure, SubagentStop, SessionEnd, PreCompact, PostCompact | `event.mjs`, timeout 5 s | the state core (`src/state/`) uses them |
 | PermissionRequest | `permission-request.mjs`, timeout 600 s | owned by `/permission` (wheel-button answers) |
-| SubagentStart, PreCompact, PostCompact | none | the state core ignores them; each hook costs a node start |
+| SubagentStart | none | the state core ignores it; each hook costs a node start |
+
+PreCompact and PostCompact set and clear the "compacting" note on the bar (docs/DECISIONS.md, "Compaction note
+(cycle 38)"). They are posted without `compact_summary` (the whole conversation summary, large and private) and
+without `custom_instructions`; `trigger` is kept. They never cause a RevviewContext post.
 
 ## event.mjs
 
-- Reads stdin, checks it is a JSON object with a string `hook_event_name`, posts the bytes unchanged.
+- Reads stdin, checks it is a JSON object with a string `hook_event_name`, posts the bytes unchanged (except PreCompact/PostCompact, see above).
 - **Never posts `PermissionRequest`** (also if it were installed on that event by mistake): the server feeds it into
   the board from `/permission`; a second copy through `/event` would make a duplicate pending entry, and a button
   press would then do nothing. Never posts a name starting with `Revview` either (a payload cannot become a

@@ -3,6 +3,8 @@
 // local revview server (http://127.0.0.1:$REVVIEW_PORT/event, default 8138). After a successful post of a
 // few events (session start, prompt, stop, a Bash result) it also posts a synthetic RevviewContext with the
 // git toplevel and branch of the payload's cwd.
+// PreCompact / PostCompact are posted without `custom_instructions` and `compact_summary` (the whole
+// conversation summary: large and private); `trigger` stays. They get no RevviewContext.
 // PermissionRequest is NOT posted here: hooks/permission-request.mjs owns it through /permission, and a
 // second post to /event would make a duplicate pending entry. Names that are not strings or start with
 // `Revview` are not posted either (a hook must not be a way to send synthetic events).
@@ -91,7 +93,14 @@ function git(cwd) {
   });
 }
 
+const PRIVATE = { PreCompact: ['custom_instructions'], PostCompact: ['compact_summary', 'custom_instructions'] };
+
 async function main(body, ev) {
+  const strip = PRIVATE[ev.hook_event_name];
+  if (strip) {
+    for (const k of strip) delete ev[k];
+    body = Buffer.from(JSON.stringify(ev));
+  }
   if (!(await post(body))) return bail(null);
   if (wantsContext(ev) && typeof ev.cwd === 'string' && path.isAbsolute(ev.cwd) && typeof ev.session_id === 'string') {
     const c = await git(ev.cwd);
