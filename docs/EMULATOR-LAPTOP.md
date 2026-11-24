@@ -87,8 +87,8 @@ What each scene puts on the screen (the big state word of the bar):
 The digit keys jump to a scene; P pauses; `[` and `]` slow down and speed up (the cheatsheet lists them).
 
 With `--live` there is no demo. `run.sh` starts a real Claude Code session and the bar shows that session (see
-"Live: a real Claude Code session" below). Until its first hook arrives the bar is on its empty state (UNKNOWN, "No
-events from this session yet"; it is not STARTING, which only a session started from the menu shows).
+"Live: a real Claude Code session" below). Until its first hook arrives the bar shows STARTING (the
+same as a session started from the menu: at most 30 s, then UNKNOWN, "No events from this session yet", if no hook came).
 
 **Nothing is sent to a Claude, ever, in demo mode.** No real session is behind the demo, so only some keys do
 anything you can see:
@@ -275,8 +275,9 @@ The temp directory `revview-emu.XXXXXX` in your `TMPDIR` (or `/tmp`) was not rem
 **`--live` says `tmux` or `claude` was not found.** Install it, or put its folder on the `PATH` of the shell you run
 `run.sh` from. Nothing was started; the exit code is 1.
 
-**`--live` says `Claude exited at once`.** `claude` started and ended within a moment, so no session could be made (exit
-1). The usual cause is that it is not signed in or needs a first-run answer. Its own message is gone with the tmux
+**`--live` says `Claude exited at once` or `Claude exited within 10 s of starting`.** `claude` started and ended within a
+moment (the first before the page was up, the second in the first 10 s after), so there is no session (exit 1, everything
+cleaned up). A Claude that you end yourself later is not an error: the run goes on as it did before. The usual cause is that it is not signed in or needs a first-run answer. Its own message is gone with the tmux
 window, so run `claude` once in a normal terminal, answer whatever it asks (sign in), leave it, and run `run.sh --live`
 again.
 

@@ -1629,3 +1629,26 @@ So nothing was checked and nothing in `pi/` changed.
   on Trixie (P01, P02); which package ships the `cryptsetup` command (P08).
 - **Stale text left as it was:** DECISIONS "stage 4A" lists the packages without `sox` (added later, see QA round 7)
   and the WB5 espeak-ng pinning names Debian 12, not Trixie. Both are history; PI-FACTS has the current list.
+
+## 2026-11-24: Live emulator gaps (cycle 36)
+
+Both gaps from QA round 9 closed. Tested with stand-in `claude` programs and a real tmux only; nothing here ran with a
+real Claude Code (bench L7-L15 stay `untested`).
+
+- **STARTING for the first session.** `src/server/index.js` started the `--start` sessions straight on the runner, so
+  nothing marked them. The CLI now remembers their ids and, once the server is up, calls `live.launched(id)`: the same
+  function the menu's New session uses (`RevviewLaunching`, `launchLimitMs` = 30 s, then `RevviewLaunchExpired`). No second
+  mechanism. This is only the non-`--boot` branch. The Pi's key-on path (`--boot`: `RevviewBootBegin`/`RevviewBootDone`,
+  `bootSessions`, its 60 s limit, `launched(id, true)` with the key-on mark and its notes) is not edited; the existing
+  `bootSessions` tests pass unchanged, and `tests/unit/server-cli-start-marks.test.js` runs the real CLI both ways (a real
+  tmux and a hookless stand-in): without `--boot` it shows STARTING, with `--boot` it still shows STARTING with the boot line.
+  The guide, BENCH L7, L14 and the r9-05 note above now say STARTING (the r9-05 text about UNKNOWN is history).
+- **Claude exits early.** After the server answers, `run.sh --live` checks (`tmux has-session`, every 0.2 s in the loops it
+  already has, with or without a browser) for the first 10 s (`claude_window`). If the Claude session is gone it prints
+  "run.sh: Claude exited within 10 s of starting, so there is no session. Run `claude` once ..." and exits 1 through the
+  normal clean-up (tmux server, browser, server, work dir, pid file and directory all gone). 10 s catches a not-signed-in
+  or first-run quit and a crash after start, yet is short enough that a session the user ends on purpose is not an error.
+  After the window nothing is checked: the run behaves as before (a Claude that ends later leaves the server and the bar
+  up; Ctrl+C or the window ends the run, exit 0). Exit status 1, as for "Claude exited at once" (r9-03).
+  Tests: stand-in that exits after 1.5 s, one killed after 1.5 s (both with and without a browser), and one that ends
+  after 12 s (no message, run still up, clean stop).
