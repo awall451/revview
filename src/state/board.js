@@ -30,7 +30,7 @@ export function initialBoard() {
     want: null, // a session revview started that is not on the board yet: selected when it first appears
     owned: null, // ids of sessions revview owns (its tmux windows); null = the server runs without sessions
     nav: null, // null (normal view) or {kind, row[, id]}: a list/menu the driver has open; a list also holds the highlighted session id
-    note: null, // a one-line message for the bottom note row (null = none); cleared by the driver's next gesture
+    note: null, // the bottom note row: null or { kind, text } (see NOTE_RULES); cleared by the driver's next gesture
     projects: [], // project paths from the config file (display only)
   };
 }
@@ -65,7 +65,7 @@ function isValidBoard(b) {
     && (b.endNoteFor === undefined || typeof b.endNoteFor === 'string')
     && (b.keyon === undefined || typeof b.keyon === 'string')
     && (b.booting === undefined || typeof b.booting === 'boolean')
-    && (b.note === undefined || b.note === null || typeof b.note === 'string')
+    && (b.note === undefined || b.note === null || (isObj(b.note) && Object.hasOwn(NOTE_RULES, b.note.kind) && typeof b.note.text === 'string'))
     && Array.isArray(b.projects) && b.projects.every((x) => typeof x === 'string')
     && (b.projectsMissing === undefined || (Array.isArray(b.projectsMissing) && b.projectsMissing.every((x) => typeof x === 'string')))
     && Object.keys(b.sessions).every((k) => isValidSession(b.sessions[k]));
@@ -182,6 +182,27 @@ function withContext(board, patch) {
   return context.repo === board.context.repo && context.branch === board.context.branch ? board : { ...board, context };
 }
 
+// The bar's note is { kind, text }. Every rule goes by kind, never by the text (the text is display only):
+//   kind          made by                                    rule besides "a button gesture clears it"
+//   plain         any other note (RevviewNote, BootDone,     none
+//                 "Highlighted session ended: list closed")
+//   too-early     actions.js: an answer refused too early    goes when the prompt the bar shows changes
+//   starting-ptt  actions.js: push-to-talk during STARTING   goes when the selected session no longer shows STARTING
+//   answer-prompt actions.js: push-to-talk refused, the      none
+//                 selected session has a pending prompt
+//   ended         a session's end (here); the key-on Claude  a push-to-talk tap with no session clears it
+//                 that exited at once (BootDone)             (RevviewNoSessionPress); RevviewEndReason replaces it
+//   ended-last    the last session ended: "<name> ended:     as ended; hidden while the data is locked
+//                 open the menu for New session"
+const NOTE_RULES = { plain: {}, 'too-early': {}, 'starting-ptt': {}, 'answer-prompt': {}, ended: { ended: true }, 'ended-last': { ended: true } };
+export const NOTE_KINDS = Object.freeze(Object.keys(NOTE_RULES));
+// the kinds a RevviewNote may carry (absent = plain); the ended kinds are made by the board and BootDone only
+const POSTED_NOTE_KINDS = ['plain', 'too-early', 'starting-ptt', 'answer-prompt'];
+const noteOf = (kind, text) => ({ kind, text });
+const isNoteText = (t) => typeof t === 'string' && t.length >= 1 && t.length <= 120;
+const isEndedNote = (n) => isObj(n) && NOTE_RULES[n.kind]?.ended === true;
+const noteKind = (n) => (isObj(n) ? n.kind : null);
+
 // the note actions.js sets when push-to-talk is refused during STARTING (one text, two files)
 export const STARTING_PTT_NOTE = 'Claude is still starting: push-to-talk not sent';
 // the key-on session whose window vanished while STARTING (the server uses the same text for a start that failed at once)
@@ -197,20 +218,18 @@ const endReasonText = (t) => {
   if (c === '') return null;
   return c.length > REASON_MAX ? `${c.slice(0, REASON_MAX - 1)}\u2026` : c;
 };
-const isEndedNote = (n) => typeof n === 'string' && (n === KEYON_ENDED_NOTE || n.startsWith(ENDED_PREFIX) || n.endsWith(' ended') || n.endsWith(` ended${ENDED_NEXT}`));
 
 export function reduceBoard(board, event) {
   const b = isValidBoard(board) ? board : initialBoard();
   if (!isObj(event) || typeof event.hook_event_name !== 'string') return b;
   let next = reduceInner(b, event);
   // a button gesture clears the board note; so does the answer that a "Too early: press again" note asked for
-  if ((event.hook_event_name === 'RevviewNav' || event.hook_event_name === 'RevviewAnswered') && typeof next.note === 'string') next = { ...next, note: null };
+  if ((event.hook_event_name === 'RevviewNav' || event.hook_event_name === 'RevviewAnswered') && next.note !== null) next = { ...next, note: null };
   // the "Too early" note belongs to the prompt it was set for: when what the bar shows changes, it goes
-  const TOO_EARLY = 'Too early: press again';
   // the push-to-talk refusal belongs to STARTING: when the selected session no longer shows STARTING (first hook,
   // launch limit) it goes, so UNKNOWN can say "No events from this session yet" (QA r6b-01); no other note is touched
-  if (b.note === STARTING_PTT_NOTE && next.note === STARTING_PTT_NOTE && !sessionStarting(next, selectedKey(next))) next = { ...next, note: null };
-  if (b.note === TOO_EARLY && next.note === TOO_EARLY) {
+  if (noteKind(b.note) === 'starting-ptt' && noteKind(next.note) === 'starting-ptt' && !sessionStarting(next, selectedKey(next))) next = { ...next, note: null };
+  if (noteKind(b.note) === 'too-early' && noteKind(next.note) === 'too-early') {
     const id = (x) => { const p = shownPrompt(x); return p === null ? null : `${p.session}\u0000${p.agent}\u0000${p.since}`; };
     if (id(b) !== id(next)) next = { ...next, note: null };
   }
@@ -228,7 +247,9 @@ export function reduceBoard(board, event) {
     // the key-on session that vanished while still STARTING: "ended at once" (its reason is in the server log)
     const atOnce = b.keyon === wasSel && (b.launching ?? []).includes(wasSel) && b.sessions[wasSel].quiet === true;
     const reason = b.endReasons?.[wasSel];
-    next = { ...next, endNoteFor: wasSel, note: typeof reason === 'string' ? `${ENDED_PREFIX}${reason}` : atOnce ? KEYON_ENDED_NOTE : `${name} ended${last ? ENDED_NEXT : ''}` };
+    const note = typeof reason === 'string' ? noteOf('ended', `${ENDED_PREFIX}${reason}`) : atOnce ? noteOf('ended', KEYON_ENDED_NOTE)
+      : last ? noteOf('ended-last', `${name} ended${ENDED_NEXT}`) : noteOf('ended', `${name} ended`);
+    next = { ...next, endNoteFor: wasSel, note };
   }
   const tid = targetOf(event, b.sessions);
   const spoke = isDriverPrompt(event) && has(next.sessions, tid) ? tid : null;
@@ -246,7 +267,7 @@ export function reduceBoard(board, event) {
   // an open list highlights a session, not a row: the highlight follows it, and a list whose session ended closes
   if (cur.nav !== null && cur.nav.kind === 'list' && typeof cur.nav.id === 'string') {
     const at = orderOf(cur).indexOf(cur.nav.id);
-    if (at < 0) cur = { ...cur, nav: null, note: 'Highlighted session ended: list closed' };
+    if (at < 0) cur = { ...cur, nav: null, note: noteOf('plain', 'Highlighted session ended: list closed') };
     else if (at !== cur.nav.row) cur = { ...cur, nav: { ...cur.nav, row: at } };
   }
   const focus = cur.selected !== null ? cur.selected : pickFocus(cur, spoke, asked(b) && !asked(cur));
@@ -425,9 +446,10 @@ function reduceInner(b, event) {
       // the key-on boot is over (a session came, or none will: nothing to start, or the start failed): the bar
       // leaves STARTING for the initial phase so its buttons work. Outside the boot STARTING it changes nothing.
       if (b.booting !== true) return b;
-      const note = event.note;
-      const ok = typeof note === 'string' && note.length >= 1 && note.length <= 120;
-      return { ...b, booting: false, phase: b.phase === 'starting' ? 'unknown' : b.phase, note: ok ? note : b.note };
+      // the note's kind: plain (absent), or ended (the key-on Claude exited at once); another kind drops the note
+      const kind = event.kind === undefined ? 'plain' : event.kind;
+      const ok = isNoteText(event.note) && (kind === 'plain' || kind === 'ended');
+      return { ...b, booting: false, phase: b.phase === 'starting' ? 'unknown' : b.phase, note: ok ? noteOf(kind, event.note) : b.note };
     }
     case 'RevviewLaunching': {
       // revview just started this session's window: until its first hook it shows STARTING (see boardView)
@@ -517,11 +539,12 @@ function reduceInner(b, event) {
       const kept = Object.entries(b.endReasons ?? {}).filter(([k]) => k !== id).slice(-7);
       const endReasons = Object.fromEntries([...kept, [id, text]]);
       const base = { ...b, endReasons };
-      return !has(b.sessions, id) && b.endNoteFor === id && isEndedNote(b.note) ? { ...base, note: `${ENDED_PREFIX}${text}` } : base;
+      return !has(b.sessions, id) && b.endNoteFor === id && isEndedNote(b.note) ? { ...base, note: noteOf('ended', `${ENDED_PREFIX}${text}`) } : base;
     }
     case 'RevviewNote': {
-      const note = event.note;
-      return typeof note === 'string' && note.length >= 1 && note.length <= 120 && note !== b.note ? { ...b, note } : b;
+      const kind = event.kind === undefined ? 'plain' : event.kind;
+      if (!isNoteText(event.note) || !POSTED_NOTE_KINDS.includes(kind)) return b;
+      return isObj(b.note) && b.note.kind === kind && b.note.text === event.note ? b : { ...b, note: noteOf(kind, event.note) };
     }
     case 'RevviewNav':
       return reduceNav(b, event); // a button gesture clears the note (see reduceBoard)
@@ -816,7 +839,7 @@ function extrasOf(b, shownKey) {
     position: b.owned === null || i < 0 ? null : { index: i + 1, count: order.length },
     elsewhere: order.filter((k) => k !== shownKey && b.sessions[k].pending.length > 0).length,
     nav: navView(b),
-    note: typeof b.note === 'string' ? (b.locked && b.note.endsWith(ENDED_NEXT) ? null : b.note) : voice !== 'none' && shownKey !== null && b.sessions[shownKey].quiet === true && !startingOf(b, b.sessions[shownKey], shownKey) ? 'No events from this session yet' : null,
+    note: isObj(b.note) ? (b.locked && b.note.kind === 'ended-last' ? null : b.note.text) : voice !== 'none' && shownKey !== null && b.sessions[shownKey].quiet === true && !startingOf(b, b.sessions[shownKey], shownKey) ? 'No events from this session yet' : null,
     answered: answeredOf(shownKey === null ? null : b.sessions[shownKey]),
   };
 }

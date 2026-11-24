@@ -96,9 +96,9 @@ test('board: the reason of a session that ended is on the bar, cut and cleaned; 
 
 test('board: a reason that arrives after the end note replaces it; an empty screen says so; the memory is bounded', () => {
   let b = fold(initialBoard(), ev('RevviewOwned', { ids: [A], names: ['alpha'] }), ev('RevviewSelect', { session_id: A }), ev('RevviewOwned', { ids: [] }));
-  assert.equal(b.note, 'alpha ended: open the menu for New session');
+  assert.equal(b.note?.text, 'alpha ended: open the menu for New session');
   b = reduceBoard(b, ev('RevviewEndReason', { session_id: A, text: '   ' }));
-  assert.equal(b.note, 'Session ended: no output');
+  assert.equal(b.note?.text, 'Session ended: no output');
   for (let i = 0; i < 20; i++) b = reduceBoard(b, ev('RevviewEndReason', { session_id: `s${i}`, text: 't' }));
   assert.ok(Object.keys(b.endReasons).length <= 8);
   assert.equal(reduceBoard(b, ev('RevviewEndReason', { session_id: 5, text: 'x' })), b);
@@ -106,9 +106,9 @@ test('board: a reason that arrives after the end note replaces it; an empty scre
 
 test('board: a press with no session clears the reason note like the other ended notes', () => {
   let b = fold(initialBoard(), ev('RevviewOwned', { ids: [A] }), ev('RevviewSelect', { session_id: A }), ev('RevviewEndReason', { session_id: A, text: 'boom' }), ev('RevviewOwned', { ids: [] }));
-  assert.equal(b.note, 'Session ended: boom');
+  assert.equal(b.note?.text, 'Session ended: boom');
   b = reduceBoard(b, ev('RevviewNoSessionPress'));
-  assert.notEqual(b.note, 'Session ended: boom');
+  assert.notEqual(b.note?.text, 'Session ended: boom');
 });
 
 // ---- server: log and bar ----
@@ -228,11 +228,11 @@ test('reap: a dead window without @revview_id (opened by hand) is killed after t
 test('board: the reason of one session does not replace the end note of another', () => {
   const C = '33333333-3333-4333-8333-333333333333';
   let b = fold(initialBoard(), ev('RevviewOwned', { ids: [A, C], names: ['alpha', 'gamma'] }), ev('RevviewSelect', { session_id: A }), ev('RevviewOwned', { ids: [C], names: ['gamma'] }));
-  assert.equal(b.note, 'alpha ended');
+  assert.equal(b.note?.text, 'alpha ended');
   b = reduceBoard(b, ev('RevviewEndReason', { session_id: C, text: 'gamma died' }));
-  assert.equal(b.note, 'alpha ended', 'C is still on the board; its reason waits');
+  assert.equal(b.note?.text, 'alpha ended', 'C is still on the board; its reason waits');
   b = reduceBoard(b, ev('RevviewEndReason', { session_id: A, text: 'alpha died' }));
-  assert.equal(b.note, 'Session ended: alpha died');
+  assert.equal(b.note?.text, 'Session ended: alpha died');
 });
 
 test('server: a reaped session is logged once (no extra "disappeared" line)', async (t) => {

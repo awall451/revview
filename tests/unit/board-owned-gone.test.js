@@ -72,18 +72,18 @@ test('r5-04: the selected session ends, others remain: note "<repo> ended"', () 
   const b = run([owned(A, B), start(A, 'alpha'), start(B, 'beta'), ev('RevviewSelect', { session_id: A })]);
   assert.equal(b.selected, A);
   const e = reduceBoard(b, ev('SessionEnd', { session_id: A }));
-  assert.equal(e.note, 'alpha ended');
+  assert.equal(e.note?.text, 'alpha ended');
   assert.equal(boardView(e).note, 'alpha ended');
   assert.equal(e.selected, B);
   assert.equal(reduceBoard(b, owned(B)).note, null, 'one listing: not ended yet');
-  assert.equal(run([owned(B), owned(B)], b).note, 'alpha ended');
+  assert.equal(run([owned(B), owned(B)], b).note?.text, 'alpha ended');
   assert.equal(reduceBoard(e, ev('RevviewNav', { op: 'next' })).note, null);
 });
 
 test('r5-04: long labels are cut, a non-selected end sets no note, the last end sets none (no sessions run: no menu, r7b-02)', () => {
   const b = run([owned(A, B), start(A, 'x'.repeat(150)), start(B, 'beta'), ev('RevviewSelect', { session_id: A })]);
   const e = reduceBoard(b, ev('SessionEnd', { session_id: A }));
-  assert.ok(e.note.length <= 120 && e.note.endsWith(' ended'));
+  assert.ok(e.note?.text.length <= 120 && e.note?.text.endsWith(' ended'));
   assert.equal(reduceBoard(b, ev('SessionEnd', { session_id: B })).note, null);
   const one = run([start(A, 'alpha'), ev('RevviewSelect', { session_id: A }), ev('SessionEnd', { session_id: A })]);
   assert.equal(one.note, null);

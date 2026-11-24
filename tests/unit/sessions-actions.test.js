@@ -150,7 +150,7 @@ test('r4-07: a press or deny refused as too early sets the fixed note "Too early
     const s = setup({ answerResult: { ok: false, reason: 'too-early' } });
     const r = await s.a.handle(dev(button, 'tap'));
     assert.deepEqual([r.done, r.reason], [false, 'too-early']);
-    assert.deepEqual(s.applied, [{ hook_event_name: 'RevviewNote', note: 'Too early: press again' }]);
+    assert.deepEqual(s.applied, [{ hook_event_name: 'RevviewNote', note: 'Too early: press again', kind: 'too-early' }]);
   }
   for (const reason of ['not-shown-long-enough', 'no-prompt', 'session', 'unbound', 'no-request', 'ambiguous', 'kind']) {
     const s = setup({ answerResult: { ok: false, reason } });
@@ -223,7 +223,7 @@ test('push-to-talk while the session is launching is dropped with a note; after 
   const tap = () => a.handle(dev('push-to-talk', 'tap'));
   assert.deepEqual(await tap(), { action: 'push-to-talk', done: false, reason: 'session starting' });
   assert.deepEqual(sent, []);
-  assert.deepEqual(applied, [{ hook_event_name: 'RevviewNote', note: 'Claude is still starting: push-to-talk not sent' }]);
+  assert.deepEqual(applied, [{ hook_event_name: 'RevviewNote', note: 'Claude is still starting: push-to-talk not sent', kind: 'starting-ptt' }]);
   const launching = board;
   board = reduceBoard(launching, { hook_event_name: 'RevviewLaunchExpired', session_id: SID });
   assert.equal((await tap()).done, true);

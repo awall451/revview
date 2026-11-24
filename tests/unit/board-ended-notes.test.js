@@ -11,7 +11,7 @@ const fold = (b, ...events) => events.reduce((x, e) => reduceBoard(x, e), b);
 const PTT = 'Claude is still starting: push-to-talk not sent';
 
 test('r6b-01: LaunchExpired clears the push-to-talk refusal note: UNKNOWN says "No events from this session yet"', () => {
-  let b = fold(initialBoard(), ev('RevviewOwned', { ids: [A] }), ev('RevviewSelect', { session_id: A }), ev('RevviewLaunching', { session_id: A }), ev('RevviewNote', { note: PTT }));
+  let b = fold(initialBoard(), ev('RevviewOwned', { ids: [A] }), ev('RevviewSelect', { session_id: A }), ev('RevviewLaunching', { session_id: A }), ev('RevviewNote', { note: PTT, kind: 'starting-ptt' }));
   assert.equal(boardView(b).note, PTT);
   b = reduceBoard(b, ev('RevviewLaunchExpired', { session_id: A }));
   assert.equal(boardView(b).view, 'unknown');
@@ -19,10 +19,10 @@ test('r6b-01: LaunchExpired clears the push-to-talk refusal note: UNKNOWN says "
 });
 
 test('r6b-01: the first hook clears it too; another note is not touched by LaunchExpired', () => {
-  let b = fold(initialBoard(), ev('RevviewOwned', { ids: [A] }), ev('RevviewSelect', { session_id: A }), ev('RevviewLaunching', { session_id: A }), ev('RevviewNote', { note: PTT }));
+  let b = fold(initialBoard(), ev('RevviewOwned', { ids: [A] }), ev('RevviewSelect', { session_id: A }), ev('RevviewLaunching', { session_id: A }), ev('RevviewNote', { note: PTT, kind: 'starting-ptt' }));
   assert.equal(reduceBoard(b, ev('UserPromptSubmit', { session_id: A, cwd: '/w/a' })).note, null);
-  b = fold(b, ev('RevviewNote', { note: 'Too early: press again' }), ev('RevviewLaunchExpired', { session_id: A }));
-  assert.equal(b.note, 'Too early: press again');
+  b = fold(b, ev('RevviewNote', { note: 'Too early: press again', kind: 'too-early' }), ev('RevviewLaunchExpired', { session_id: A }));
+  assert.equal(b.note?.text, 'Too early: press again');
 });
 
 test('r6b-02: the only (quiet, selected) session vanishing from the owned list says "<repo> ended"', () => {
@@ -70,4 +70,26 @@ test('r6b-07: with no session the board is UNKNOWN with voice no-session (the vi
   const b = fold(initialBoard(), ev('RevviewOwned', { ids: [] }), ev('RevviewNote', { note: 'x' }));
   assert.equal(boardView(b).voice, 'no-session');
   assert.equal(boardView(b).view, 'unknown');
+});
+
+test('a plain note whose text ends in " ended" is not an ended note: a press with no session and a reason leave it', () => {
+  // A really ended (its end note is A's), then a plain note with the same look replaced that note
+  let b = fold(initialBoard(), ev('RevviewOwned', { ids: [A], names: ['alpha'] }), ev('RevviewSelect', { session_id: A }), ev('RevviewOwned', { ids: [], names: [] }));
+  assert.equal(b.endNoteFor, A);
+  b = reduceBoard(b, ev('RevviewNote', { note: 'alpha ended' }));
+  assert.equal(boardView(b).note, 'alpha ended');
+  b = reduceBoard(b, ev('RevviewEndReason', { session_id: A, text: 'boom' }));
+  assert.equal(boardView(b).note, 'alpha ended');
+  b = reduceBoard(b, ev('RevviewNoSessionPress'));
+  assert.equal(boardView(b).note, 'alpha ended');
+  // the real end note in the same place is replaced and cleared (the rules do work on the ended kind)
+  const real = fold(initialBoard(), ev('RevviewOwned', { ids: [A], names: ['alpha'] }), ev('RevviewSelect', { session_id: A }), ev('RevviewOwned', { ids: [], names: [] }));
+  assert.equal(boardView(reduceBoard(real, ev('RevviewEndReason', { session_id: A, text: 'boom' }))).note, 'Session ended: boom');
+  assert.equal(boardView(reduceBoard(real, ev('RevviewNoSessionPress'))).note, null);
+});
+
+test('a plain note ending in ": open the menu for New session" is still shown while the data is locked', () => {
+  let b = fold(initialBoard(), ev('RevviewNote', { note: 'alpha ended: open the menu for New session' }));
+  b = reduceBoard(b, ev('RevviewDataLock', { locked: true }));
+  assert.equal(boardView(b).note, 'alpha ended: open the menu for New session');
 });

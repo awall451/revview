@@ -34,7 +34,7 @@ test('r4-07: the "Too early" note shows on NEEDS PERMISSION, and the answer that
   const S = { session_id: 'A', cwd: '/w/a' };
   const cmd = { tool_name: 'Bash', tool_input: { command: 'ls' } };
   let b = [ev('UserPromptSubmit', S), ev('PermissionRequest', { ...S, ...cmd }), ev('RevviewSelect', { session_id: 'A' })].reduce((x, e) => reduceBoard(x, e), initialBoard());
-  b = reduceBoard(b, ev('RevviewNote', { note: 'Too early: press again' }));
+  b = reduceBoard(b, ev('RevviewNote', { note: 'Too early: press again', kind: 'too-early' }));
   assert.equal(boardView(b).note, 'Too early: press again');
   assert.equal(boardView(b).view, 'permission');
   const p = b.sessions.A.pending[0];
@@ -68,7 +68,7 @@ test('cycle 14: the "Too early" note goes when the shown prompt changes, stays w
   const S = { session_id: 'A', cwd: '/w/a' };
   const bash = (command) => ev('PermissionRequest', { ...S, tool_name: 'Bash', tool_input: { command } });
   let b = [ev('UserPromptSubmit', S), bash('ls'), ev('RevviewSelect', { session_id: 'A' })].reduce((x, e) => reduceBoard(x, e), initialBoard());
-  b = reduceBoard(b, ev('RevviewNote', { note: 'Too early: press again' }));
+  b = reduceBoard(b, ev('RevviewNote', { note: 'Too early: press again', kind: 'too-early' }));
   assert.equal(boardView(reduceBoard(b, ev('RevviewNetwork', { online: true }))).note, 'Too early: press again');
   const c = reduceBoard(b, bash('rm -rf x')); // a second prompt queues behind; the shown one is the same
   assert.equal(boardView(c).note, 'Too early: press again');

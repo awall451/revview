@@ -639,7 +639,7 @@ export async function startLiveServer({
     // internal: the boot path picks the session the buttons act on (no HTTP route reaches it)
     select: (id) => apply({ hook_event_name: 'RevviewSelect', session_id: id }, true),
     // internal: the key-on boot is over (ends the boot STARTING; a no-op afterwards)
-    bootDone: (note) => apply({ hook_event_name: 'RevviewBootDone', ...(note ? { note } : {}) }, true),
+    bootDone: (note, kind) => apply({ hook_event_name: 'RevviewBootDone', ...(note ? { note } : {}), ...(note && kind ? { kind } : {}) }, true),
     // internal: revview just started this session (marks it STARTING for launchLimitMs; no HTTP route)
     launched,
     refreshOwned,
@@ -759,6 +759,7 @@ export async function bootSessions({ runner, live, dirs = [], log = () => {}, ti
   timer?.unref?.();
   let id = null;
   let note;
+  let noteKind; // absent = plain (see NOTE_RULES in src/state/board.js)
   try {
     const existing = await runner.list();
     if (existing.length > 0) {
@@ -793,9 +794,11 @@ export async function bootSessions({ runner, live, dirs = [], log = () => {}, ti
       ? 'Key-on session not started: start folder missing'
       : gone ? KEYON_ENDED_NOTE
         : 'Key-on session not started: see the server log';
+    // the Claude that exited at once leaves an ended note (a push-to-talk tap with no session clears it)
+    if (gone && !msg.startsWith('cwd is not an existing directory')) noteKind = 'ended';
   }
   timers.clearTimeout(timer);
-  live.bootDone?.(note);
+  live.bootDone?.(note, noteKind);
   return id;
 }
 

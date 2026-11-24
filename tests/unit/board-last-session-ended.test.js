@@ -39,7 +39,7 @@ test('r7-01: RevviewNoSessionPress clears an ended note, not other notes', () =>
   assert.ok(boardView(b).note);
   assert.equal(boardView(reduceBoard(b, ev('RevviewNoSessionPress'))).note, null);
   const o = fold(initialBoard(), ev('RevviewNote', { note: 'Read aloud: no speech engine installed' }));
-  assert.equal(reduceBoard(o, ev('RevviewNoSessionPress')).note, 'Read aloud: no speech engine installed');
+  assert.equal(reduceBoard(o, ev('RevviewNoSessionPress')).note?.text, 'Read aloud: no speech engine installed');
 });
 
 test('r7-01 (server): key-on window gone at the first poll gives the key-on note; a push-to-talk tap then shows the no-session line', async (t) => {
@@ -86,7 +86,7 @@ test('r7-01 (server): a non-key-on session whose window goes: "<repo> ended: ope
 test('r7-01: RevviewNoSessionPress also clears "<repo> ended" (others left, nothing selected)', () => {
   const b = fold(initialBoard(), ev('RevviewOwned', { ids: [A, B], names: ['alpha', 'beta'] }), ev('RevviewSelect', { session_id: A }),
     ev('RevviewOwned', { ids: [B], names: ['beta'] }));
-  assert.equal(b.note, 'alpha ended');
+  assert.equal(b.note?.text, 'alpha ended');
   assert.equal(reduceBoard(b, ev('RevviewNoSessionPress')).note, null);
 });
 

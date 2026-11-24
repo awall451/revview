@@ -320,7 +320,7 @@ test('8b. a refused start leaves the selection alone and logs', async () => {
   assert.equal(t.sel(), A);
   assert.equal(t.r.board.want, null);
   assert.equal(t.nav(), null);
-  assert.equal(t.r.board.note, 'New session not started: project folder missing');
+  assert.equal(t.r.board.note?.text, 'New session not started: project folder missing');
   assert.ok(t.logs.some((l) => /new-session: not done/.test(l)));
 });
 
@@ -411,7 +411,7 @@ test('8d. a failed start for another reason notes a fixed text, never the error 
   await t.tap('menu');
   await t.tap('press');
   await t.tap('press');
-  assert.equal(t.r.board.note, 'New session not started: see the server log');
+  assert.equal(t.r.board.note?.text, 'New session not started: see the server log');
 });
 
 test('8e. no such project notes it on the bar', async () => {
@@ -419,5 +419,5 @@ test('8e. no such project notes it on the bar', async () => {
   await t.tap('menu');
   await t.tap('press');
   await t.tap('press');
-  assert.equal(t.r.board.note, 'New session not started: no such project');
+  assert.equal(t.r.board.note?.text, 'New session not started: no such project');
 });

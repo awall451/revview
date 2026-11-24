@@ -50,7 +50,8 @@ export function createActions({
     try { await onOwnedChanged?.(); } catch (e) { log(`owned refresh failed: ${String(e?.message ?? e)}`); }
   };
   // a fixed text only: an error message never reaches the screen
-  const note = (text) => apply({ hook_event_name: 'RevviewNote', note: text });
+  // (kind: see NOTE_RULES in src/state/board.js; absent = plain, a note no rule but the next gesture clears)
+  const note = (text, kind) => apply({ hook_event_name: 'RevviewNote', note: text, ...(kind ? { kind } : {}) });
 
   // Send one key to the selected session; `after(sent)` runs only when it was sent.
   async function send(action, key, after) {
@@ -84,7 +85,7 @@ export function createActions({
       apply({ hook_event_name: 'RevviewAnswered', session_id: shown.session, agent: shown.agent, since: shown.since, decision: kind });
     }
     // only the too-early refusal says so on the bar (QA r4-07); every other refusal stays silent
-    if (res?.ok !== true && res?.reason === 'too-early') note('Too early: press again');
+    if (res?.ok !== true && res?.reason === 'too-early') note('Too early: press again', 'too-early');
     return out(kind, res?.ok === true, res?.ok === true ? undefined : res?.reason ?? 'refused');
   }
 
@@ -154,14 +155,14 @@ export function createActions({
     if (button === 'push-to-talk' && gesture === 'tap') {
       // Claude is still loading (the boot STARTING, or a session revview just started with no hook yet): drop it
       if (!b.locked && sessionStarting(b, selectedKey(b))) {
-        note(STARTING_PTT_NOTE);
+        note(STARTING_PTT_NOTE, 'starting-ptt');
         return out('push-to-talk', false, 'session starting');
       }
       // a permission prompt is waiting on the selected session (any agent): Space would land in the terminal dialog
       // as a keypress, not as push-to-talk. The dialog stays answerable by keys while the hook waits (fixtures/buttons).
       // (without a runner nothing could be sent anyway: that stays "no sessions")
       if (runner && b.sessions[selectedKey(b)]?.pending?.length > 0) {
-        note(PROMPT_PTT_NOTE);
+        note(PROMPT_PTT_NOTE, 'answer-prompt');
         return out('push-to-talk', false, 'permission prompt shown');
       }
       // no session selected: the tap goes nowhere, and an "... ended" note must not hide the line that says so

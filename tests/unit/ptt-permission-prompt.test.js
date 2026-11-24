@@ -35,7 +35,7 @@ test('a pending prompt in the selected session: no key, note, refusal', async ()
   const s = setup(perm(SID));
   assert.deepEqual(await s.tap(), refused);
   assert.deepEqual(s.sent, []);
-  assert.equal(s.get().note, 'Answer the prompt first');
+  assert.equal(s.get().note?.text, 'Answer the prompt first');
 });
 
 test('a subagent prompt in the selected session refuses too', async () => {
@@ -69,7 +69,7 @@ test('after the prompt is answered a tap sends Space again', async () => {
 test('the note is cleared by the next gesture', async () => {
   const s = setup(perm(SID));
   await s.tap();
-  assert.equal(s.get().note, 'Answer the prompt first');
+  assert.equal(s.get().note?.text, 'Answer the prompt first');
   s.push({ hook_event_name: 'RevviewNav', button: 'up', gesture: 'tap' });
   assert.equal(s.get().note, null);
 });
