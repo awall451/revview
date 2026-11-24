@@ -29,7 +29,8 @@ max_runs="${REVVIEW_KIOSK_RUNS:-}"
 log() { echo "revview-kiosk: $*" >&2; }
 nap() { if [ -n "$max_runs" ]; then sleep 0; else sleep "$1"; fi; }
 
-# Flag behaviour is from memory and untested on the Pi (Chromium version on Trixie not checked).
+# Switch names checked against chromium 1:156.0.8078.108-1~deb13u1+rpt1 (Raspberry Pi archive) binary strings;
+# behaviour untested on the Pi.
 flags=(
   --kiosk
   --ozone-platform=wayland
@@ -37,7 +38,6 @@ flags=(
   --disable-infobars
   --no-first-run
   --no-default-browser-check
-  --disable-session-crashed-bubble
   --hide-crash-restore-bubble
   --password-store=basic
   --disable-features=Translate

@@ -83,7 +83,9 @@ test('editLightdm: section missing, key missing, other section untouched', () =>
 test('renderAutostart: sh, rotation first, kiosk backgrounded', () => {
   const a = renderAutostart({ dir: '/opt/revview', output: 'HDMI-A-1', transform: 90 });
   assert.ok(a.startsWith('#!/bin/sh\n# labwc autostart, written by pi/install.sh'));
-  assert.match(a, /REPLACES the system \/etc\/xdg\/labwc\/autostart/);
+  assert.doesNotMatch(a, /REPLACES/); // the old comment was a wrong fact: labwc -m merges, the system autostart runs first
+  assert.match(a, /runs the system \/etc\/xdg\/labwc\/autostart\n# first .*then this file/);
+  assert.match(a, /`labwc -m`/);
   assert.match(a, /^wlr-randr --output HDMI-A-1 --transform 90$/m);
   assert.match(a, /^\/opt\/revview\/pi\/kiosk\.sh &$/m);
   assert.ok(a.indexOf('wlr-randr') < a.indexOf('kiosk.sh &'));
@@ -249,7 +251,7 @@ test('CLI: missing files are skipped with a reason; a two-line cmdline is left a
   assert.equal(res.code, 4, res.err); // boot files skipped: the run ends non-zero (qa r6-03)
   assert.ok(res.lines.some((l) => l.startsWith('skipped ') && l.endsWith('config.txt: missing')));
   assert.ok(res.lines.some((l) => l.includes('cmdline.txt: ') && l.startsWith('skipped')));
-  assert.ok(res.lines.some((l) => l.endsWith('no lightdm.conf; set Desktop Autologin with raspi-config')));
+  assert.ok(res.lines.some((l) => l.endsWith('no lightdm.conf; set Desktop Autologin with raspi-config (System Options, S5 Boot: B4 Desktop Autologin)')));
   assert.equal(fs.readFileSync(path.join(r, 'boot/firmware/cmdline.txt'), 'utf8'), 'a\nb\n');
 }));
 

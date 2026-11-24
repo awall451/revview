@@ -43,10 +43,11 @@ test('kiosk: launches the browser twice with the boot url and the flags', withDi
   const line = r.launches[0];
   assert.ok(line.endsWith(`file://${ROOT.replace(/\/$/, '')}/src/view/boot.html?port=8138`), line);
   for (const f of ['--kiosk', '--ozone-platform=wayland', '--noerrdialogs', '--disable-infobars', '--no-first-run',
-    '--no-default-browser-check', '--disable-session-crashed-bubble', '--hide-crash-restore-bubble', '--password-store=basic',
+    '--no-default-browser-check', '--hide-crash-restore-bubble', '--password-store=basic',
     '--disable-features=Translate', '--check-for-update-interval=31536000', '--disable-pinch', '--overscroll-history-navigation=0']) {
     assert.ok(line.split(' ').includes(f), `${f} in ${line}`);
   }
+  assert.ok(!line.includes('--disable-session-crashed-bubble'), line); // not in Chromium 156 (removed upstream)
   assert.ok(line.includes(`--user-data-dir=${d.run}/revview-kiosk`), line);
   assert.match(r.err, /revview-kiosk: /);
 }));

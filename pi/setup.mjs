@@ -103,7 +103,8 @@ export function renderAutostart({ dir, output, transform }) {
   checkPath('dir', dir);
   return `#!/bin/sh
 # labwc autostart, ${AUTOSTART_MARK}. Run by labwc with sh at session start.
-# This file REPLACES the system /etc/xdg/labwc/autostart: no desktop, no panel, no icons, just the kiosk.
+# The Pi session (rpd-labwc: labwc-pi runs \`labwc -m\`, merge config) runs the system /etc/xdg/labwc/autostart
+# first (desktop, panel, kanshi), then this file. The kiosk is a full-screen window above them (untested, bench P6).
 # Rotation is one of three things that must agree (docs/DESIGN.md): the console one is on the kernel command
 # line, the touch one is /etc/udev/rules.d/71-revview-touch.rules. Not backgrounded: the kiosk starts on the
 # rotated output.
@@ -292,7 +293,7 @@ function main(argv) {
   const lightdm = R('/etc/lightdm/lightdm.conf');
   if (fs.existsSync(lightdm) || isLink(lightdm)) edit('/etc/lightdm/lightdm.conf', (t) => editLightdm(t, o.user));
   // a missing lightdm.conf stays a plain note (no exit code change): the desktop autologin is another way to get it
-  else say(`skipped ${lightdm}: no lightdm.conf; set Desktop Autologin with raspi-config`);
+  else say(`skipped ${lightdm}: no lightdm.conf; set Desktop Autologin with raspi-config (System Options, S5 Boot: B4 Desktop Autologin)`);
 
   // The owner's key map and dongle ids: created once from the repo's default; on an update a three-way merge of
   // the shipped version recorded at the last run (BASE_PATH), the new shipped file and the owner's file.
