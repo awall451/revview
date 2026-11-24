@@ -1,0 +1,71 @@
+import { boardView, pendingPrompts, shownPrompt } from '../state/index.js';
+import { text } from './http.js';
+
+export const PING_MS = 15000;
+export const MAX_SSE_CLIENTS = 8;
+export const MAX_CLIENT_BACKLOG_BYTES = 256 * 1024; // unread bytes after which a stalled SSE client is dropped
+
+export const message = (ctx) => `data: ${JSON.stringify({ seq: ctx.seq, state: boardView(ctx.board) })}\n\n`;
+export const broadcast = (ctx) => {
+  const m = message(ctx);
+  for (const c of ctx.clients) {
+    // a client that never reads would make the write buffer grow without bound: drop it
+    if (c.writableLength > MAX_CLIENT_BACKLOG_BYTES) {
+      ctx.clients.delete(c);
+      c.destroy();
+      continue;
+    }
+    c.write(m);
+  }
+};
+
+// An event the core can take: seq += 1, new board, broadcast. A throwing core leaves everything alone.
+// A POSTed event always counts (even if nothing changed); an internal one (onlyIfChanged) only when it did.
+export function apply(ctx, event, onlyIfChanged = false) {
+  let next;
+  try {
+    next = ctx.reduceEvent(ctx.board, event);
+  } catch (e) {
+    console.error('reduce failed:', e);
+    return false;
+  }
+  if (onlyIfChanged && next === ctx.board) return true;
+  ctx.seq += 1;
+  ctx.board = next;
+  // permission requests: drop those whose prompt is gone, then note what the bar shows now
+  ctx.registry.sweep(pendingPrompts(ctx.board));
+  ctx.registry.observe(shownPrompt(ctx.board));
+  broadcast(ctx);
+  return true;
+}
+
+export function events(ctx, req, res) {
+  if (ctx.clients.size >= MAX_SSE_CLIENTS) return text(res, 503, 'too many event streams', { 'retry-after': '5' });
+  res.writeHead(200, {
+    'content-type': 'text/event-stream',
+    'cache-control': 'no-store',
+    connection: 'keep-alive',
+  });
+  res.write('retry: 1000\n\n');
+  res.write(message(ctx));
+  ctx.clients.add(res);
+  const drop = () => ctx.clients.delete(res);
+  res.on('close', drop);
+  res.on('error', drop);
+}
+
+export const stateHandler = (ctx, req, res) =>
+  res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify({ seq: ctx.seq, state: boardView(ctx.board) }));
+
+export function startPing(ctx) {
+  const timer = setInterval(() => {
+    for (const c of ctx.clients) {
+      if (c.writableLength > MAX_CLIENT_BACKLOG_BYTES) {
+        ctx.clients.delete(c);
+        c.destroy();
+      } else c.write(': ping\n\n');
+    }
+  }, PING_MS);
+  timer.unref();
+  return timer;
+}

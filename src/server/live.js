@@ -2,81 +2,27 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { initialBoard, reduceBoard, boardView, pendingPrompts, shownPrompt, selectedKey, KEYON_ENDED_NOTE } from '../state/index.js';
-import { createDataLockMonitor, DEFAULT_DATA_MOUNT } from './datalock.js';
-import { createNetMonitor, createDefaultProbe } from './netmon.js';
-import { createThermalMonitor, createDefaultReaders, thermalEnv, DEFAULT_TEMP_PATH, DEFAULT_VCGENCMD } from './thermal.js';
-import { createSessionRunner, createActions, createPermissionRegistry, loadProjects } from '../sessions/index.js';
-import { startInput, createInputPipeline } from '../input/index.js';
-import { loadConfig, ConfigError, DEFAULT_CONFIG_PATH } from '../input/keymap.js';
-import { BROWSER_CODES, MODIFIER_KIND } from '../input/keys.js';
-import {
-  createSpeaker, createClosingMemo, createReadAloud, loadSpeechConfig, pickEngine, describeChoice, SpeechConfigError,
-  DEFAULT_SPEECH_CONFIG_PATH,
-} from '../speech/index.js';
+import { initialBoard, reduceBoard, boardView, selectedKey } from '../state/index.js';
+import { createDataLockMonitor } from './datalock.js';
+import { createNetMonitor } from './netmon.js';
+import { createThermalMonitor } from './thermal.js';
+import { createActions, createPermissionRegistry } from '../sessions/index.js';
+import { createSpeaker, createClosingMemo, createReadAloud } from '../speech/index.js';
+import { text, serveStatic, originOk } from './http.js';
+import { apply as applyEvent, events, stateHandler, startPing } from './feed.js';
+import { postEvent } from './routes-event.js';
+import { postPermission } from './routes-permission.js';
+import { devKey, demoStream, bridgeCodes } from './routes-dev.js';
+import { acceptGesture, setupInput, buttonsHandler } from './gestures.js';
 
 
 export const DEFAULT_PORT = 8138;
 export const DEFAULT_HOST = '127.0.0.1'; // the only address it binds; there is no option for another
-export const MAX_BODY_BYTES = 1024 * 1024;
-const PREFIX_BYTES = 64 * 1024; // of an oversize body, kept to tell whether it was a hook event
-const PREFIX_WAIT_MS = 2000; // how long to wait for a prefix when only Content-Length was over the limit
-const SESSION_ID_RE = /"session_id"\s*:\s*"([^"\\]{1,200})"/;
-const EVENT_NAME_RE = /"hook_event_name"\s*:\s*"([A-Za-z]{1,64})"/;
-const TOOL_NAME_RE = /"tool_name"\s*:\s*"([^"\\]{1,200})"/;
-const DIFF_TOOLS = ['Edit', 'Write', 'MultiEdit']; // the only tools whose PostToolUse counts diff (src/state/diff.js)
-const PING_MS = 15000;
-const MAX_DEV_BODY_BYTES = 1024;
-const GESTURE_LOG_MAX = 32;
-const BUTTON_RE = /^[a-z][a-z0-9-]{0,31}$/;
-const GESTURES = ['tap', 'hold', 'long-hold'];
-// made only by revview itself (the actions, the boot path): no POST may forge them, not even under --dev-bridge
 const LAUNCH_LIMIT_MS = 30000;
 // a compaction took 5-7 s in the recordings and 1-2 min in long sessions; this bounds a lost end event
 export const COMPACT_LIMIT_MS = 180000;
-const INTERNAL_EVENTS = ['RevviewInterrupted', 'RevviewAnswered', 'RevviewSelect', 'RevviewNav', 'RevviewOwned', 'RevviewProjects', 'RevviewNote', 'RevviewBootBegin', 'RevviewBootDone', 'RevviewLaunching', 'RevviewLaunchExpired', 'RevviewNoSessionPress', 'RevviewCompactExpired', 'RevviewEndReason', 'RevviewThermal'];
-export const MAX_SSE_CLIENTS = 8;
-export const MAX_DEMO_CLIENTS = 2;
-// Browser codes the demo player owns under --dev-demo (the demo's keys: scene 1-9, pause, slower, faster).
-export const DEMO_CODES = Object.freeze([...Array.from({ length: 9 }, (_, i) => `Digit${i + 1}`), 'KeyP', 'BracketLeft', 'BracketRight']);
-export const MAX_CLIENT_BACKLOG_BYTES = 256 * 1024; // unread bytes after which a stalled SSE client is dropped
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_VIEW_DIR = path.resolve(HERE, '..', 'view');
-
-const TYPES = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.png': 'image/png',
-  '.svg': 'image/svg+xml',
-};
-
-const text = (res, status, msg, extra = {}) =>
-  res.writeHead(status, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store', ...extra }).end(msg + '\n');
-
-function serveStatic(req, res, root) {
-  let rel;
-  try {
-    rel = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  } catch {
-    return text(res, 400, 'bad path');
-  }
-  if (rel.includes('\0')) return text(res, 400, 'bad path');
-  const file = path.resolve(root, '.' + rel);
-  if (file !== root && !file.startsWith(root + path.sep)) return text(res, 403, 'forbidden');
-  fs.stat(file, (err, st) => {
-    const target = !err && st.isDirectory() ? path.join(file, 'index.html') : file;
-    fs.readFile(target, (err2, body) => {
-      if (err2) return text(res, 404, 'not found');
-      res.writeHead(200, {
-        'content-type': TYPES[path.extname(target)] || 'application/octet-stream',
-        'cache-control': 'no-store',
-      });
-      res.end(req.method === 'HEAD' ? undefined : body);
-    });
-  });
-}
 
 export async function startLiveServer({
   port = 0, viewDir = DEFAULT_VIEW_DIR, reduce: reduceEvent = reduceBoard,
@@ -85,12 +31,30 @@ export async function startLiveServer({
   boot = false, netmon = null, thermal = null, dataLock = null,
 } = {}) {
   const root = path.resolve(viewDir);
-  let board = initialBoard();
-  let seq = 0;
-  const clients = new Set();
-  let ownPort = 0;
-  const registry = createPermissionRegistry({ clock, waitMs: permissionWaitMs, minShownMs });
-  let closed = false;
+  // Everything the modules share, per server (no module-level state: tests start many servers in one process).
+  // Set later in this function: readAloud, actions, inputHandle, bridge, lastSource (setupInput), monitor, thermalMonitor, dataMonitor.
+  const ctx = {
+    root, reduceEvent, input, devBridge, devKeys, devDemo, onGesture, sessions, dataLock,
+    board: initialBoard(),
+    seq: 0,
+    clients: new Set(),
+    ownPort: 0,
+    registry: createPermissionRegistry({ clock, waitMs: permissionWaitMs, minShownMs }),
+    closed: false,
+    demoClients: new Set(),
+    gestureLog: [],
+    lastSource: 'device',
+    readAloud: null,
+    actions: null,
+    inputHandle: null,
+    bridge: null,
+    monitor: null,
+    thermalMonitor: null,
+    dataMonitor: null,
+    apply: (event, onlyIfChanged) => applyEvent(ctx, event, onlyIfChanged),
+    compactSync: (id, started) => compactSync(id, started),
+    acceptGesture: (g) => acceptGesture(ctx, g),
+  };
   // owned = the sessions revview itself started (the runner's windows); null without a runner (the old look)
   // project folders that do not exist are marked in the New session rows; re-checked on the owned poll (no timer of its own)
   let missingKey = null;
@@ -100,7 +64,7 @@ export async function startLiveServer({
     const k = JSON.stringify(missing);
     if (k === missingKey) return;
     missingKey = k;
-    apply({ hook_event_name: 'RevviewProjects', paths: projects, missing }, true);
+    ctx.apply({ hook_event_name: 'RevviewProjects', paths: projects, missing }, true);
   }
   let lastOwned = new Map(); // id -> name of the windows the last listing had (only to log the ones that vanish)
   // One refresh at a time: a caller that comes while one runs shares a single later run (it then sees what changed
@@ -125,7 +89,7 @@ export async function startLiveServer({
         lastOwned.delete(r.id); // its end is logged below: not a second "disappeared" line
         console.error(`owned sessions: Claude of session ${r.id}${r.name ? ` (${r.name.replace(/[\u0000-\u001f\u007f-\u009f]/g, '')})` : ''} ended${r.status === null ? '' : ` with status ${r.status}`}; ${r.lines.length === 0 ? 'its screen was empty' : `last ${r.lines.length} screen line(s):`}`);
         for (const l of r.lines) console.error(`  | ${l}`);
-        if (!closed) apply({ hook_event_name: 'RevviewEndReason', session_id: r.id, text: [...r.lines].reverse().find((l) => l.trim() !== '') ?? '' }, true);
+        if (!ctx.closed) ctx.apply({ hook_event_name: 'RevviewEndReason', session_id: r.id, text: [...r.lines].reverse().find((l) => l.trim() !== '') ?? '' }, true);
       }
       const list = await sessions.list();
       const now = new Map(list.map((x) => [x.id, x.name]));
@@ -133,24 +97,22 @@ export async function startLiveServer({
         if (!now.has(id)) console.error(`owned sessions: window of session ${id}${typeof name === 'string' && name !== '' ? ` (${name})` : ''} disappeared (Claude exited or the window was closed)`);
       }
       lastOwned = now;
-      if (!closed) apply({ hook_event_name: 'RevviewOwned', ids: list.map((x) => x.id), names: list.map((x) => x.name) }, true);
+      if (!ctx.closed) ctx.apply({ hook_event_name: 'RevviewOwned', ids: list.map((x) => x.id), names: list.map((x) => x.name) }, true);
     } catch (e) {
       console.error('owned sessions: list failed:', e instanceof Error ? e.message : e);
     }
   }
   // speech = { engine, speakOnStop, spawn?, killWaitMs? } or null: with null nothing about speech exists
-  let readAloud = null;
   if (speech) {
     const log = (m) => console.error(m);
     const speaker = createSpeaker({ engine: speech.engine, spawn: speech.spawn, killWaitMs: speech.killWaitMs, log });
-    readAloud = createReadAloud({ speaker, memo: createClosingMemo(), speakOnStop: speech.speakOnStop === true, log });
+    ctx.readAloud = createReadAloud({ speaker, memo: createClosingMemo(), speakOnStop: speech.speakOnStop === true, log });
   }
-  let dataMonitor = null;
   // while the data is locked no Claude session may start (the key-on one waits, New session is refused)
   const guarded = sessions && dataLock ? {
     ...sessions,
     start: async (...a) => {
-      if (dataMonitor?.check() ?? true) throw new Error('data is locked: insert the key stick');
+      if (ctx.dataMonitor?.check() ?? true) throw new Error('data is locked: insert the key stick');
       return sessions.start(...a);
     },
   } : sessions;
@@ -159,12 +121,12 @@ export async function startLiveServer({
   const clearT = timers?.clearTimeout ?? clearTimeout;
   const launchTimers = new Map();
   function launched(id, keyon = false) {
-    if (closed || typeof id !== 'string') return;
-    apply({ hook_event_name: 'RevviewLaunching', session_id: id, ...(keyon ? { keyon: true } : {}) }, true);
+    if (ctx.closed || typeof id !== 'string') return;
+    ctx.apply({ hook_event_name: 'RevviewLaunching', session_id: id, ...(keyon ? { keyon: true } : {}) }, true);
     if (launchTimers.has(id)) clearT(launchTimers.get(id));
     const t = setT(() => {
       launchTimers.delete(id);
-      if (!closed) apply({ hook_event_name: 'RevviewLaunchExpired', session_id: id }, true);
+      if (!ctx.closed) ctx.apply({ hook_event_name: 'RevviewLaunchExpired', session_id: id }, true);
     }, launchLimitMs);
     t?.unref?.();
     launchTimers.set(id, t);
@@ -172,18 +134,18 @@ export async function startLiveServer({
   // a PreCompact marks the session as compacting; the mark ends with the next event, or after compactLimitMs
   const compactTimers = new Map();
   function compactStarted(id) {
-    if (closed) return;
+    if (ctx.closed) return;
     if (compactTimers.has(id)) clearT(compactTimers.get(id));
     const t = setT(() => {
       compactTimers.delete(id);
-      if (!closed) apply({ hook_event_name: 'RevviewCompactExpired', session_id: id }, true);
+      if (!ctx.closed) ctx.apply({ hook_event_name: 'RevviewCompactExpired', session_id: id }, true);
     }, compactLimitMs);
     t?.unref?.();
     compactTimers.set(id, t);
   }
   // after every posted event: arm the timer only when the board's session really is compacting, drop it otherwise
   function compactSync(id, started) {
-    const on = board.sessions?.[id]?.state?.compacting === true;
+    const on = ctx.board.sessions?.[id]?.state?.compacting === true;
     if (on && started) compactStarted(id);
     else if (!on && compactTimers.has(id)) {
       clearT(compactTimers.get(id));
@@ -198,362 +160,32 @@ export async function startLiveServer({
       return r;
     },
   } : guarded;
-  const actions = createActions({
-    readAloud, runner: marked, registry, getBoard: () => board, apply, projects, clock, timers, navTimeoutMs,
+  ctx.actions = createActions({
+    readAloud: ctx.readAloud, runner: marked, registry: ctx.registry, getBoard: () => ctx.board, apply: ctx.apply, projects, clock, timers, navTimeoutMs,
     log: (m) => console.error(m), onOwnedChanged: refreshOwned,
   });
 
-  const message = () => `data: ${JSON.stringify({ seq, state: boardView(board) })}\n\n`;
-  const broadcast = () => {
-    const m = message();
-    for (const c of clients) {
-      // a client that never reads would make the write buffer grow without bound: drop it
-      if (c.writableLength > MAX_CLIENT_BACKLOG_BYTES) {
-        clients.delete(c);
-        c.destroy();
-        continue;
-      }
-      c.write(m);
-    }
-  };
-
-  // An event the core can take: seq += 1, new board, broadcast. A throwing core leaves everything alone.
-  // A POSTed event always counts (even if nothing changed); an internal one (onlyIfChanged) only when it did.
-  function apply(event, onlyIfChanged = false) {
-    let next;
-    try {
-      next = reduceEvent(board, event);
-    } catch (e) {
-      console.error('reduce failed:', e);
-      return false;
-    }
-    if (onlyIfChanged && next === board) return true;
-    seq += 1;
-    board = next;
-    // permission requests: drop those whose prompt is gone, then note what the bar shows now
-    registry.sweep(pendingPrompts(board));
-    registry.observe(shownPrompt(board));
-    broadcast();
-    return true;
-  }
-
-  // Gestures: an in-memory log, never part of the board. Presses while the boot STARTING lasts are dropped, not
-  // queued. The booting flag matters (a POSTed RevviewStarting never sets it, nothing would end it): a placeholder session that shows 'starting' after the boot must not drop presses.
-  const gestureLog = [];
-  function acceptGesture({ button, gesture, source }) {
-    const entry = { button, gesture, source, at: Date.now(), dropped: board.booting === true && boardView(board).view === 'starting' };
-    gestureLog.push(entry);
-    if (gestureLog.length > GESTURE_LOG_MAX) gestureLog.shift();
-    try {
-      onGesture?.({ ...entry });
-    } catch (e) {
-      console.error('onGesture failed:', e);
-    }
-    // the actions never throw into the reader (handle() catches), the extra catch is a belt
-    try {
-      actions.handle({ ...entry }).catch((e) => console.error('action failed:', e));
-    } catch (e) {
-      console.error('action failed:', e);
-    }
-  }
-
-  // Source of the key event that is feeding the one detector (hold timers inherit the last one).
-  let lastSource = 'device';
-  const gestureFromDetector = (g) => acceptGesture({ button: g.button, gesture: g.gesture, source: lastSource });
-  let inputHandle = null;
-  if (input) {
-    inputHandle = startInput({
-      config: input,
-      onGesture: gestureFromDetector,
-      onPresence: (present) => apply({ hook_event_name: 'RevviewInput', present }, true),
-      onKey: () => { lastSource = 'device'; },
-      log: (m) => console.error(m),
-      deps: inputDeps,
-      retryMs: inputRetryMs,
-    });
-  }
-  let bridge = null;
-  if (devBridge) {
-    bridge = devKeys
-      ? createInputPipeline({ config: devKeys, onGesture: gestureFromDetector })
-      : inputHandle ?? createInputPipeline({ config: loadConfig(DEFAULT_CONFIG_PATH), onGesture: gestureFromDetector });
-  }
-  // browser codes of the bridge's bound non-modifier keys (the page prevents their default action)
-  const bridgeCodes = () => {
-    const cfg = devKeys ?? input ?? loadConfig(DEFAULT_CONFIG_PATH);
-    const bound = new Set(cfg.bindings.map((b) => b.key));
-    return Object.keys(BROWSER_CODES).filter((c) => bound.has(BROWSER_CODES[c]) && !(BROWSER_CODES[c] in MODIFIER_KIND));
-  };
-
-  // A body over the limit that still looks like a hook event means an event was lost (QA issue 11).
-  function noteDropped(prefix) {
-    // Only a lost PostToolUse of a diff tool makes +N -N wrong; any other lost event (a huge Read or Bash
-    // output, a PreToolUse) changes no count, so it is not marked. Claude Code writes session_id first and
-    // tool_name before tool_input, so they are in the prefix (and the first match is the real field).
-    const head = prefix.toString('utf8');
-    const name = EVENT_NAME_RE.exec(head);
-    if (!name || name[1] !== 'PostToolUse') return;
-    const tool = TOOL_NAME_RE.exec(head);
-    if (tool && !DIFF_TOOLS.includes(tool[1])) return;
-    const m = SESSION_ID_RE.exec(head);
-    apply(m ? { hook_event_name: 'RevviewDropped', session_id: m[1] } : { hook_event_name: 'RevviewDropped' }, true);
-  }
-
-  function readBody(req, res, done) {
-    const declared = Number(req.headers['content-length']);
-    let size = 0;
-    let kept = 0;
-    const chunks = [];
-    const prefix = []; // first PREFIX_BYTES of the body, for an oversize one
-    let finished = false;
-    let timer = null;
-    const keep = (c) => {
-      if (kept >= PREFIX_BYTES) return;
-      const part = c.subarray(0, PREFIX_BYTES - kept);
-      prefix.push(part);
-      kept += part.length;
-    };
-    const tooBig = () => {
-      if (finished) return;
-      finished = true;
-      clearTimeout(timer);
-      req.removeAllListeners('data');
-      req.removeAllListeners('end');
-      chunks.length = 0;
-      res.on('finish', () => req.socket.destroy());
-      text(res, 413, 'body too large (max 1 MiB)', { connection: 'close' });
-      noteDropped(Buffer.concat(prefix));
-    };
-    if (declared > MAX_BODY_BYTES) {
-      // nothing counted yet: wait briefly for up to 64 KiB so the prefix can be looked at
-      timer = setTimeout(tooBig, PREFIX_WAIT_MS);
-      req.on('data', (c) => {
-        if (finished) return;
-        keep(c);
-        if (kept >= PREFIX_BYTES) tooBig();
-      });
-      req.on('end', tooBig);
-      return;
-    }
-    req.on('data', (c) => {
-      if (finished) return;
-      keep(c);
-      size += c.length;
-      if (size > MAX_BODY_BYTES) return tooBig();
-      chunks.push(c);
-    });
-    req.on('end', () => {
-      if (finished) return;
-      finished = true;
-      done(Buffer.concat(chunks).toString('utf8'));
-    });
-  }
-
-  function postEvent(req, res) {
-    readBody(req, res, (body) => {
-      let event;
-      try {
-        event = JSON.parse(body);
-      } catch {
-        return text(res, 400, body.trim() === '' ? 'empty body' : 'malformed JSON');
-      }
-      if (event === null || typeof event !== 'object' || Array.isArray(event)) {
-        return text(res, 400, 'body must be a JSON object');
-      }
-      // Gestures and presence come only from the in-process reader (or the dev bridge): a local process
-      // without an Origin header must not be able to forge a press or the NO BUTTONS state.
-      if (!devBridge && (event.hook_event_name === 'RevviewButton' || event.hook_event_name === 'RevviewInput')) {
-        return text(res, 403, `${event.hook_event_name} is not accepted over HTTP (dev bridge only)`);
-      }
-      // internal only: it makes a screen state from a key revview sent itself, so no POST may forge it
-      if (INTERNAL_EVENTS.includes(event.hook_event_name)) {
-        return text(res, 403, `${event.hook_event_name} is internal and not accepted over HTTP`);
-      }
-      // with a data lock the mount table decides: a posted RevviewDataLock is only a poke to re-read it
-      if (dataLock && event.hook_event_name === 'RevviewDataLock') {
-        dataMonitor?.check();
-        return res.writeHead(204).end();
-      }
-      // with --netmon the probe decides: a posted RevviewNetwork is only a poke to probe again
-      if (monitor && event.hook_event_name === 'RevviewNetwork') {
-        monitor.check();
-        return res.writeHead(204).end();
-      }
-      // the server makes these states itself (--boot, --data-lock, --netmon): outside the dev bridge nothing may post them
-      // (a posted RevviewStarting with no session would stay on screen, a posted RevviewDataLock without --data-lock
-      // would show INSERT KEY while New session still starts, a posted RevviewNetwork without --netmon would show OFFLINE
-      // with nothing to bring it back)
-      if (!devBridge && ['RevviewStarting', 'RevviewDataLock', 'RevviewNetwork'].includes(event.hook_event_name)) {
-        return text(res, 403, `${event.hook_event_name} is not accepted over HTTP (dev bridge only)`);
-      }
-      if (!apply(event)) return text(res, 500, 'state core failed; event ignored');
-      if (typeof event.session_id === 'string') compactSync(event.session_id, event.hook_event_name === 'PreCompact');
-      try {
-        readAloud?.onEvent(event, board, selectedKey(board));
-      } catch (e) {
-        console.error('read aloud failed:', e instanceof Error ? e.message : e);
-      }
-      if (event.hook_event_name === 'RevviewButton' && typeof event.button === 'string'
-        && BUTTON_RE.test(event.button) && GESTURES.includes(event.gesture)) {
-        acceptGesture({ button: event.button, gesture: event.gesture, source: 'post' });
-      }
-      res.writeHead(204).end();
-    });
-  }
-
-  // The PermissionRequest hook's long poll. The request is bound to the prompt this very event put on the
-  // board (matched by session, agent and the board tick); nothing the client sends can name another prompt,
-  // and no route answers it: only a wheel button (src/sessions/actions.js) can.
-  function postPermission(req, res) {
-    readBody(req, res, (body) => {
-      let ev;
-      try {
-        ev = JSON.parse(body);
-      } catch {
-        return text(res, 400, body.trim() === '' ? 'empty body' : 'malformed JSON');
-      }
-      if (ev === null || typeof ev !== 'object' || Array.isArray(ev) || ev.hook_event_name !== 'PermissionRequest'
-        || typeof ev.session_id !== 'string' || ev.session_id === '' || typeof ev.tool_name !== 'string') {
-        return text(res, 400, 'expected a PermissionRequest hook object');
-      }
-      const before = board;
-      if (!apply(ev)) return text(res, 500, 'state core failed; event ignored');
-      if (!sessions) return res.writeHead(204).end(); // no buttons can answer: the terminal dialog stays
-      const agent = typeof ev.agent_id === 'string' && ev.agent_id !== '' ? ev.agent_id : '';
-      // only an entry THIS event created (the board changed and the entry is from this tick) is bound, so its
-      // text on the bar is this request's own tool and command
-      const mine = board === before ? [] : pendingPrompts(board).filter((p) => p.session === ev.session_id
-        && p.agent === agent && p.since === board.tick);
-      let prompt;
-      if (mine.length === 1) prompt = mine[0];
-      else {
-        prompt = { session: ev.session_id, agent, since: null, tool: ev.tool_name, file: null, command: null };
-        console.error('permission request not bound to a prompt on the bar: buttons cannot answer it');
-      }
-      let over = false;
-      const id = registry.add(prompt, (decision) => {
-        if (over || res.writableEnded) return;
-        over = true;
-        if (decision === null) return res.writeHead(204).end();
-        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(decision));
-      });
-      if (id === null) return text(res, 503, 'too many waiting permission requests');
-      res.on('close', () => {
-        over = true;
-        registry.remove(id);
-      });
-    });
-  }
-
-  // Dev only (registered only with devBridge): the page forwards key presses to the same detector.
-  function devKey(req, res) {
-    const declared = Number(req.headers['content-length']);
-    if (declared > MAX_DEV_BODY_BYTES) {
-      res.on('finish', () => req.socket.destroy());
-      return text(res, 413, 'body too large (max 1 KiB)', { connection: 'close' });
-    }
-    let size = 0;
-    const chunks = [];
-    let over = false;
-    req.on('data', (c) => {
-      if (over) return;
-      size += c.length;
-      if (size > MAX_DEV_BODY_BYTES) {
-        over = true;
-        chunks.length = 0;
-        res.on('finish', () => req.socket.destroy());
-        text(res, 413, 'body too large (max 1 KiB)', { connection: 'close' });
-        return;
-      }
-      chunks.push(c);
-    });
-    req.on('end', () => {
-      if (over) return;
-      let b;
-      try {
-        b = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-      } catch {
-        return text(res, 400, 'malformed JSON');
-      }
-      if (b === null || typeof b !== 'object' || Array.isArray(b)) return text(res, 400, 'body must be a JSON object');
-      if (b.type === 'lost') {
-        bridge.reset();
-        return res.writeHead(204).end();
-      }
-      if ((b.type !== 'down' && b.type !== 'up') || typeof b.code !== 'string' || b.code.length > 32
-        || (b.repeat !== undefined && typeof b.repeat !== 'boolean')) {
-        return text(res, 400, 'expected {code, type: down|up|lost, repeat?}');
-      }
-      // dev demo: the demo's keys go to the player (GET /dev/demo), never to the bridge
-      if (devDemo && DEMO_CODES.includes(b.code)) {
-        if (b.type === 'down' && b.repeat !== true) {
-          const msg = `data: ${JSON.stringify({ code: b.code })}\n\n`;
-          for (const c of demoClients) c.write(msg);
-        }
-        return res.writeHead(204).end();
-      }
-      const code = Object.hasOwn(BROWSER_CODES, b.code) ? BROWSER_CODES[b.code] : undefined;
-      if (code !== undefined) {
-        lastSource = 'bridge';
-        bridge.feed(code, b.type === 'up' ? 0 : b.repeat ? 2 : 1);
-      }
-      res.writeHead(204).end();
-    });
-  }
-
-  // Dev only (devDemo): the demo player listens here for the demo keys typed in the page.
-  const demoClients = new Set();
-  function demoStream(req, res) {
-    if (demoClients.size >= MAX_DEMO_CLIENTS) return text(res, 503, 'too many demo streams', { 'retry-after': '5' });
-    res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
-    res.write('retry: 1000\n\n');
-    demoClients.add(res);
-    const drop = () => demoClients.delete(res);
-    res.on('close', drop);
-    res.on('error', drop);
-  }
-
-  function events(req, res) {
-    if (clients.size >= MAX_SSE_CLIENTS) return text(res, 503, 'too many event streams', { 'retry-after': '5' });
-    res.writeHead(200, {
-      'content-type': 'text/event-stream',
-      'cache-control': 'no-store',
-      connection: 'keep-alive',
-    });
-    res.write('retry: 1000\n\n');
-    res.write(message());
-    clients.add(res);
-    const drop = () => clients.delete(res);
-    res.on('close', drop);
-    res.on('error', drop);
-  }
-
-  function originOk(req) {
-    const allowed = [`127.0.0.1:${ownPort}`, `localhost:${ownPort}`];
-    if (!allowed.includes(req.headers.host)) return false;
-    const origin = req.headers.origin;
-    return origin === undefined || allowed.some((a) => origin === `http://${a}`);
-  }
+  setupInput(ctx, { inputDeps, inputRetryMs });
 
   const ROUTES = {
-    '/event': { POST: postEvent },
-    '/permission': { POST: postPermission },
-    '/events': { GET: events },
-    '/buttons': { GET: (req, res) => res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify({ buttons: boardView(board).buttons, gestures: gestureLog })) },
-    '/state': { GET: (req, res) => res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify({ seq, state: boardView(board) })) },
+    '/event': { POST: (req, res) => postEvent(ctx, req, res) },
+    '/permission': { POST: (req, res) => postPermission(ctx, req, res) },
+    '/events': { GET: (req, res) => events(ctx, req, res) },
+    '/buttons': { GET: (req, res) => buttonsHandler(ctx, req, res) },
+    '/state': { GET: (req, res) => stateHandler(ctx, req, res) },
   };
 
   if (devBridge) {
-    ROUTES['/dev/key'] = { POST: devKey };
-    ROUTES['/dev/keys'] = { GET: (req, res) => res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify({ codes: bridgeCodes() })) };
+    ROUTES['/dev/key'] = { POST: (req, res) => devKey(ctx, req, res) };
+    ROUTES['/dev/keys'] = { GET: (req, res) => res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify({ codes: bridgeCodes(ctx) })) };
   }
 
-  if (devBridge && devDemo) ROUTES['/dev/demo'] = { GET: demoStream };
+  if (devBridge && devDemo) ROUTES['/dev/demo'] = { GET: (req, res) => demoStream(ctx, req, res) };
 
   const server = http.createServer((req, res) => {
     req.on('error', () => {});
     res.on('error', () => {});
-    if (!originOk(req)) return text(res, 403, 'forbidden origin or host');
+    if (!originOk(ctx, req)) return text(res, 403, 'forbidden origin or host');
     let pathname;
     try {
       pathname = new URL(req.url, 'http://x').pathname;
@@ -574,50 +206,40 @@ export async function startLiveServer({
     else socket.destroy();
   });
 
-  const timer = setInterval(() => {
-    for (const c of clients) {
-      if (c.writableLength > MAX_CLIENT_BACKLOG_BYTES) {
-        clients.delete(c);
-        c.destroy();
-      } else c.write(': ping\n\n');
-    }
-  }, PING_MS);
-  timer.unref();
+  const timer = startPing(ctx);
 
   await new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(port, DEFAULT_HOST, resolve);
   });
-  ownPort = server.address().port;
+  ctx.ownPort = server.address().port;
 
   applyProjects();
-  if (boot) apply({ hook_event_name: 'RevviewBootBegin' }, true);
-  let monitor = null;
+  if (boot) ctx.apply({ hook_event_name: 'RevviewBootBegin' }, true);
   if (netmon) {
-    monitor = createNetMonitor({
+    ctx.monitor = createNetMonitor({
       log: (m) => console.error(m), ...netmon,
-      onChange: (online) => { if (!closed) apply({ hook_event_name: 'RevviewNetwork', online }, true); },
+      onChange: (online) => { if (!ctx.closed) ctx.apply({ hook_event_name: 'RevviewNetwork', online }, true); },
     });
   }
-  let thermalMonitor = null;
   if (thermal) {
-    thermalMonitor = createThermalMonitor({
+    ctx.thermalMonitor = createThermalMonitor({
       log: (m) => console.error(m), ...thermal,
-      onChange: ({ hot, lowPower }) => { if (!closed) apply({ hook_event_name: 'RevviewThermal', hot, lowPower }, true); },
+      onChange: ({ hot, lowPower }) => { if (!ctx.closed) ctx.apply({ hook_event_name: 'RevviewThermal', hot, lowPower }, true); },
     });
   }
   let unlocked = !dataLock;
   let resolveUnlocked = () => {};
   const whenUnlocked = unlocked ? Promise.resolve() : new Promise((r) => { resolveUnlocked = r; });
   if (dataLock) {
-    dataMonitor = createDataLockMonitor({
+    ctx.dataMonitor = createDataLockMonitor({
       log: (m) => console.error(m), ...dataLock,
       onChange: (locked) => {
         if (!locked) { unlocked = true; resolveUnlocked(); }
-        if (!closed) apply({ hook_event_name: 'RevviewDataLock', locked }, true);
+        if (!ctx.closed) ctx.apply({ hook_event_name: 'RevviewDataLock', locked }, true);
       },
     });
-    dataMonitor.check();
+    ctx.dataMonitor.check();
   }
   let ownedTimer = null;
   if (sessions) {
@@ -628,44 +250,44 @@ export async function startLiveServer({
 
   return {
     // internal: the boot path picks the session the buttons act on (no HTTP route reaches it)
-    select: (id) => apply({ hook_event_name: 'RevviewSelect', session_id: id }, true),
+    select: (id) => ctx.apply({ hook_event_name: 'RevviewSelect', session_id: id }, true),
     // internal: the key-on boot is over (ends the boot STARTING; a no-op afterwards)
-    bootDone: (note, kind) => apply({ hook_event_name: 'RevviewBootDone', ...(note ? { note } : {}), ...(note && kind ? { kind } : {}) }, true),
+    bootDone: (note, kind) => ctx.apply({ hook_event_name: 'RevviewBootDone', ...(note ? { note } : {}), ...(note && kind ? { kind } : {}) }, true),
     // internal: revview just started this session (marks it STARTING for launchLimitMs; no HTTP route)
     launched,
     refreshOwned,
     whenUnlocked: () => whenUnlocked,
-    dataLocked: () => (dataMonitor ? dataMonitor.locked() !== false : false),
-    selected: () => selectedKey(board),
-    url: `http://${DEFAULT_HOST}:${ownPort}`,
-    port: ownPort,
-    state: () => boardView(board),
-    gestures: () => gestureLog.map((g) => ({ ...g })),
-    permissionsWaiting: () => registry.size(), // test seam: waiting PermissionRequest hook calls
+    dataLocked: () => (ctx.dataMonitor ? ctx.dataMonitor.locked() !== false : false),
+    selected: () => selectedKey(ctx.board),
+    url: `http://${DEFAULT_HOST}:${ctx.ownPort}`,
+    port: ctx.ownPort,
+    state: () => boardView(ctx.board),
+    gestures: () => ctx.gestureLog.map((g) => ({ ...g })),
+    permissionsWaiting: () => ctx.registry.size(), // test seam: waiting PermissionRequest hook calls
     close: async () => {
       try {
-        await readAloud?.close(); // kills any speech child
+        await ctx.readAloud?.close(); // kills any speech child
       } catch (e) {
         console.error('read aloud close failed:', e instanceof Error ? e.message : e);
       }
       return new Promise((resolve) => {
-        closed = true;
-        inputHandle?.stop();
-        monitor?.stop();
-        thermalMonitor?.stop();
-        dataMonitor?.stop();
-        actions.close();
+        ctx.closed = true;
+        ctx.inputHandle?.stop();
+        ctx.monitor?.stop();
+        ctx.thermalMonitor?.stop();
+        ctx.dataMonitor?.stop();
+        ctx.actions.close();
         for (const t of launchTimers.values()) clearT(t);
         launchTimers.clear();
         for (const t of compactTimers.values()) clearT(t);
         compactTimers.clear();
         if (ownedTimer !== null) clearInterval(ownedTimer);
-        registry.close(); // leaves the tmux server alone: sessions outlive a server restart
+        ctx.registry.close(); // leaves the tmux server alone: sessions outlive a server restart
         clearInterval(timer);
         server.close(() => resolve());
-        for (const c of clients) c.end();
-        for (const c of demoClients) c.end();
-        clients.clear();
+        for (const c of ctx.clients) c.end();
+        for (const c of ctx.demoClients) c.end();
+        ctx.clients.clear();
         server.closeAllConnections();
       });
     },
