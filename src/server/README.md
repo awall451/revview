@@ -13,6 +13,27 @@ unknown flag prints the message to stderr and exits with code 2 before listening
 It binds to **127.0.0.1 only**; there is deliberately no way to change the host from the CLI.
 Open `http://127.0.0.1:8138/`.
 
+## Files
+
+`index.js` is the entry point: it re-exports the public names and, run as a program, calls `cli.js`'s `main`.
+Shared per-server state (board, seq, clients, timers, monitors) lives on one `ctx` object made in `live.js`;
+no module keeps state of its own.
+
+| File | What |
+|---|---|
+| `index.js` | re-exports; runs `main()` when started with `node src/server/index.js` |
+| `cli.js` | `parseArgs`, `main` (flags, runner, speech/netmon/thermal setup, startup lines) |
+| `boot.js` | `bootSessions`, `bootAfterUnlock`, `netmonTarget`, `installShutdown` |
+| `live.js` | `startLiveServer`: builds `ctx`, the route table, listen, the returned handle and `close()` |
+| `feed.js` | `apply` (reduce + broadcast), `GET /events` (SSE), `GET /state`, the SSE ping |
+| `http.js` | `text`, static files, the Host/Origin check |
+| `routes-event.js` | `POST /event`, body reading and the oversize-body drop mark |
+| `routes-permission.js` | `POST /permission` (long poll) |
+| `routes-dev.js` | `POST /dev/key`, `GET /dev/keys`, `GET /dev/demo` |
+| `gestures.js` | gesture log, `GET /buttons`, the input reader and dev bridge setup |
+| `lifecycle.js` | project marks, owned-sessions poll, launch and compaction timers, the runner the actions get |
+| `monitors.js` | starts `netmon.js`, `thermal.js`, `datalock.js` |
+
 ## Key-on on the Pi: `--boot` and `--netmon`
 
 `--boot`: the bar shows STARTING from the first moment until the boot is done (see below). After the server is
