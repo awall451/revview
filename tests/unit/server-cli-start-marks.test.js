@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 // The real CLI (src/server/index.js) with a real tmux on a private socket and a hookless stand-in `claude`:
 // --start without --boot (the --live emulator) marks the session STARTING like menu -> New session; --boot (the Pi's
 // key-on start) keeps its own path (BootBegin/BootDone + the key-on mark). The Pi's pure logic is pinned by
-// server-boot / server-r6-boot / server-r6-launch (bootSessions); this pins the two CLI paths side by side.
+// server-boot / server-boot-done / server-launch (bootSessions); this pins the two CLI paths side by side.
 const SERVER = fileURLToPath(new URL('../../src/server/index.js', import.meta.url));
 const until = async (fn, what, ms = 15000) => {
   const end = Date.now() + ms;

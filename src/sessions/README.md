@@ -96,5 +96,5 @@ Read aloud is described in `src/speech/README.md`. It is tested with a stand-in 
 
 `tests/unit/sessions-runner.test.js` (fake exec, argv shapes), `tests/unit/sessions-tmux.test.js` (real tmux
 on a temp socket, with the stand-in `tests/unit/fixtures/sessions/fake-claude.js` that logs received bytes),
-`tests/unit/sessions-wb4.test.js` (real board and registry, fake runner/clock/timers) and `sessions-projects.test.js`.
+`tests/unit/sessions-selection.test.js` (real board and registry, fake runner/clock/timers) and `sessions-projects.test.js`.
 The tmux test fails, not skips, when tmux is missing.
