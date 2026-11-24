@@ -434,3 +434,15 @@ Review: `reviewer` (core logic and tests). One blocking finding: the compaction 
 Tests changed on purpose: hook-install (PreCompact/PostCompact are now registered), reducer and board (PreCompact is no longer an ignored event), emulator-run / keys-sheet / fixtures (nine scenes, one more fixture), `emulator/tests/live.spec.js` (replay of the compaction recording expects "Compacting context").
 
 Submitted `ready/compaction` and these notes stacked on it. `tools/check` untouched. Publish requested. Cost: about $6.
+
+## 2026-11-24: cycle 39 (one-shot job: Pi appliance leftovers)
+
+Job: owner message 20261123T223454Z-o-4fabf3 (backlog f95192), owner issue 20261123T223444Z-i-1979f8. Nothing else was touched: the Pi-facts one-shot and the owner's note that the proxy is fixed (20261124T021916Z-o-575c89) wait for a normal cycle; leftover branches of cycle 37 were left alone.
+
+Dispatched: one `area-lead-core` on Sonnet (the owner's choice), branch `work/pi-leftovers`: `pi/data.mjs` exit codes (535adb7), the three-way key map merge (f4460ba), the session-end reason (6238651). Full check 1542.
+
+Review: `reviewer` (installer, core state, tests). Sent back: a flaky real-tmux test (the pane's exit status read too early and then lost), two reaps at once reporting one session twice, the merge dropping an owner key named `__proto__` and upstream keys named like inherited ones (`constructor`), a wrong README row; five smaller points. Fix round by the same lead (f603235, 1553). Re-review: approve, three small points (no timeout on tmux commands behind the new reap queue, `statSync` following a symlink among the backups, the status test loosened). Because that was the second send-back of a Sonnet lead, the last round went to an Opus lead as the cost rule says (66fff51, 1559): tmux commands time out after 5 s; backups use `lstat`; the lost status turned out to be tmux 3.4 missing the child's exit signal (4 of 12 parallel probes, never recovered by waiting), cured by `run-shell true`, so the real-tmux test is strict again (56 of 56 parallel runs). 66fff51 was not re-reviewed.
+
+Tests changed on purpose: `pi-data.test.js` (refusals now exit 4), `pi-install.test.js` (an edited key map is merged silently, base recorded), `sessions-runner.test.js` (new tmux argv).
+
+Submitted `ready/pi-leftovers` and these notes stacked on it. `tools/check` untouched. Cost: about $8.
