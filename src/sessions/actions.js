@@ -5,6 +5,8 @@
 import { performance } from 'node:perf_hooks';
 import { shownPrompt, selectedKey, boardView, sessionStarting, STARTING_PTT_NOTE } from '../state/index.js';
 
+export const PROMPT_PTT_NOTE = 'Answer the prompt first';
+
 export const CTRL_C_GAP_MS = 5000;
 export const NAV_TIMEOUT_MS = 10000;
 
@@ -154,6 +156,12 @@ export function createActions({
       if (!b.locked && sessionStarting(b, selectedKey(b))) {
         note(STARTING_PTT_NOTE);
         return out('push-to-talk', false, 'session starting');
+      }
+      // a permission prompt is waiting on the selected session (any agent): Space would land in the terminal dialog
+      // as a keypress, not as push-to-talk. The dialog stays answerable by keys while the hook waits (fixtures/buttons).
+      if (b.sessions[selectedKey(b)]?.pending?.length > 0) {
+        note(PROMPT_PTT_NOTE);
+        return out('push-to-talk', false, 'permission prompt shown');
       }
       // no session selected: the tap goes nowhere, and an "... ended" note must not hide the line that says so
       if (runner && selectedKey(b) === null) apply({ hook_event_name: 'RevviewNoSessionPress' });

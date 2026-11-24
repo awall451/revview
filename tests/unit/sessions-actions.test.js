@@ -113,7 +113,7 @@ test('a Ctrl+C that was not sent does not start the gap', async () => {
 });
 
 test('push-to-talk tap sends Space; its hold does nothing', async () => {
-  const s = setup();
+  const s = setup({ board: workingBoard() });
   assert.equal((await s.a.handle(dev('push-to-talk', 'tap'))).done, true);
   assert.equal((await s.a.handle(dev('push-to-talk', 'hold'))).done, false);
   assert.deepEqual(s.sent, ['Space']);
@@ -191,7 +191,7 @@ test('the board is read after the target await', async () => {
 });
 
 test('gestures are serialized: a second one waits for the first', async () => {
-  const s = setup();
+  const s = setup({ board: workingBoard() });
   const release = s.gate();
   const p1 = s.a.handle(dev('push-to-talk', 'tap'));
   const p2 = s.a.handle(dev('cancel', 'tap'));
