@@ -192,12 +192,12 @@ test('write: a second run says unchanged for everything and changes nothing', wi
   assert.equal(res.out.trim().split('\n').filter((l) => l.startsWith('unchanged ')).length, 8);
 }));
 
-test('write: a symlink where a file goes is refused, the rest is written, exit 1', withRoot((r) => {
+test('write: a symlink where a file goes is refused, the rest is written, exit 4', withRoot((r) => {
   fs.mkdirSync(path.join(r, 'etc/revview'), { recursive: true });
   fs.writeFileSync(path.join(r, 'victim'), 'keep');
   fs.symlinkSync(path.join(r, 'victim'), path.join(r, 'etc/revview/data.conf'));
   const res = node(wargs(r));
-  assert.equal(res.code, 1);
+  assert.equal(res.code, 4);
   assert.match(res.out, /skipped .*data\.conf: is a symlink/);
   assert.equal(fs.readFileSync(path.join(r, 'victim'), 'utf8'), 'keep');
   assert.ok(fs.existsSync(path.join(r, 'etc/revview/data.env')));
@@ -224,7 +224,7 @@ test('write: bad arguments exit 2 and write nothing', withRoot((r) => {
   assert.deepEqual(fs.readdirSync(r), []);
 }));
 
-test('check CLI: good case prints JSON, bad exits 1, bad args exit 2', () => {
+test('check CLI: good case prints JSON, refused exits 4, bad args exit 2', () => {
   const a = ['check', '--lsblk', path.join(FIX, 'lsblk.json'), '--mounts', path.join(FIX, 'mounts'), '--device', '/dev/mmcblk0p3', '--key-device', '/dev/sda1'];
   const ok = node(a);
   assert.equal(ok.code, 0, ok.err);
@@ -233,8 +233,40 @@ test('check CLI: good case prints JSON, bad exits 1, bad args exit 2', () => {
   const b = [...a];
   b[b.indexOf('/dev/mmcblk0p3')] = '/dev/mmcblk0p2';
   const no = node(b);
-  assert.equal(no.code, 1);
+  assert.equal(no.code, 4);
   assert.match(no.err, /mounted/);
   assert.equal(node(a.slice(0, -2)).code, 2);
   assert.equal(node([...a, '--x', 'y']).code, 2);
+});
+
+// Exit codes (same as pi/setup.mjs): 0 done, 4 refused, 2 bad arguments, 3 an unexpected error (never node's own 1).
+test('write: an unexpected error (the root is a file) exits 3', withRoot((r) => {
+  // --root is a plain file: mkdir under it fails with ENOTDIR, an exception the writer does not turn into a refusal
+  const f = path.join(r, 'plainfile');
+  fs.writeFileSync(f, 'x');
+  const res = node(wargs(f));
+  assert.equal(res.code, 3, res.err);
+  assert.match(res.err, /revview data: failed/);
+  assert.doesNotMatch(res.err, /\n\s+at /, 'a message, not a stack');
+}));
+
+test('exit 3 for an uncaught exception in check (lsblk JSON of the wrong shape), not node\'s 1', withRoot((r) => {
+  const l = path.join(r, 'l.json');
+  fs.writeFileSync(l, '{"blockdevices":5}');
+  const res = node(['check', '--lsblk', l, '--mounts', '/dev/null', '--device', '/dev/a', '--key-device', '/dev/b']);
+  assert.equal(res.code, 3, res.err);
+  assert.match(res.err, /revview data: failed/);
+}));
+
+test('exit 3 for an unhandled promise rejection', () => {
+  const pre = path.join(os.tmpdir(), `pi-data-rej-${process.pid}.mjs`);
+  // runs after the handlers of data.mjs are installed: the preload only queues the rejection for a later tick
+  fs.writeFileSync(pre, 'setTimeout(() => { Promise.reject(new Error("boom")); }, 50);\nsetTimeout(() => {}, 1000);\n');
+  try {
+    const p = spawnSync(process.execPath, ['--import', pre, DATA, 'write', '--root', '/nonexistent-r/x', '--user', 'alice', '--home', '/home/alice', '--dir', '/opt/revview',
+      '--data-uuid', UUID, '--key-uuid', '1234-ABCD', '--dry-run'], { encoding: 'utf8' });
+    // the dry run is done at once and would exit 0; the preload keeps the process alive and rejects 50 ms later
+    assert.equal(p.status, 3, p.stderr);
+    assert.match(p.stderr, /boom/);
+  } finally { fs.rmSync(pre, { force: true }); }
 });

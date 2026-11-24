@@ -278,3 +278,28 @@ test('shellcheck is clean on data-setup.sh', { skip: hasShellcheck ? false : 'sh
   const p = spawnSync('shellcheck', [SCRIPT, path.join(ROOT, 'pi/lib.sh')], { encoding: 'utf8' });
   assert.equal(p.status, 0, p.stdout + p.stderr);
 });
+
+// A `node` first on PATH: the real (not --dry-run) data.mjs write is replaced by an exit with `code`; all else is real.
+function nodeStub(e, code) {
+  fs.writeFileSync(path.join(e.bin, 'node'), `#!/bin/bash
+case " $* " in
+  *data.mjs\\ write*) case " $* " in *" --dry-run "*) ;; *) echo "stub node: exit ${code}" >&2; exit ${code} ;; esac ;;
+esac
+exec ${JSON.stringify(process.execPath)} "$@"
+`, { mode: 0o755 });
+}
+
+test('data.mjs write exiting 3 (crash) after work started: exit 1, the message says failed', withEnv((e) => {
+  nodeStub(e, 3);
+  const res = run(e, fmt(e));
+  assert.equal(res.code, 1, res.out + res.err);
+  assert.match(res.err, /data\.mjs failed \(exit 3/);
+  assert.doesNotMatch(res.err, /refused to write/);
+}));
+
+test('data.mjs write refusing (its exit 4): exit 1 with a message that says refused', withEnv((e) => {
+  nodeStub(e, 4);
+  const res = run(e, fmt(e));
+  assert.equal(res.code, 1, res.out + res.err);
+  assert.match(res.err, /data\.mjs refused to write/);
+}));

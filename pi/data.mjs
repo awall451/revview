@@ -4,10 +4,14 @@
 // The check/render functions are pure (data in, text out). Nothing here formats, mounts or opens anything, and
 // no key material is ever seen by this file.
 // Usage: node pi/data.mjs check --lsblk FILE --mounts FILE --device D --key-device K
-//          exit 0 and one JSON line describing both devices; exit 1 and the reasons (one per line) on stderr; 2 bad args
+//          exit 0 and one JSON line describing both devices; exit 4 and the reasons (one per line) on stderr; 2 bad args
 //        node pi/data.mjs write --root R --user U --home H --dir D --data-uuid X --key-uuid Y [--owner UID:GID] [--dry-run]
 //          One line per file: wrote | unchanged | backup A -> B | skipped P: why | would write (--dry-run).
-//          Exit 1 when a file was refused, or (R is /) when any part of the path to D/pi/unlock.sh is a symlink, not root-owned or writable by others.
+//          Exit 4 when a file was refused, or (R is /) when any part of the path to D/pi/unlock.sh is a symlink, not root-owned or writable by others.
+// Exit codes (the same as pi/setup.mjs): 0 done; 4 refused (the devices are not acceptable, a file was refused or skipped,
+//   an untrusted path); 2 bad arguments; 3 an unexpected error, also an uncaught exception or an unhandled rejection (a
+//   message on stderr, no stack). Never node's own 1 (an import failure, a syntax error): a caller must be able to tell
+//   a refusal from a crash. pi/data-setup.sh maps all of them to its own 1 or 2 (see its header).
 // lsblk is the parsed JSON of: lsblk -J -b -o NAME,PATH,TYPE,FSTYPE,UUID,LABEL,SIZE,MOUNTPOINTS,TRAN,RM  (FROM MEMORY)
 import fs from 'node:fs';
 import path from 'node:path';
@@ -227,7 +231,7 @@ function cmdCheck(argv) {
   const res = checkDevices({ lsblk, mounts, device: o.device, keyDevice: o.keyDevice });
   if (res.errors.length) {
     for (const e of res.errors) process.stderr.write(`revview data: ${e}\n`);
-    process.exit(1);
+    process.exit(4);
   }
   console.log(JSON.stringify({ data: res.data, key: res.key }));
 }
@@ -263,7 +267,7 @@ function cmdWrite(argv) {
     if (errs.length) {
       for (const e of errs) process.stderr.write(`revview data: ${e}\n`);
       process.stderr.write(`revview data: pi/unlock.sh is run as root at boot, so the user must not be able to change any part of its path; put the repository in a root-owned place such as /opt/revview (sudo chown -R root:root /opt/revview, no write for group or others) and run this again\n`);
-      process.exit(1);
+      process.exit(4);
     }
   }
 
@@ -284,10 +288,16 @@ function cmdWrite(argv) {
   else {
     if (w.mkdirp(mnt, false, 0o755)) console.log(`wrote ${mnt}`);
   }
-  if (w.failed()) process.exitCode = 1;
+  if (w.failed()) process.exitCode = 4;
 }
 
 if (process.argv[1] && fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url))) {
+  const crash = (e) => {
+    process.stderr.write(`revview data: failed: ${e?.message ?? e}\n`);
+    process.exit(3);
+  };
+  process.on('uncaughtException', crash);
+  process.on('unhandledRejection', crash);
   const [cmd, ...rest] = process.argv.slice(2);
   if (cmd === 'check') cmdCheck(rest);
   else if (cmd === 'write') cmdWrite(rest);

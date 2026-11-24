@@ -23,6 +23,9 @@
 # Exit: 0 done; 1 something was refused or failed after work had started (see the messages; fix and re-run);
 #   2 bad arguments or refused before anything was changed (a device that is not acceptable, no confirmation,
 #   the read-only root (overlay) on, a non-LUKS device without --format).
+#   pi/data.mjs's own codes (0 done, 4 refused, 2 bad arguments, 3 crash) never leave this script: before the first
+#   change any non-zero code of its checks is exit 2; when it writes the files, 4 and 3 both become exit 1 (the
+#   message says which).
 # FROM MEMORY, UNTESTED against the real tools: lsblk's column names and JSON shape (-J -b -o NAME,PATH,TYPE,FSTYPE,UUID,
 #   LABEL,SIZE,MOUNTPOINTS,TRAN,RM), cryptsetup luksFormat/luksAddKey/open/isLuks/luksUUID and their options
 #   (--pbkdf pbkdf2 --iter-time 500 --key-size 256), that luksAddKey --key-file asks for the NEW passphrase on the
@@ -343,6 +346,8 @@ write_args=(--root "$root" --user "$user" --home "$home" --dir "$dir" --data-uui
 if [ "$dry" -eq 1 ]; then write_args+=(--dry-run); fi
 rc=0
 "$node_bin" "$here/data.mjs" write "${write_args[@]}" || rc=$?
+if [ "$rc" -eq 4 ]; then echo "data-setup.sh: data.mjs refused to write a file (see above)" >&2
+elif [ "$rc" -ne 0 ]; then echo "data-setup.sh: data.mjs failed (exit $rc, see above)" >&2; fi
 if [ "$rc" -ne 0 ]; then failed=1; fi
 
 if [ "$real" -eq 1 ] && [ "$dry" -eq 0 ]; then
