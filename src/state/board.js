@@ -59,6 +59,7 @@ function isValidBoard(b) {
       && (b.nav.id === undefined || typeof b.nav.id === 'string')))
     && (b.launching === undefined || (Array.isArray(b.launching) && b.launching.every((x) => typeof x === 'string')))
     && (b.endReasons === undefined || isObj(b.endReasons))
+    && (b.endNoteFor === undefined || typeof b.endNoteFor === 'string')
     && (b.keyon === undefined || typeof b.keyon === 'string')
     && (b.booting === undefined || typeof b.booting === 'boolean')
     && (b.note === undefined || b.note === null || typeof b.note === 'string')
@@ -224,7 +225,7 @@ export function reduceBoard(board, event) {
     // the key-on session that vanished while still STARTING: "ended at once" (its reason is in the server log)
     const atOnce = b.keyon === wasSel && (b.launching ?? []).includes(wasSel) && b.sessions[wasSel].quiet === true;
     const reason = b.endReasons?.[wasSel];
-    next = { ...next, note: typeof reason === 'string' ? `${ENDED_PREFIX}${reason}` : atOnce ? KEYON_ENDED_NOTE : `${name} ended${last ? ENDED_NEXT : ''}` };
+    next = { ...next, endNoteFor: wasSel, note: typeof reason === 'string' ? `${ENDED_PREFIX}${reason}` : atOnce ? KEYON_ENDED_NOTE : `${name} ended${last ? ENDED_NEXT : ''}` };
   }
   const tid = targetOf(event, b.sessions);
   const spoke = isDriverPrompt(event) && has(next.sessions, tid) ? tid : null;
@@ -508,7 +509,7 @@ function reduceInner(b, event) {
       const kept = Object.entries(b.endReasons ?? {}).filter(([k]) => k !== id).slice(-7);
       const endReasons = Object.fromEntries([...kept, [id, text]]);
       const base = { ...b, endReasons };
-      return !has(b.sessions, id) && isEndedNote(b.note) ? { ...base, note: `${ENDED_PREFIX}${text}` } : base;
+      return !has(b.sessions, id) && b.endNoteFor === id && isEndedNote(b.note) ? { ...base, note: `${ENDED_PREFIX}${text}` } : base;
     }
     case 'RevviewNote': {
       const note = event.note;

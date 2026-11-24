@@ -144,13 +144,16 @@ export function renderDongleRule(template, { vendor, product }) {
 // ---- three-way merge of the key map (buttons.json) ----
 // Leaves are scalars and arrays (an array is ONE value); objects are merged key by key.
 const ABSENT = Symbol('absent');
+const has = (o, k) => Object.hasOwn(o, k);
+// own keys only, and '__proto__' / 'constructor' are ordinary keys: results are built with defineProperty, never `o[k] =`
+const setOwn = (o, k, v) => Object.defineProperty(o, k, { value: v, enumerable: true, writable: true, configurable: true });
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 export function jsonEqual(a, b) {
   if (a === ABSENT || b === ABSENT) return a === b;
   if (Array.isArray(a) || Array.isArray(b)) return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => jsonEqual(x, b[i]));
   if (isObj(a) && isObj(b)) {
     const ka = Object.keys(a);
-    return ka.length === Object.keys(b).length && ka.every((k) => k in b && jsonEqual(a[k], b[k]));
+    return ka.length === Object.keys(b).length && ka.every((k) => has(b, k) && jsonEqual(a[k], b[k]));
   }
   return a === b;
 }
@@ -166,9 +169,9 @@ export function mergeJson(base, theirs, mine) {
     if (jsonEqual(n, b)) return m;
     if (isObj(n) && isObj(m) && (isObj(b) || b === ABSENT)) {
       const out = {};
-      for (const k of [...Object.keys(m), ...Object.keys(n).filter((x) => !(x in m))]) {
-        const r = node(isObj(b) && k in b ? b[k] : ABSENT, k in n ? n[k] : ABSENT, k in m ? m[k] : ABSENT, at ? `${at}.${k}` : k);
-        if (r !== ABSENT) out[k] = r;
+      for (const k of [...Object.keys(m), ...Object.keys(n).filter((x) => !has(m, x))]) {
+        const r = node(isObj(b) && has(b, k) ? b[k] : ABSENT, has(n, k) ? n[k] : ABSENT, has(m, k) ? m[k] : ABSENT, at ? `${at}.${k}` : k);
+        if (r !== ABSENT) setOwn(out, k, r);
       }
       return out;
     }
@@ -180,7 +183,7 @@ export function mergeJson(base, theirs, mine) {
 // The leaf paths where a and b differ (for the "what the merge does" line).
 export function diffPaths(a, b, at = '') {
   if (isObj(a) && isObj(b)) {
-    return [...new Set([...Object.keys(a), ...Object.keys(b)])].flatMap((k) => diffPaths(k in a ? a[k] : ABSENT, k in b ? b[k] : ABSENT, at ? `${at}.${k}` : k));
+    return [...new Set([...Object.keys(a), ...Object.keys(b)])].flatMap((k) => diffPaths(has(a, k) ? a[k] : ABSENT, has(b, k) ? b[k] : ABSENT, at ? `${at}.${k}` : k));
   }
   return jsonEqual(a, b) ? [] : [at || '(whole file)'];
 }
@@ -320,7 +323,9 @@ function main(argv) {
       let baseV = null;
       const baseLink = linkedComponent(baseP);
       if (baseLink) refuse(baseP, `${baseLink === baseP ? 'it is' : `${baseLink} is`} a symlink; the shipped version is not recorded or read, ${ETC_BUTTONS} was kept as it is`);
-      else if (o.adopt) {
+      else if (o.adopt && readOr(baseP) !== null && (() => { try { return isObj(JSON.parse(readOr(baseP))); } catch { return false; } })()) {
+        refuse(baseP, `--adopt-buttons-base: ${BASE_PATH} already holds a valid record of the shipped version; adopting would make the update's own changes look like yours. Nothing was changed. To start over, remove ${BASE_PATH} yourself first`);
+      } else if (o.adopt) {
         recordBase();
         say(`note: ${ETC_BUTTONS} kept as it is; the current ${repoButtons} is now recorded as the version it is based on, later updates are merged`);
       } else {

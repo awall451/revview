@@ -1780,3 +1780,20 @@ Tested in the unit suite only; nothing run on a Pi.
 - **Emulator.** `emulator/run.sh --live` used `has-session` to notice a Claude that died at once; a kept dead window made that
   true, so it now looks for a live pane (`pane_dead` 0). The messages and exit codes are unchanged.
 - **Not proven:** anything on the Pi (its tmux may be another version: BENCH PL-3), that the systemd journal shows the lines as expected.
+
+### Review round (cycle 39)
+
+- **Exit status of a dead pane.** tmux 3.4 shows `pane_dead=1` before `pane_dead_status`, and in about 3 of 8 runs side by side
+  the status never came (probe: `1|` for 3 s). `reap` asks again (3 times, 100 ms), then leaves the pane for the next poll and
+  reports status `null` only once the pane has been seen dead for 1.5 s. So the status is best effort (log header only); the bar
+  never depends on it. Because of that wait the bar shows the reason about 10 s after the exit (a poll to see the window, a
+  poll to report it); not shortened: the poll is also what the two-listing rule of `RevviewOwned` follows.
+- **One reap at a time** (a queue): a second caller waits and then looks again. A capture that fails with the window gone is
+  dropped, not reported as an empty screen. The server drops a reaped id from its "disappeared" log.
+- **remain-on-exit stays global** (tmux cannot target the window just made in the same command line: tested, `set-option -w`
+  there hits another window). So a dead window without `@revview_id` (opened by hand) is killed, unreported, once it has
+  been seen dead for 1.5 s (never at the first sight: `start()` tags the window a moment after creating it).
+- **End reason belongs to its session:** `board.endNoteFor` says whose end note is on the bar; a late reason replaces only that.
+- **Key map:** keys are compared with `Object.hasOwn` and results built with `defineProperty`, so `__proto__` and `constructor`
+  are ordinary keys (kept, added, removed). `--adopt-buttons-base` is refused (exit 4) when a valid base exists. Backups are ordered
+  by file time (the Pi has no real-time clock) and the one just written is never pruned.

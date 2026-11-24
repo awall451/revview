@@ -279,3 +279,61 @@ test('symlinks: the key map file, /etc/revview, and the base directory are refus
   assert.equal(get(r, BTN), ser(old));
   assert.deepEqual(fs.readdirSync(path.join(r, 'tgt')), []);
 }));
+
+// ---- review round: prototype-ish keys, adopt over a valid base, backups on a clock that is wrong ----
+test('mergeJson: __proto__ and constructor are ordinary keys, on the owner side and the upstream side', () => {
+  const base = JSON.parse('{"a":1}');
+  const mine = JSON.parse('{"a":1,"__proto__":{"mine":1}}');
+  const theirs = JSON.parse('{"a":2,"constructor":5,"toString":"x"}');
+  const { value, conflicts } = mergeJson(base, theirs, mine);
+  assert.deepEqual(conflicts, []);
+  assert.deepEqual(Object.keys(value).sort(), ['__proto__', 'a', 'constructor', 'toString']);
+  assert.deepEqual(Object.getOwnPropertyDescriptor(value, '__proto__').value, { mine: 1 });
+  assert.equal(Object.getOwnPropertyDescriptor(value, 'constructor').value, 5);
+  assert.equal(value.a, 2);
+});
+
+test('owner file with "__proto__" and "constructor" keys: an update elsewhere keeps them in the rewritten file', withRoot((r) => {
+  const old = oldShipped((b) => { b.timing.holdMs = 111; });
+  const mineText = ser(old).replace(/\n}\n$/, ',\n  "__proto__": { "mine": 1 },\n  "constructor": 7\n}\n');
+  assert.ok(mineText.includes('"__proto__"'));
+  setup(r, old, mineText);
+  const res = cli(r);
+  assert.equal(res.code, 0, res.err);
+  const parsed = getJ(r, BTN);
+  assert.deepEqual(Object.getOwnPropertyDescriptor(parsed, '__proto__').value, { mine: 1 });
+  assert.equal(Object.getOwnPropertyDescriptor(parsed, 'constructor').value, 7);
+  assert.equal(parsed.timing.holdMs, SHIPPED.timing.holdMs, 'the update still arrived');
+  assert.equal(backups(r).length, 1);
+  assert.equal(get(r, `etc/revview/${backups(r)[0]}`), mineText);
+}));
+
+test('--adopt-buttons-base is refused when a valid base exists: nothing changes, exit 4', withRoot((r) => {
+  const old = oldShipped((b) => { b.timing.holdMs = 111; });
+  const mine = clone(old);
+  mine.device.product = 'abcd';
+  setup(r, old, mine);
+  const res = cli(r, ['--adopt-buttons-base']);
+  assert.equal(res.code, 4);
+  assert.match(res.err + res.out, /already holds a valid record/);
+  assert.equal(get(r, BASE), ser(old));
+  assert.equal(get(r, BTN), ser(mine));
+  assert.equal(backups(r).length, 0);
+}));
+
+test('backups: the one just written is never pruned, even when its name sorts oldest (no real-time clock)', withRoot((r) => {
+  const old = oldShipped((b) => { b.timing.holdMs = 111; });
+  setup(r, old, old);
+  const dir = path.join(r, 'etc/revview');
+  for (const [i, name] of ['99990101-000000', '99990101-000001', '99990101-000002'].entries()) {
+    const f = path.join(dir, `buttons.json.revview-backup-${name}`);
+    fs.writeFileSync(f, `earlier ${i}`);
+    const when = new Date(Date.now() - (10 - i) * 60000);
+    fs.utimesSync(f, when, when);
+  }
+  assert.equal(cli(r).code, 0);
+  const left = backups(r);
+  assert.equal(left.length, 3);
+  assert.ok(left.some((n) => get(r, `etc/revview/${n}`) === ser(old)), 'the backup of the file just replaced survives');
+  assert.ok(!left.some((n) => get(r, `etc/revview/${n}`) === 'earlier 0'), 'the oldest by file time went');
+}));

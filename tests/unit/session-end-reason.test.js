@@ -51,7 +51,8 @@ test('tmux: a claude that prints and exits is reaped once, with its last lines a
   assert.equal(got.length, 1);
   assert.equal(got[0].id, A);
   assert.equal(got[0].name, 'dead');
-  assert.equal(got[0].status, 3);
+  // tmux sometimes never fills in the exit status of a pane that ended (seen 3 times in 8 runs side by side)
+  assert.ok([3, null].includes(got[0].status), String(got[0].status));
   assert.deepEqual(got[0].lines.slice(-2), ['first line', 'Authentication failed: run claude to sign in']);
   assert.deepEqual(await runner.list(), []);
   assert.deepEqual(await runner.reap(), [], 'nothing is left to reap: no dead window piles up');
@@ -62,7 +63,7 @@ test('tmux: a dead window is not a live session; a window stopped on purpose is 
   await dead.start({ cwd: os.tmpdir() });
   await until(async () => (await dead.list()).length === 0 || null); // exited but still there: list hides it
   assert.deepEqual(await dead.list(), []);
-  assert.equal((await dead.reap()).length, 1);
+  assert.equal((await reaped(dead)).length, 1);
   const live = mk(t, [process.execPath, path.resolve(import.meta.dirname, 'fixtures/sessions/fake-claude.js'), path.join(os.tmpdir(), `rv-log-${process.pid}`)], () => B);
   await live.start({ cwd: os.tmpdir() });
   assert.equal((await live.list()).length, 1);
@@ -129,4 +130,125 @@ test('server: reaped lines go to the log (bounded) and the last non-empty line t
   assert.equal(live.state().note, 'Session ended: line 19');
   assert.equal(logs.filter((l) => l.startsWith('  | ')).length, 20);
   assert.ok(logs.some((l) => /ended with status 1/.test(l) && l.includes(A)), logs.join('\n'));
+});
+
+// ---- review round: reap races, unknown status, foreign windows, other sessions' notes ----
+function fakeTmux(state) {
+  const calls = [];
+  const exec = async (bin, args) => {
+    const cmd = args.find((a) => ['list-panes', 'display-message', 'capture-pane', 'kill-window'].includes(a));
+    calls.push(cmd);
+    if (cmd === 'list-panes') return { stdout: state.panes.map((p) => p.join('\t')).join('\n') + '\n' };
+    if (cmd === 'display-message') return { stdout: `${state.late ?? ''}\n` };
+    if (cmd === 'capture-pane') {
+      if (state.captureFails) throw new Error("can't find pane");
+      return { stdout: 'boom\n' };
+    }
+    if (cmd === 'kill-window') {
+      if (state.killFails) throw new Error("can't find window");
+      return { stdout: '' };
+    }
+    return { stdout: '' };
+  };
+  return { calls, exec };
+}
+const mkFake = (state, clock) => {
+  const f = fakeTmux(state);
+  const runner = createSessionRunner({ exec: f.exec, now: () => clock.t, sleep: async () => {} });
+  return { runner, calls: f.calls };
+};
+
+test('reap: a dead pane whose exit status is not known yet is left for a later poll, then reported with null', async () => {
+  const clock = { t: 1000 };
+  const state = { panes: [['@1', '%1', '1', '', A, 'w']] };
+  const { runner, calls } = mkFake(state, clock);
+  assert.deepEqual(await runner.reap(), []);
+  assert.ok(!calls.includes('kill-window'), 'the window is kept so that the status can still arrive');
+  state.late = '3'; // the status arrives (asked again on the next poll)
+  clock.t += 5000;
+  const got = await runner.reap();
+  assert.equal(got.length, 1);
+  assert.equal(got[0].status, 3);
+  state.panes = [['@2', '%2', '1', '', B, 'x']];
+  state.late = '';
+  clock.t += 5000;
+  assert.deepEqual(await runner.reap(), []);
+  clock.t += 5000;
+  const last = await runner.reap();
+  assert.equal(last.length, 1);
+  assert.equal(last[0].status, null);
+});
+
+test('reap: a status that shows up on the second ask is used at once', async () => {
+  const state = { panes: [['@1', '%1', '1', '', A, 'w']], late: '9' };
+  const { runner } = mkFake(state, { t: 1 });
+  assert.equal((await runner.reap())[0].status, 9);
+});
+
+test('reap: two reaps at once report one ended session once', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rv-reap-'));
+  const clock = { t: 1000 };
+  const runner = createSessionRunner({ socket: { path: path.join(dir, 'sock') }, claude: [process.execPath, exitFixture, '2', 'only once'], newId: () => A, now: () => clock.t });
+  t.after(async () => { await runner.killServer().catch(() => {}); fs.rmSync(dir, { recursive: true, force: true }); });
+  await runner.start({ cwd: os.tmpdir() });
+  await until(async () => (await runner.list()).length === 0 || null);
+  // the exit status can take a poll to show up: the pair is run again a poll later, and the session comes out of one of them, once
+  const all = [];
+  for (let round = 0; round < 2; round++) {
+    const [x, y] = await Promise.all([runner.reap(), runner.reap()]);
+    all.push(...x, ...y);
+    clock.t += 5000;
+  }
+  assert.equal(all.length, 1, JSON.stringify(all));
+  assert.deepEqual(all[0].lines.slice(-1), ['only once']);
+});
+
+test('reap: a capture that fails because the window is gone is dropped, not reported as an empty screen', async () => {
+  const state = { panes: [['@1', '%1', '1', '4', A, 'w']], captureFails: true, killFails: true };
+  const { runner } = mkFake(state, { t: 1 });
+  assert.deepEqual(await runner.reap(), []);
+  state.killFails = false; // the window is still there and could be killed: that is reported (empty lines)
+  const got = await runner.reap();
+  assert.equal(got.length, 1);
+  assert.deepEqual(got[0].lines, []);
+});
+
+test('reap: a dead window without @revview_id (opened by hand) is killed after the grace time, never reported', async () => {
+  const clock = { t: 1000 };
+  const state = { panes: [['@5', '%5', '1', '0', '', 'hand']] };
+  const { runner, calls } = mkFake(state, clock);
+  assert.deepEqual(await runner.reap(), []);
+  assert.ok(!calls.includes('kill-window'), 'not at the first sight: start() may not have tagged it yet');
+  clock.t += 5000;
+  assert.deepEqual(await runner.reap(), []);
+  assert.ok(calls.includes('kill-window'));
+});
+
+test('board: the reason of one session does not replace the end note of another', () => {
+  const C = '33333333-3333-4333-8333-333333333333';
+  let b = fold(initialBoard(), ev('RevviewOwned', { ids: [A, C], names: ['alpha', 'gamma'] }), ev('RevviewSelect', { session_id: A }), ev('RevviewOwned', { ids: [C], names: ['gamma'] }));
+  assert.equal(b.note, 'alpha ended');
+  b = reduceBoard(b, ev('RevviewEndReason', { session_id: C, text: 'gamma died' }));
+  assert.equal(b.note, 'alpha ended', 'C is still on the board; its reason waits');
+  b = reduceBoard(b, ev('RevviewEndReason', { session_id: A, text: 'alpha died' }));
+  assert.equal(b.note, 'Session ended: alpha died');
+});
+
+test('server: a reaped session is logged once (no extra "disappeared" line)', async (t) => {
+  const logs = [];
+  const orig = console.error;
+  console.error = (...a) => logs.push(a.join(' '));
+  t.after(() => { console.error = orig; });
+  let listed = [{ id: A, window: '@0', cwd: '/x', name: 'alpha' }];
+  let dead = [];
+  const runner = { list: async () => listed, reap: async () => { const r = dead; dead = []; return r; } };
+  const live = await startLiveServer({ port: 0, boot: true, sessions: runner });
+  t.after(() => live.close());
+  await live.refreshOwned();
+  listed = [];
+  dead = [{ id: A, name: 'alpha', status: 1, lines: ['x'] }];
+  await live.refreshOwned();
+  await live.refreshOwned();
+  assert.equal(logs.filter((l) => /disappeared/.test(l)).length, 0, logs.join('\n'));
+  assert.equal(logs.filter((l) => /ended with status 1/.test(l)).length, 1);
 });

@@ -14,6 +14,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const WINDOW_RE = /^@\d+$/;
 const NO_SERVER_RE = /no server running|error connecting|no sessions|can't find session|No such file or directory|server exited/i;
 const SESSION = 'revview';
+const GRACE_MS = 1500; // see `reap`
 const UNSAFE_TEXT_RE = /[#\u0000-\u001f\u007f-\u009f]/;
 
 // tmux expands formats and runs #(cmd): text with '#' or a control character must never reach it
@@ -39,6 +40,8 @@ export function createSessionRunner({
   exec = defaultExec,
   newId = randomUUID,
   log = () => {},
+  now = Date.now,
+  sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
 } = {}) {
   const socketArgs = socket.path ? ['-S', socket.path] : ['-L', socket.name ?? 'revview'];
   const run = async (args) => {
@@ -135,23 +138,58 @@ export function createSessionRunner({
   // Windows whose Claude has exited (kept by remain-on-exit): read the last screen lines, then kill the window, so
   // none piles up. Returns [{ id, name, status, lines }] (lines already cleaned, at most `maxLines`). One failing
   // window does not stop the others. A window revview stops itself (`stop`) is killed while alive and never shows here.
-  async function reap({ maxLines = 20 } = {}) {
+  //  - Only one reap runs at a time: a second call waits for the running one and then looks again (it finds nothing
+  //    the first one took), so one ended session is never reported twice.
+  //  - tmux can show pane_dead a moment before pane_dead_status is known: the status is asked again a few times, and
+  //    while it is still unknown the pane is left for a later poll (a null status is reported only after GRACE_MS).
+  //  - remain-on-exit is global on this private server (a per-window setting cannot be made in the same command line),
+  //    so a window opened by hand has no @revview_id: such a dead window is killed (not reported), also after GRACE_MS,
+  //    so that a window start() has just made and not yet tagged is never taken.
+  //  - A capture that fails because the window is gone is dropped, not reported as an empty screen.
+  const firstSeen = new Map(); // pane id -> time it was first seen dead
+  let reapQueue = Promise.resolve();
+  const reap = (opts) => {
+    const p = reapQueue.then(() => reapOnce(opts));
+    reapQueue = p.catch(() => {});
+    return p;
+  };
+  async function reapOnce({ maxLines = 20 } = {}) {
     let out;
     try {
       out = await run(['list-panes', '-a', '-F', '#{window_id}\t#{pane_id}\t#{pane_dead}\t#{pane_dead_status}\t#{@revview_id}\t#{window_name}']);
     } catch (e) {
-      if (NO_SERVER_RE.test(errText(e))) return [];
+      if (NO_SERVER_RE.test(errText(e))) { firstSeen.clear(); return []; }
       throw e;
     }
+    const t = now();
+    const seenNow = new Set();
     const done = [];
     for (const line of out.split('\n')) {
-      const [window, pane, dead, status = '', id, ...rest] = line.split('\t');
-      if (dead !== '1' || !WINDOW_RE.test(window ?? '') || !/^%\d+$/.test(pane ?? '') || !UUID_RE.test(id ?? '')) continue;
+      const [window, pane, dead, status0 = '', id, ...rest] = line.split('\t');
+      if (dead !== '1' || !WINDOW_RE.test(window ?? '') || !/^%\d+$/.test(pane ?? '')) continue;
+      seenNow.add(pane);
+      if (!firstSeen.has(pane)) firstSeen.set(pane, t);
+      const aged = t - firstSeen.get(pane) >= GRACE_MS;
+      if (!UUID_RE.test(id ?? '')) {
+        if (aged) { try { await run(['kill-window', '-t', window]); } catch { /* gone already */ } }
+        continue;
+      }
+      let status = status0;
+      for (let i = 0; i < 3 && !/^\d+$/.test(status); i++) {
+        await sleep(100);
+        try { status = (await run(['display-message', '-p', '-t', pane, '#{pane_dead_status}'])).trim(); } catch { break; }
+      }
+      const known = /^\d+$/.test(status);
+      if (!known && !aged) continue; // a later poll: the status may still arrive
       let lines = [];
-      try { lines = cleanScreen(await run(['capture-pane', '-p', '-J', '-S', '-100', '-t', pane]), maxLines); } catch (e) { log(`capture of ${id} failed: ${errText(e).trim()}`); }
-      try { await run(['kill-window', '-t', window]); } catch (e) { log(`kill of ${window} failed: ${errText(e).trim()}`); }
-      done.push({ id, name: rest.join('\t'), status: /^\d+$/.test(status) ? Number(status) : null, lines });
+      let captured = true;
+      try { lines = cleanScreen(await run(['capture-pane', '-p', '-J', '-S', '-100', '-t', pane]), maxLines); } catch (e) { captured = false; log(`capture of ${id} failed: ${errText(e).trim()}`); }
+      let killed = true;
+      try { await run(['kill-window', '-t', window]); } catch (e) { killed = false; log(`kill of ${window} failed: ${errText(e).trim()}`); }
+      if (!captured && !killed) continue; // the window is gone (another reaper, or by hand): nothing to report
+      done.push({ id, name: rest.join('\t'), status: known ? Number(status) : null, lines });
     }
+    for (const k of [...firstSeen.keys()]) if (!seenNow.has(k)) firstSeen.delete(k);
     return done;
   }
 

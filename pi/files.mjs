@@ -101,8 +101,13 @@ export function createWriter({ dry = false, owner, homeAbs = '', root = '/', say
       atomicWrite(rb, old, 0o644, opts.owned);
       say(`backup ${p} -> ${rb}`);
       const prefix = `${path.basename(p)}.revview-backup-`;
-      const mine = fs.readdirSync(path.dirname(p)).filter((n) => n.startsWith(prefix)).sort();
-      for (const n of mine.slice(0, Math.max(0, mine.length - (opts.keep ?? 3)))) fs.rmSync(path.join(path.dirname(p), n), { force: true });
+      // The Pi has no real-time clock, so a name's stamp can be older than earlier backups: order by file time, and never
+      // remove the backup just written (it counts as one of the kept).
+      const dir = path.dirname(p);
+      const others = fs.readdirSync(dir).filter((n) => n.startsWith(prefix) && n !== path.basename(rb))
+        .map((n) => ({ n, t: fs.statSync(path.join(dir, n)).mtimeMs }))
+        .sort((x, y) => (x.t - y.t) || (x.n < y.n ? -1 : 1));
+      for (const { n } of others.slice(0, Math.max(0, others.length - Math.max(0, (opts.keep ?? 3) - 1)))) fs.rmSync(path.join(dir, n), { force: true });
     }
     const mode = opts.mode ?? (old !== null ? fs.statSync(p).mode & 0o777 : 0o644);
     if (wantBackup) {
