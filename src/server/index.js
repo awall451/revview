@@ -12,7 +12,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { main } from './cli.js';
 
-export { DEFAULT_PORT, DEFAULT_HOST, COMPACT_LIMIT_MS, startLiveServer } from './live.js';
+export { DEFAULT_PORT, DEFAULT_HOST, startLiveServer } from './live.js';
+export { COMPACT_LIMIT_MS } from './lifecycle.js';
 export { MAX_BODY_BYTES } from './routes-event.js';
 export { MAX_SSE_CLIENTS, MAX_CLIENT_BACKLOG_BYTES } from './feed.js';
 export { MAX_DEMO_CLIENTS, DEMO_CODES } from './routes-dev.js';

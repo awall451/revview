@@ -1,11 +1,7 @@
 import http from 'node:http';
-import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { initialBoard, reduceBoard, boardView, selectedKey } from '../state/index.js';
-import { createDataLockMonitor } from './datalock.js';
-import { createNetMonitor } from './netmon.js';
-import { createThermalMonitor } from './thermal.js';
 import { createActions, createPermissionRegistry } from '../sessions/index.js';
 import { createSpeaker, createClosingMemo, createReadAloud } from '../speech/index.js';
 import { text, serveStatic, originOk } from './http.js';
@@ -14,13 +10,11 @@ import { postEvent } from './routes-event.js';
 import { postPermission } from './routes-permission.js';
 import { devKey, demoStream, bridgeCodes } from './routes-dev.js';
 import { acceptGesture, setupInput, buttonsHandler } from './gestures.js';
-
+import { createLifecycle, LAUNCH_LIMIT_MS, COMPACT_LIMIT_MS } from './lifecycle.js';
+import { startMonitors } from './monitors.js';
 
 export const DEFAULT_PORT = 8138;
 export const DEFAULT_HOST = '127.0.0.1'; // the only address it binds; there is no option for another
-const LAUNCH_LIMIT_MS = 30000;
-// a compaction took 5-7 s in the recordings and 1-2 min in long sessions; this bounds a lost end event
-export const COMPACT_LIMIT_MS = 180000;
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_VIEW_DIR = path.resolve(HERE, '..', 'view');
 
@@ -32,7 +26,8 @@ export async function startLiveServer({
 } = {}) {
   const root = path.resolve(viewDir);
   // Everything the modules share, per server (no module-level state: tests start many servers in one process).
-  // Set later in this function: readAloud, actions, inputHandle, bridge, lastSource (setupInput), monitor, thermalMonitor, dataMonitor.
+  // Set later in this function: readAloud, actions, inputHandle, bridge, lastSource (setupInput), monitor, thermalMonitor,
+  // dataMonitor (startMonitors), compactSync, launchTimers, compactTimers, clearT (createLifecycle), ownedTimer (the owned poll below).
   const ctx = {
     root, reduceEvent, input, devBridge, devKeys, devDemo, onGesture, sessions, dataLock,
     board: initialBoard(),
@@ -51,115 +46,18 @@ export async function startLiveServer({
     monitor: null,
     thermalMonitor: null,
     dataMonitor: null,
+    ownedTimer: null,
     apply: (event, onlyIfChanged) => applyEvent(ctx, event, onlyIfChanged),
-    compactSync: (id, started) => compactSync(id, started),
+    compactSync: null,
     acceptGesture: (g) => acceptGesture(ctx, g),
   };
-  // owned = the sessions revview itself started (the runner's windows); null without a runner (the old look)
-  // project folders that do not exist are marked in the New session rows; re-checked on the owned poll (no timer of its own)
-  let missingKey = null;
-  const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
-  function applyProjects() {
-    const missing = projects.filter((p) => !isDir(p));
-    const k = JSON.stringify(missing);
-    if (k === missingKey) return;
-    missingKey = k;
-    ctx.apply({ hook_event_name: 'RevviewProjects', paths: projects, missing }, true);
-  }
-  let lastOwned = new Map(); // id -> name of the windows the last listing had (only to log the ones that vanish)
-  // One refresh at a time: a caller that comes while one runs shares a single later run (it then sees what changed
-  // meanwhile), so a slow or hung tmux never piles up one pending refresh per poll.
-  let ownedRun = null;
-  let ownedAgain = null;
-  function refreshOwned() {
-    if (!ownedRun) {
-      ownedRun = refreshOwnedOnce().finally(() => { ownedRun = null; });
-      return ownedRun;
-    }
-    ownedAgain ??= ownedRun.then(() => { ownedAgain = null; return refreshOwned(); });
-    return ownedAgain;
-  }
-  async function refreshOwnedOnce() {
-    applyProjects();
-    if (!sessions) return;
-    try {
-      // Claude windows that exited stay until read here (remain-on-exit): the last screen lines go to the log (the
-      // journal under the user unit; untrusted text, at most 20 lines) and the last non-empty one to the bar
-      for (const r of (await sessions.reap?.()) ?? []) {
-        lastOwned.delete(r.id); // its end is logged below: not a second "disappeared" line
-        console.error(`owned sessions: Claude of session ${r.id}${r.name ? ` (${r.name.replace(/[\u0000-\u001f\u007f-\u009f]/g, '')})` : ''} ended${r.status === null ? '' : ` with status ${r.status}`}; ${r.lines.length === 0 ? 'its screen was empty' : `last ${r.lines.length} screen line(s):`}`);
-        for (const l of r.lines) console.error(`  | ${l}`);
-        if (!ctx.closed) ctx.apply({ hook_event_name: 'RevviewEndReason', session_id: r.id, text: [...r.lines].reverse().find((l) => l.trim() !== '') ?? '' }, true);
-      }
-      const list = await sessions.list();
-      const now = new Map(list.map((x) => [x.id, x.name]));
-      for (const [id, name] of lastOwned) {
-        if (!now.has(id)) console.error(`owned sessions: window of session ${id}${typeof name === 'string' && name !== '' ? ` (${name})` : ''} disappeared (Claude exited or the window was closed)`);
-      }
-      lastOwned = now;
-      if (!ctx.closed) ctx.apply({ hook_event_name: 'RevviewOwned', ids: list.map((x) => x.id), names: list.map((x) => x.name) }, true);
-    } catch (e) {
-      console.error('owned sessions: list failed:', e instanceof Error ? e.message : e);
-    }
-  }
   // speech = { engine, speakOnStop, spawn?, killWaitMs? } or null: with null nothing about speech exists
   if (speech) {
     const log = (m) => console.error(m);
     const speaker = createSpeaker({ engine: speech.engine, spawn: speech.spawn, killWaitMs: speech.killWaitMs, log });
     ctx.readAloud = createReadAloud({ speaker, memo: createClosingMemo(), speakOnStop: speech.speakOnStop === true, log });
   }
-  // while the data is locked no Claude session may start (the key-on one waits, New session is refused)
-  const guarded = sessions && dataLock ? {
-    ...sessions,
-    start: async (...a) => {
-      if (ctx.dataMonitor?.check() ?? true) throw new Error('data is locked: insert the key stick');
-      return sessions.start(...a);
-    },
-  } : sessions;
-  // a session revview just started shows STARTING until its first hook, but at most launchLimitMs
-  const setT = timers?.setTimeout ?? setTimeout;
-  const clearT = timers?.clearTimeout ?? clearTimeout;
-  const launchTimers = new Map();
-  function launched(id, keyon = false) {
-    if (ctx.closed || typeof id !== 'string') return;
-    ctx.apply({ hook_event_name: 'RevviewLaunching', session_id: id, ...(keyon ? { keyon: true } : {}) }, true);
-    if (launchTimers.has(id)) clearT(launchTimers.get(id));
-    const t = setT(() => {
-      launchTimers.delete(id);
-      if (!ctx.closed) ctx.apply({ hook_event_name: 'RevviewLaunchExpired', session_id: id }, true);
-    }, launchLimitMs);
-    t?.unref?.();
-    launchTimers.set(id, t);
-  }
-  // a PreCompact marks the session as compacting; the mark ends with the next event, or after compactLimitMs
-  const compactTimers = new Map();
-  function compactStarted(id) {
-    if (ctx.closed) return;
-    if (compactTimers.has(id)) clearT(compactTimers.get(id));
-    const t = setT(() => {
-      compactTimers.delete(id);
-      if (!ctx.closed) ctx.apply({ hook_event_name: 'RevviewCompactExpired', session_id: id }, true);
-    }, compactLimitMs);
-    t?.unref?.();
-    compactTimers.set(id, t);
-  }
-  // after every posted event: arm the timer only when the board's session really is compacting, drop it otherwise
-  function compactSync(id, started) {
-    const on = ctx.board.sessions?.[id]?.state?.compacting === true;
-    if (on && started) compactStarted(id);
-    else if (!on && compactTimers.has(id)) {
-      clearT(compactTimers.get(id));
-      compactTimers.delete(id);
-    }
-  }
-  const marked = sessions ? {
-    ...guarded,
-    start: async (...a) => {
-      const r = await guarded.start(...a);
-      launched(r?.id);
-      return r;
-    },
-  } : guarded;
+  const { applyProjects, refreshOwned, launched, runner: marked } = createLifecycle(ctx, { projects, timers, launchLimitMs, compactLimitMs });
   ctx.actions = createActions({
     readAloud: ctx.readAloud, runner: marked, registry: ctx.registry, getBoard: () => ctx.board, apply: ctx.apply, projects, clock, timers, navTimeoutMs,
     log: (m) => console.error(m), onOwnedChanged: refreshOwned,
@@ -216,36 +114,11 @@ export async function startLiveServer({
 
   applyProjects();
   if (boot) ctx.apply({ hook_event_name: 'RevviewBootBegin' }, true);
-  if (netmon) {
-    ctx.monitor = createNetMonitor({
-      log: (m) => console.error(m), ...netmon,
-      onChange: (online) => { if (!ctx.closed) ctx.apply({ hook_event_name: 'RevviewNetwork', online }, true); },
-    });
-  }
-  if (thermal) {
-    ctx.thermalMonitor = createThermalMonitor({
-      log: (m) => console.error(m), ...thermal,
-      onChange: ({ hot, lowPower }) => { if (!ctx.closed) ctx.apply({ hook_event_name: 'RevviewThermal', hot, lowPower }, true); },
-    });
-  }
-  let unlocked = !dataLock;
-  let resolveUnlocked = () => {};
-  const whenUnlocked = unlocked ? Promise.resolve() : new Promise((r) => { resolveUnlocked = r; });
-  if (dataLock) {
-    ctx.dataMonitor = createDataLockMonitor({
-      log: (m) => console.error(m), ...dataLock,
-      onChange: (locked) => {
-        if (!locked) { unlocked = true; resolveUnlocked(); }
-        if (!ctx.closed) ctx.apply({ hook_event_name: 'RevviewDataLock', locked }, true);
-      },
-    });
-    ctx.dataMonitor.check();
-  }
-  let ownedTimer = null;
+  const whenUnlocked = startMonitors(ctx, { netmon, thermal, dataLock });
   if (sessions) {
     await refreshOwned();
-    ownedTimer = setInterval(refreshOwned, ownedPollMs);
-    ownedTimer.unref();
+    ctx.ownedTimer = setInterval(refreshOwned, ownedPollMs);
+    ctx.ownedTimer.unref();
   }
 
   return {
@@ -277,11 +150,11 @@ export async function startLiveServer({
         ctx.thermalMonitor?.stop();
         ctx.dataMonitor?.stop();
         ctx.actions.close();
-        for (const t of launchTimers.values()) clearT(t);
-        launchTimers.clear();
-        for (const t of compactTimers.values()) clearT(t);
-        compactTimers.clear();
-        if (ownedTimer !== null) clearInterval(ownedTimer);
+        for (const t of ctx.launchTimers.values()) ctx.clearT(t);
+        ctx.launchTimers.clear();
+        for (const t of ctx.compactTimers.values()) ctx.clearT(t);
+        ctx.compactTimers.clear();
+        if (ctx.ownedTimer !== null) clearInterval(ctx.ownedTimer);
         ctx.registry.close(); // leaves the tmux server alone: sessions outlive a server restart
         clearInterval(timer);
         server.close(() => resolve());
