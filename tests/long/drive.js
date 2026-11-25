@@ -8,7 +8,8 @@
 //   --streams N      sessions replayed at once (default 4)
 //   --samples N      measurement points between start and end (default 7, evenly spread)
 //   --out DIR        logs and long-drive.json go here (default /tmp/long-drive)
-//   --smoke          a short pass (20 simulated minutes at 60x) to see that the tool works
+//   --smoke          a short pass to see that the tool works: 1/3 simulated hour at 60x, but the simulated clock runs
+//                    on through the outages (wall seconds, 60x), so it simulates about 65 minutes in about a minute
 /* global document */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -58,7 +59,7 @@ process.on('exit', killAll);
 
 // The state word the page shows for each view (the spec; same table as emulator/tests/live.spec.js).
 const LABELS = {
-  working: 'WORKING', waiting: 'WAITING FOR ME', permission: 'NEEDS PERMISSION', done: 'DONE',
+  working: 'WORKING', waiting: 'WAITING FOR ME', permission: 'NEEDS PERMISSION', asking: 'CLAUDE ASKS', done: 'DONE',
   starting: 'STARTING', offline: 'OFFLINE', 'insert-key': 'INSERT KEY',
   unknown: 'UNKNOWN', ended: 'CLAUDE EXITED', 'no-link': 'NO LINK',
 };
@@ -210,7 +211,8 @@ async function drive(argv) {
       link: document.documentElement.dataset.link ?? null,
       seq: document.documentElement.dataset.seq ?? null,
       view: document.body.dataset.view ?? null,
-      word: t('state-word'), tool: t('tool'), file: t('file'),
+      // a long path is shown cut in its middle (src/view/view.js fitFile); data-full holds the whole path the page has
+      word: t('state-word'), tool: t('tool'), file: document.getElementById('file')?.dataset.full ?? null,
     };
   });
   function expectedFrom({ seq, state }) {
@@ -219,6 +221,8 @@ async function drive(argv) {
     return {
       seq: String(seq), view: state.view, word: LABELS[state.view],
       ...(working ? { tool: compacting ? 'Compacting context' : state.tool || '', file: compacting ? '' : state.file || '' } : {}),
+      // CLAUDE ASKS: the tool in row A (as emulator/tests/live.spec.js checks it); the file row is not used
+      ...(state.view === 'asking' ? { tool: state.tool || '' } : {}),
     };
   }
   const differs = (shown, want) => Object.keys(want).filter((k) => shown[k] !== want[k]);

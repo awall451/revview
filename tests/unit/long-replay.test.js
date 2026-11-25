@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createReplay, instance, loadSessions, postEvent } from '../long/replay.js';
 import { startLiveServer } from '../../src/server/index.js';
@@ -8,6 +9,8 @@ import { startLiveServer } from '../../src/server/index.js';
 // so the result does not depend on how fast or loaded the machine is.
 const SESSIONS = fileURLToPath(new URL('../../fixtures/sessions', import.meta.url));
 const sessions = loadSessions(SESSIONS);
+// how many recordings there are, counted from the directory (not hard-coded: new recordings get added)
+const RECORDINGS = fs.readdirSync(SESSIONS).filter((f) => f.endsWith('.jsonl')).length;
 
 function fakeClock() {
   let t = 0;
@@ -15,7 +18,8 @@ function fakeClock() {
 }
 
 test('loadSessions: every recording, each ends with SessionEnd', () => {
-  assert.equal(sessions.length, 6);
+  assert.ok(RECORDINGS >= 6, `at least the 6 original recordings, found ${RECORDINGS}`);
+  assert.equal(sessions.length, RECORDINGS);
   for (const s of sessions) {
     assert.equal(s.events.at(-1).hook_event_name, 'SessionEnd', s.name);
     assert.ok(s.events.every((e) => e.session_id === s.id), s.name);
@@ -65,14 +69,16 @@ test('replay: a lane loops through the recordings with new session ids, and a fa
   let n = 0;
   const r = createReplay({ sessions, post: async (e) => { seen.push(e); return ++n % 10 === 0 ? 0 : 204; }, now: clock.now, speedup: 1, streams: 1, gapSimMs: 10, pauseSimMs: 100 });
   r.resume();
-  for (let i = 0; i < 400; i++) { clock.advance(10); r.tick(); }
+  // tick until the lane has started every recording once and then two more (bounded, so a stuck lane fails)
+  for (let i = 0; i < 100000 && r.stats.sessions < sessions.length + 2; i++) { clock.advance(10); r.tick(); }
   await r.drain();
-  assert.ok(r.stats.sessions > 6, `looped past the 6 recordings, got ${r.stats.sessions} sessions`);
+  assert.ok(r.stats.sessions > sessions.length, `looped past the ${sessions.length} recordings, got ${r.stats.sessions} sessions`);
   assert.equal(r.stats.posted, seen.length, 'a failed event is not posted again');
   assert.equal(r.stats.failed, Math.floor(seen.length / 10));
   const ids = new Set(seen.filter((e) => e.hook_event_name === 'SessionStart').map((e) => e.session_id));
   assert.equal(ids.size, r.stats.sessions, 'every loop is a new session');
-  assert.ok(Object.keys(r.stats.bySession).length === 6);
+  assert.deepEqual(Object.keys(r.stats.bySession).sort(), sessions.map((x) => x.name).sort(), 'every recording played');
+  assert.ok(Object.values(r.stats.bySession).some((c) => c >= 2), 'some recording played a second time');
 });
 
 test('replay against the real server: every event is accepted and the board counts them all', async () => {

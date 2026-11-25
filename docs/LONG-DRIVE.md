@@ -8,7 +8,7 @@ memory. It is run on request. `tools/check` and the gate never run it (nothing i
 ## Run it
 
     bash tools/long-drive                 # 4 simulated hours at 30x: about 8 minutes, results in /tmp/long-drive
-    bash tools/long-drive --smoke         # a 1 minute pass to see that the tool works
+    bash tools/long-drive --smoke         # about 65 simulated minutes in about a minute, to see that the tool works
     bash tools/long-drive --sim-hours 2 --speedup 60 --streams 3 --samples 5 --out /tmp/my-drive
 
 Needs `npm ci` (the script does it when `node_modules` is missing) and the preinstalled Playwright Chromium
@@ -22,11 +22,11 @@ if it is killed with SIGKILL they end with it); `node --test tests/long/cleanup.
 
 | Part | What |
 |---|---|
-| Replay (`tests/long/replay.js`) | The six recordings in `fixtures/sessions/*.jsonl`, 4 streams at once. A stream plays one recording after the other, in a loop; each loop is a NEW session (new session id, also inside `transcript_path`; the rest of each event is the recording's). The recordings have no timestamps, so the timing is made up and fixed: 4 s (simulated) between two events of a session, 60 s (plus 5 s per stream number) between sessions. Nothing is random: two runs post the same events in the same order. Events go to `POST /event` as the hooks do. A refused or unanswered POST is counted and NOT retried (a hook that cannot reach the server loses its event). |
+| Replay (`tests/long/replay.js`) | Every recording in `fixtures/sessions/*.jsonl` (ten on 2026-11-25: the six of the first run plus `ask-bypass`, `ask-question`, `plan-approve`, `plan-feedback`), 4 streams at once. A stream plays one recording after the other, in a loop; each loop is a NEW session (new session id, also inside `transcript_path`; the rest of each event is the recording's). The recordings have no timestamps, so the timing is made up and fixed: 4 s (simulated) between two events of a session, 60 s (plus 5 s per stream number) between sessions. Nothing is random: two runs post the same events in the same order. Events go to `POST /event` as the hooks do. A refused or unanswered POST is counted and NOT retried (a hook that cannot reach the server loses its event). |
 | Simulated clock | Simulated time runs `--speedup` times faster than wall time (default 30). It is paused while the page is compared with the board, so a comparison never sees a half-delivered event. It keeps running during a disturbance. |
 | Server | `node src/server/index.js PORT` as its own process, started with `tests/long/clock-skew.js` preloaded, with none of the Pi's flags (`--input`, `--sessions`, `--boot`, `--netmon`, `--thermal` need the wheel, tmux, the network, the Pi's sensors). |
 | Page | Playwright's Chromium, headless, 1280x400, the real `src/view/` page loaded from the server through a small proxy (`startProxy` in `tests/long/drive.js`) that forwards with the Host and Origin the server expects. The proxy is what makes "the network" cuttable; the hooks do not go through it. |
-| Comparison | After each disturbance and at each sample, with the replay stopped and every POST answered: `GET /state` of the server against what the page shows: `data-seq`, `data-view`, the state word, and for the four working views the tool and file lines. It polls for up to 20 s and counts a miss as a FAILED comparison (the run goes on). It does not compare the output lines, the command or the diff counts. |
+| Comparison | After each disturbance and at each sample, with the replay stopped and every POST answered: `GET /state` of the server against what the page shows: `data-seq`, `data-view`, the state word, for the four working views the tool and file lines (the file by `data-full`: a long path is shown cut in its middle), and for CLAUDE ASKS (`asking`) the tool line. It polls for up to 20 s and counts a miss as a FAILED comparison (the run goes on). It does not compare the output lines, the command, the diff counts or the question and options of CLAUDE ASKS. |
 | Measurements | Server RSS and peak RSS from `/proc/PID/status`. Page JS heap and node counts from CDP `Performance.getMetrics`, read before and after a forced garbage collection (`HeapProfiler.collectGarbage`), plus `document.getElementsByTagName('*').length`. At the start, at 7 evenly spread points and at the end. |
 
 Disturbances (`PLAN` in `drive.js`; positions are a fraction of the simulated run, outage lengths are wall time):
@@ -40,51 +40,60 @@ Disturbances (`PLAN` in `drive.js`; positions are a fraction of the simulated ru
 | `server-term` | `SIGTERM` (the clean stop), down 2 s, started again. |
 | `clock-jump` | `Date.now()` of the server jumps by +6 h, later by -2 h (a `SIGUSR2` makes the preload re-read the offset), and `Date.now()` of the page the same. Only `Date.now()` moves; timers stay monotonic. The kernel clock is not touched (that needs root). |
 
-## The run (2026-11-25, dev VM, 4 cores, Node 22, Playwright Chromium)
+## The run (2026-11-25, dev VM, 4 cores, Node 22, Playwright Chromium, ten recordings)
+
+This is the second full run. The first one (same day) was made with the six recordings there were before the
+AskUserQuestion and ExitPlanMode recordings came in; with those, the drive's comparison knew no `asking` view and
+compared the cut-down file text, so a smoke run then counted 3 false failed comparisons. The comparison was fixed
+(see Method) and the full run repeated; the numbers below are all of the repeated run.
 
 "Simulated 4 hours" really was: **240 simulated minutes in 480 s of running time (481 s total), speed-up factor 30**
-(wall clock time at 30 times its speed), **7805 events posted** (0.54 per simulated second, about 16 per wall second)
-from 4 streams over **420 sessions** (69 to 71 of each of the 6 recordings). 7366 were accepted; **439 were refused
-because the server was down** (48 + 50 + 341 across the three restarts, equal to the failures counted). Nothing was
-tuned after seeing a result; the plan and the numbers are those of the first full run.
+(wall clock time at 30 times its speed), **7889 events posted** (0.55 per simulated second, about 16 per wall second)
+from 4 streams over **414 sessions** (40 to 42 of each of the 10 recordings). 7473 were accepted; **416 were refused
+because the server was down** (67 + 27 + 322 across the three restarts, equal to the failures counted). Nothing was
+tuned after seeing a result.
 
 Memory (all from `long-drive.json`; the heap is the page's JS heap, "after GC" is after a forced collection):
 
 | Point | Sim min | Wall s | Events | Server RSS kB | Server peak RSS kB | JS heap kB | JS heap after GC kB | DOM nodes | JS listeners |
 |---|---|---|---|---|---|---|---|---|---|
-| start | 0 | 0 | 0 | 69012 | 69012 | 1884 | 1268 | 42 | 16 |
-| middle 1 | 30 | 61 | 990 | 70936 | 71616 | 1868 | 1448 | 41 | 16 |
-| middle 2 | 60 | 121 | 1939 | 69864 | 72004 | 1872 | 1453 | 42 | 16 |
-| middle 3 | 90 | 180 | 2928 | 70576 | 72004 | 1735 | 1457 | 41 | 16 |
-| middle 4 | 123 | 246 | 4010 | 71032 | 72252 | 2050 | 1470 | 41 | 16 |
-| middle 5 | 150 | 301 | 4886 | 69684 | 70712 | 1737 | 1473 | 42 | 16 |
-| middle 6 | 180 | 361 | 5866 | 70416 | 70848 | 1581 | 1473 | 41 | 16 |
-| middle 7 | 210 | 421 | 6836 | 70060 | 70652 | 1910 | 1475 | 41 | 16 |
-| end | 240 | 481 | 7805 | 70860 | 71956 | 1963 | 1475 | 41 | 16 |
+| start | 0 | 1 | 0 | 69080 | 69080 | 1889 | 1271 | 51 | 16 |
+| middle 1 | 30 | 61 | 996 | 70868 | 72300 | 1734 | 1485 | 57 | 16 |
+| middle 2 | 60 | 121 | 1975 | 70156 | 70668 | 1709 | 1500 | 50 | 16 |
+| middle 3 | 90 | 181 | 2959 | 70116 | 71228 | 1751 | 1500 | 56 | 16 |
+| middle 4 | 123 | 247 | 4044 | 71148 | 71912 | 2137 | 1513 | 50 | 16 |
+| middle 5 | 150 | 301 | 4928 | 69176 | 71216 | 1651 | 1518 | 50 | 16 |
+| middle 6 | 180 | 361 | 5922 | 70852 | 71760 | 1604 | 1519 | 56 | 16 |
+| middle 7 | 210 | 421 | 6916 | 73628 | 73640 | 1677 | 1521 | 56 | 16 |
+| end | 240 | 481 | 7889 | 73980 | 74856 | 1788 | 1529 | 56 | 16 |
 
-What the numbers show: nothing grew. DOM nodes stayed at 41 to 42 and listeners at 16 (one document). The heap after
-GC went from 1268 to 1448 kB in the first 30 minutes (the first states drawn) and then rose by 27 kB over the next
-3.5 hours (1448 to 1475, in steps of 0 to 13 kB per half hour; it is flat at the end). Server RSS moved between
-69.0 and 71.0 MB with no trend (the server was restarted three times; each sample is of the process running then, so
-"RSS at the end" is 70.9 MB of a server that had run since 202 simulated minutes). The one thing that grows with
-the board is the size of `/state` (391 to 435 bytes, depending on which sessions are on it, no trend). The server's own log held only its four start banners.
+What the numbers show: the page did not grow. DOM nodes stayed between 50 and 57 (which view is drawn; the CLAUDE ASKS
+block makes the page larger than in the first run, 41 to 42) and listeners at 16 (one document). The heap after GC
+went from 1271 to 1485 kB in the first 30 minutes (the first states drawn) and then rose by 44 kB over the next
+3.5 hours (1485 to 1529, in steps of 0 to 15 kB per half hour, smaller towards the end). Server RSS moved between
+69.2 and 71.1 MB for the first three servers; the fourth (running since the restart at 203 simulated minutes) was at
+73.6 and 74.0 MB at its two samples. Each sample is of the process running then, so two samples of one 37-minute
+process are not a trend this run can show either way (bench LD-4 is the real-time run). The size of `/state` was
+404 to 500 bytes, depending on which sessions are on it, no trend. The server's own log held only its four start
+banners (20 lines).
 
 Disturbances (each: the page was compared with `GET /state` afterwards, replay stopped):
 
 | # | Sim min | Disturbance | Page saw | Link back after | Events lost | Page agreed with the board |
 |---|---|---|---|---|---|---|
-| 1 | 20 | sse-reset | NO LINK | 1030 ms (the 1 s EventSource retry) | 0 | yes (view permission, seq 644) |
-| 2 | 50 | server-kill, 3 s down | NO LINK | 925 ms after the server listened | 48 | yes (working, seq 16: a fresh board) |
-| 3 | 80 | clock-jump +6 h | no change | 3 ms (never down) | 0 | yes (working, seq 986) |
-| 4 | 123 | network-loss, 25 s | NO LINK | 108 ms after it came back | 0 | yes (working, seq 2385) |
-| 5 | 141 | server-term, 2 s down | NO LINK | 826 ms after the server listened | 50 | yes (working, seq 11) |
-| 6 | 169 | clock-jump -2 h | no change | 3 ms | 0 | yes (working, seq 911) |
-| 7 | 202 | server-kill, 20 s down | NO LINK | 125 ms after the server listened | 341 | yes (working, seq 3) |
-| 8 | 218 | sse-drop, 4 s | NO LINK | 112 ms after it came back | 0 | yes (permission, seq 518) |
+| 1 | 20 | sse-reset | NO LINK | 1082 ms (the 1 s EventSource retry) | 0 | yes (view asking, seq 662) |
+| 2 | 50 | server-kill, 3 s down | NO LINK | 845 ms after the server listened | 67 | yes (working, seq 18: a fresh board) |
+| 3 | 80 | clock-jump +6 h | no change | 1 ms (never down) | 0 | yes (working, seq 958) |
+| 4 | 123 | network-loss, 25 s | NO LINK | 105 ms after it came back | 0 | yes (working, seq 2388) |
+| 5 | 141 | server-term, 2 s down | NO LINK | 834 ms after the server listened | 27 | yes (working, seq 14) |
+| 6 | 169 | clock-jump -2 h | no change | 9 ms | 0 | yes (done, seq 947) |
+| 7 | 203 | server-kill, 20 s down | NO LINK | 861 ms after the server listened | 322 | yes (working, seq 7) |
+| 8 | 218 | sse-drop, 4 s | NO LINK | 108 ms after it came back | 0 | yes (asking, seq 520) |
 
 Start, the 7 samples and the end were compared too: 0 failed comparisons of 17. The page raised no uncaught error and
-did not crash. It logged 56 console errors, all `Failed to load resource: net::ERR_...` of the event stream being cut
-(connection reset, empty response, incomplete chunked encoding); the smoke run shows the same kinds.
+did not crash. It logged 57 console errors, all `Failed to load resource: net::ERR_...` of the event stream being cut
+(34 empty response, 15 connection reset, 5 incomplete chunked encoding, 3 socket not connected); the smoke run shows
+the same kinds.
 
 ## What this does NOT show
 
@@ -110,7 +119,7 @@ did not crash. It logged 56 console errors, all `Failed to load resource: net::E
   disturbances.
 
 A restart of the server shows, by design (no persistence, `src/server/README.md`), a fresh board: after the restarts
-the bar showed what the first events afterwards made of it (for example WORKING with sequence number 3), not what the
+the bar showed what the first events afterwards made of it (for example WORKING with sequence number 7), not what the
 sessions had been doing before. The comparison is against the board the server has, as the task asked.
 
 ## Files
