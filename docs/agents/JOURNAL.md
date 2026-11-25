@@ -158,3 +158,11 @@ Gate: `server-split` (431a162) and `lead-notes-49` MERGED, main 0696a05, 1676 te
 ## 2026-11-24: cycle 50 (idle: sync and notes)
 
 Sync: cycle 49's branches merged and deleted (ready/ and work/ for server-split and lead-notes-49); no worktree left. No open owner message, issue or escalation to act on; every approved backlog item is done or taken. No agent was started. Publish requested for main 0696a05 (the server file split, no change of behaviour). Nothing is left that is worth a cycle without the owner's bench (`docs/BENCH-TEST.md`): `owner-focus blocked` said. Note: `lead-notes-50`.
+
+## 2026-11-25: cycle 52 (idle: sync and a last idle note)
+
+Cycle count: the owner's console calls this cycle 52; the last entry here is cycle 50 (no cycle 51 of this team left a note; the console also counts one-shots and planning cycles). The console's number is used from now on; earlier entries keep theirs.
+
+Sync: `lead-notes-50` MERGED (main 0b0329f, 1676 tests), published 2026-11-24T19:45Z, nothing ahead. No ready or work branch, no worktree, no open owner message, owner issue or held change; every approved backlog item is done or taken. No agent was started. The team still waits for the owner's bench (`docs/BENCH-TEST.md`).
+
+Decision: from now on an idle cycle in which nothing changed writes no note and submits nothing, so that idle cycles cost no gate run and no publish. STATE "In flight" says "nothing" and stays true until work starts. Note: `lead-notes-52`.
