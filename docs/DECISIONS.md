@@ -1995,16 +1995,22 @@ binds 127.0.0.1 only.
   A payload with too little gives `question: null` / `title: null`: the bar says "Claude asks: look at the terminal
   when parked" (never seen in the recordings: every question and plan carried its text).
 - **Bar:** the question (or "Plan: <title>") in big type, the state word's size when it fits, at most 2 lines with
-  an ellipsis; the options numbered in a 2x2 grid, each one line with an ellipsis; "pick any", "1 of N", "+N more"
+  an ellipsis, never under the 4.0 mm size (`askFontPx`: with too little room the text is cut instead); the options numbered in a 2x2 grid, each one line with an ellipsis; "pick any", "1 of N", "+N more"
   at the right of row A; for a plan "<N> steps" and "Approve in the terminal when parked". Worst case (200 code
   points, four 60-code-point labels, CJK, one unbroken token) fits at 1280x400 (`emulator/tests/asking.spec.js`).
   Gallery: `asking.png`, `asking-plan.png`, `asking-long.png`.
 - **Buttons:** a press or deny tap under CLAUDE ASKS does nothing (it must not allow the call without an answer, and
   must not open the list over the question). revview's PermissionRequest hook still holds the request as for any
-  prompt; the terminal picker stays answerable while it waits (recorded for permission prompts, `fixtures/buttons`).
+  prompt (up to 540 s). **Tried with the real hook** (2026-11-25, Claude Code 2.1.331, haiku, `emulator/run.sh --live`:
+  real hook and server, the hook process alive and waiting): the terminal picker is on screen while the hook holds the
+  request, for a question (AskUserQuestion: the options, "Type something", "Chat about this") and for a plan
+  (ExitPlanMode: "Ready to code?", the three choices); answering in the terminal ended the hold. So the request stays
+  held and the terminal stays answerable; part 2 can answer through the picker. The events did not differ from the
+  recordings (no new fixture). Not tried: 540 s of holding. Test: `tests/unit/server-permission.test.js`.
 - **Read aloud:** "Claude asks: <question> Options: 1, Red. 2, Green. 3, Blue." (plus "And N more.", "Pick one or
   more.", "Claude asks 2 questions. First: ..."); a plan: "Claude has a plan: <title>. 3 steps. Approve it in the
-  terminal when parked." With `speakOnStop` on, a new question or plan of the selected session is read at once.
+  terminal when parked." With `speakOnStop` on, a new question or plan of the selected session is read out when its PermissionRequest arrives (`POST /permission`
+  calls the read-aloud `onEvent` after the board took the event, as `/event` does; a speech failure is logged only).
 - **For part 2 (answering from the buttons):** the pending entry and `pendingPrompts()` give session, agent, `since`
   and `ask`; the entry is tied to the call's `tool_use_id` when it fits. The option labels on the bar are cut for
   display: the exact labels for an answer must come from the PermissionRequest event itself (the hook has the whole

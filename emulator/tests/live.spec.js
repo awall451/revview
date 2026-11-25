@@ -79,7 +79,16 @@ async function expectShows(page, state) {
   // a long path is cut in its middle (data-full holds all of it)
   const file = compacting ? '' : state.file || '';
   await expect(page.locator('#file')).toHaveAttribute('data-full', file);
-  if (!(await page.locator('#file').textContent()).includes('…')) await expect(page.locator('#file')).toHaveText(file);
+  const shownFile = await page.locator('#file').textContent();
+  if (shownFile.includes('…')) {
+    // cut: a real middle cut, shorter than the path, from its start and its end
+    const at = shownFile.indexOf('…');
+    // (a basename that is itself too long loses its directory: src/view/fit.js, then the start is a start of the basename)
+    const head = shownFile.slice(0, at);
+    expect(file.startsWith(head) || file.slice(file.lastIndexOf('/') + 1).startsWith(head)).toBe(true);
+    expect(file.endsWith(shownFile.slice(at + 1))).toBe(true);
+    expect(shownFile.length).toBeLessThan(file.length);
+  } else await expect(page.locator('#file')).toHaveText(file);
   const command = state.command || '';
   await expect(page.locator('#command')).toHaveAttribute('data-full', command);
   // the displayed command has a U+2060 after each '-' (no line break after "--"); data-full does not

@@ -1,4 +1,4 @@
-import { pendingPrompts } from '../state/index.js';
+import { pendingPrompts, selectedKey } from '../state/index.js';
 import { text } from './http.js';
 import { readBody } from './routes-event.js';
 
@@ -19,6 +19,11 @@ export function postPermission(ctx, req, res) {
     }
     const before = ctx.board;
     if (!ctx.apply(ev)) return text(res, 500, 'state core failed; event ignored');
+    try { // a new question or plan is read out as on /event; a speech failure never breaks this route
+      ctx.readAloud?.onEvent(ev, ctx.board, selectedKey(ctx.board));
+    } catch (e) {
+      console.error('read aloud failed:', e instanceof Error ? e.message : e);
+    }
     if (!ctx.sessions) return res.writeHead(204).end(); // no buttons can answer: the terminal dialog stays
     const agent = typeof ev.agent_id === 'string' && ev.agent_id !== '' ? ev.agent_id : '';
     // only an entry THIS event created (the board changed and the entry is from this tick) is bound, so its

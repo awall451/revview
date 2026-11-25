@@ -1,7 +1,7 @@
 /* global navigator */
 // The glance view: renders a reducer state (see src/state/README.md) as a state band, a row for tool and file, a command area and an output area.
 import { mmToPx } from './panel.js';
-import { TYPE_MM } from './type.js';
+import { TYPE_MM, RANGE_MM, askFontPx } from './type.js';
 import { middleEllipsis, fitWhere, fitPrefix, formatCount } from './fit.js';
 
 const LABELS = {
@@ -468,8 +468,8 @@ function renderAsk(input, noteRows) {
   const rowPx = parseFloat(getComputedStyle(el['ask-hint']).lineHeight) || 40;
   const below = (Math.ceil(options.length / 2) + (steps !== '' ? 1 : 0) + (hint ? 1 : 0) + noteRows) * rowPx;
   const stateFont = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--state-font')) || 55;
-  const font = Math.min(stateFont, Math.floor(((inner - rowPx - below) / ASK_LINES / ASK_LINE_HEIGHT) * 10) / 10);
   const q = el['ask-question'];
+  const font = askFontPx(stateFont, (inner - rowPx - below) / ASK_LINES / ASK_LINE_HEIGHT, mmToPx(RANGE_MM.ask[0]) / capRatio(q));
   q.style.fontSize = `${font}px`;
   q.dataset.full = big;
   const limit = ASK_LINES * font * ASK_LINE_HEIGHT + 1;

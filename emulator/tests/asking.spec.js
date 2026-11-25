@@ -54,6 +54,19 @@ const lines = (page) => page.locator('#ask-question').evaluate((e) => {
 });
 
 test.describe('question', () => {
+  test('with almost no room the question stays at the 4.0 mm size (cut with an ellipsis), never smaller', async ({ openView, page }) => {
+    const long = 'Which of these many colours, shapes, sizes and materials should the new file use, and why? '.repeat(3).trim();
+    const state = question({ question: long, options: ['One', 'Two', 'Three', 'Four'] }, { offline: true, voice: 'none' });
+    await openView(state);
+    await page.addStyleTag({ content: '#lower { height: 200px !important; }' }); // less room than the rows below need
+    await page.evaluate((s) => window.revviewRender(s), state);
+    const mm = (await textSizeMm(page.locator('#ask-question'))).capHeightMm;
+    expect(mm).toBeGreaterThanOrEqual(RANGE_MM.ask[0]);
+    expect(mm).toBeLessThan(RANGE_MM.ask[0] + 0.3); // the floor, not the roomy size
+    expect(await full(page, '#ask-question')).toBe(long);
+    expect(await text(page, '#ask-question')).toMatch(/…$/);
+  });
+
   test('the question in big type, the options numbered in a grid', async ({ openView, page }) => {
     await openView(question());
     await expect(page.locator('body')).toHaveAttribute('data-view', 'asking');

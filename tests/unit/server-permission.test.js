@@ -310,3 +310,24 @@ test('a request that adds no prompt to the bar is not bound to an older prompt o
   assert.deepEqual(await real.p, { status: 200, body: '{"behavior":"allow"}' });
   assert.equal(await pending(twin.p), 'pending');
 });
+
+// A question or a plan: the real hook was tried with Claude Code (docs/DECISIONS.md, questions and plans 1): the terminal picker
+// is on screen while revview's hook holds the request, so the request stays held (a later part answers it through the picker)
+for (const [name, file, tool] of [['question', 'sessions/ask-question.jsonl', 'AskUserQuestion'], ['plan', 'sessions/plan-approve.jsonl', 'ExitPlanMode']]) {
+  test(`a ${name} on /permission shows CLAUDE ASKS and stays held, not answered`, async (t) => {
+    const L = readLines(file);
+    const c = await setup(t);
+    c.s.select(L[0].session_id);
+    const at = L.findIndex((e) => e.hook_event_name === 'PermissionRequest' && e.tool_name === tool);
+    for (const e of L.slice(0, at)) await c.ev(e);
+    const req = L[at];
+    const r = c.perm(req);
+    for (let i = 0; i < 100 && (await c.state()).state.view !== 'asking'; i++) await sleep(10);
+    assert.equal((await c.state()).state.view, 'asking');
+    assert.equal(c.s.permissionsWaiting(), 1);
+    c.ctx.now = 1500;
+    await c.press('F21'); // a press under CLAUDE ASKS does nothing
+    assert.equal(await pending(r.p), 'pending');
+    assert.equal(c.s.permissionsWaiting(), 1);
+  });
+}

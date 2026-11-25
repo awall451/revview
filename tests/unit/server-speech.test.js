@@ -154,3 +154,34 @@ test('parseArgs: --speech file and REVVIEW_SPEECH', () => {
     else process.env.REVVIEW_SPEECH = old;
   }
 });
+
+// POST /permission is the only way a PermissionRequest arrives in the real server
+const ASK = {
+  hook_event_name: 'PermissionRequest', session_id: A, tool_name: 'AskUserQuestion',
+  tool_input: { questions: [{ question: 'Which colour should the new file use?', header: 'Colour', multiSelect: false, options: [{ label: 'Red', description: 'r' }, { label: 'Green', description: 'g' }] }] },
+};
+// a main-thread request needs a running turn: the prompt first, then the request as the hook posts it
+const permit = async (c, body) => {
+  await c.ev({ hook_event_name: 'UserPromptSubmit', session_id: body.session_id, prompt: 'go' });
+  return fetch(`${c.s.url}/permission`, { method: 'POST', body: JSON.stringify(body) });
+};
+
+test('speakOnStop: a question posted to /permission is read out by itself', T, () => withServer({ speech: { speakOnStop: true } }, async (c) => {
+  assert.equal((await permit(c, ASK)).status, 204);
+  const [t] = await until(() => (texts(c.dir).length ? texts(c.dir) : null), 'the spoken question');
+  assert.match(t, /Which colour should the new file use\?/);
+  assert.match(t, /Red/);
+}));
+
+test('a question on /permission is silent without speakOnStop', T, () => withServer({}, async (c) => {
+  assert.equal((await permit(c, ASK)).status, 204);
+  await sleep(400);
+  assert.deepEqual(texts(c.dir), []);
+}));
+
+test('speakOnStop: a question of another session, and an ordinary permission request, are not read out', T, () => withServer({ speech: { speakOnStop: true } }, async (c) => {
+  assert.equal((await permit(c, { ...ASK, session_id: B })).status, 204);
+  assert.equal((await permit(c, { hook_event_name: 'PermissionRequest', session_id: A, tool_name: 'Bash', tool_input: { command: 'ls' } })).status, 204);
+  await sleep(400);
+  assert.deepEqual(texts(c.dir), []);
+}));

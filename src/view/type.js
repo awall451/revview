@@ -8,3 +8,7 @@
 export const TYPE_MM = Object.freeze({ state: 6.05, detail: 3.55 });
 export const RANGE_MM = Object.freeze({ state: Object.freeze([5.8, 6.3]), text: Object.freeze([3.3, 3.7]), ask: Object.freeze([4.0, 6.3]) });
 // ask: the question of CLAUDE ASKS is larger than the 3.55 mm text: the state word's size when it fits, else the largest that does (never under 4.0 mm).
+
+// The font size (px) of the question of CLAUDE ASKS: the state word's size when it fits, else the largest that does
+// (`room` = the height the two lines may take, in px of font size), and never under minPx (the 4.0 mm size: the text is then cut instead).
+export const askFontPx = (stateFont, room, minPx) => Math.max(minPx, Math.min(stateFont, Math.floor(room * 10) / 10));
