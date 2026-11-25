@@ -45,6 +45,7 @@ Index (one entry per line, in file order; a "superseded" mark points to the newe
 - Pi facts checked against the trixie packages (cycle 42)
 - Push-to-talk while a permission prompt is open (cycle 47)
 - 2026-11-24: Trust boundary (cycle 47, owner issue #23)
+- 2026-11-25: Questions and plans 1 (cycle 59, owner issue #27): the bar shows AskUserQuestion and ExitPlanMode
 
 ## 2026-11-21: stack and skeleton (set by the owner, recorded here)
 
@@ -1950,3 +1951,65 @@ binds 127.0.0.1 only.
 - **Checked:** `targetOf` (`board.js`) already ignores quiet placeholders for id-less events (fixed in "core hardening").
 - **Notes:** this entry comes with an index at the top of this file and "superseded" notes under three older headings
   (nothing deleted, no text rewritten).
+
+## 2026-11-25: Questions and plans 1 (cycle 59, owner issue #27)
+
+**Recorded first** (Claude Code 2.1.331, model haiku, 2026-11-25; `fixtures/sessions/ask-question`, `ask-bypass`,
+`plan-approve`, `plan-feedback`; how in `fixtures/README.md`). What the hooks carried:
+
+- **AskUserQuestion** fires `PreToolUse`, then `PermissionRequest`, then `Notification` `permission_prompt`
+  ("Claude needs your permission"), in every mode tried: default, acceptEdits and bypassPermissions. Pre and
+  PermissionRequest carry the whole call: `tool_input.questions[]` with `question`, `header`, `options[]`
+  (`label`, `description`) and `multiSelect`. Two questions in one call are one tool call: one Pre, one request,
+  one Notification; no hook fires between the two questions on the terminal, so the bar cannot know which one is
+  on screen.
+- **Answered:** `PostToolUse` with `tool_input.answers` / `tool_response.answers` (question text -> chosen label),
+  then `PostToolBatch` (a new event name, ignored). **Dismissed with Esc:** nothing at all fired afterwards (no Post,
+  no PermissionDenied, no Stop, no `idle_prompt` within about 3 minutes) until the next event (here `SessionEnd`).
+- **ExitPlanMode** (plan mode) fires `PreToolUse` and `PermissionRequest` with `tool_input.plan` (the plan as
+  markdown, first line `# Plan: <title>`, a `## Steps` list) and `planFilePath`, then `Notification`
+  `permission_prompt` ("Claude Code needs your approval for the plan"). The terminal's three choices (Yes and use
+  auto mode / Yes, manually approve edits / Tell Claude what to change) are not in any hook.
+- **Plan approved:** `PostToolUse` ExitPlanMode with an empty `tool_input` and the plan in `tool_response`; the
+  `permission_mode` of later events changes (here to `auto`). **Rejected with Esc:** nothing fired until the driver's
+  next prompt. **"Tell Claude what to change" with text:** a plain `UserPromptSubmit` whose `prompt` is that text.
+
+**Decisions.**
+
+- **One new state, `asking`** (view and activity, in `STATES` after `permission`), word CLAUDE ASKS, a speech
+  bubble, lime `#e6f25a` (the layout test wants one band colour per view; black on it is about 17:1). It is a
+  pending prompt like a permission prompt (`board.js`): the PermissionRequest of AskUserQuestion or ExitPlanMode
+  makes the entry, which carries `ask` (`src/state/ask.js`); a bare `permission_prompt` Notification while such a
+  call is open takes the ask of that call. So it sits beside NEEDS PERMISSION with the same rank: it pre-empts the
+  shown session, outranks OFFLINE, is never dropped by the session cap, refuses push-to-talk ("Answer the prompt
+  first", as for a permission prompt: Space would land in the picker), and clears the same way: the call's Post
+  (answered), Stop, the driver's next prompt (a rejected plan, a dismissed question, plan feedback), `idle_prompt`,
+  SessionEnd. A dismissed question with no next event stays on the bar until one comes (recorded: none comes); the
+  same holds for a permission prompt dismissed with Esc.
+- **`ask` in the view state** (null in every other view): question `{ kind: 'question', question, options, more,
+  multiSelect, questions }`: the first question (200 code points), up to four option labels (60 each; the schema
+  allows four, more are counted in `more`), `questions` = how many in the call (the bar says "1 of N"); the
+  descriptions and the header are not kept. Plan `{ kind: 'plan', title, steps }`: the first markdown heading (a
+  leading "Plan:" dropped, 120 code points) and the numbered items under the first "Steps" heading (else every
+  unindented numbered item; none: null). Texts are one line: control characters and ANSI out, white space folded.
+  A payload with too little gives `question: null` / `title: null`: the bar says "Claude asks: look at the terminal
+  when parked" (never seen in the recordings: every question and plan carried its text).
+- **Bar:** the question (or "Plan: <title>") in big type, the state word's size when it fits, at most 2 lines with
+  an ellipsis; the options numbered in a 2x2 grid, each one line with an ellipsis; "pick any", "1 of N", "+N more"
+  at the right of row A; for a plan "<N> steps" and "Approve in the terminal when parked". Worst case (200 code
+  points, four 60-code-point labels, CJK, one unbroken token) fits at 1280x400 (`emulator/tests/asking.spec.js`).
+  Gallery: `asking.png`, `asking-plan.png`, `asking-long.png`.
+- **Buttons:** a press or deny tap under CLAUDE ASKS does nothing (it must not allow the call without an answer, and
+  must not open the list over the question). revview's PermissionRequest hook still holds the request as for any
+  prompt; the terminal picker stays answerable while it waits (recorded for permission prompts, `fixtures/buttons`).
+- **Read aloud:** "Claude asks: <question> Options: 1, Red. 2, Green. 3, Blue." (plus "And N more.", "Pick one or
+  more.", "Claude asks 2 questions. First: ..."); a plan: "Claude has a plan: <title>. 3 steps. Approve it in the
+  terminal when parked." With `speakOnStop` on, a new question or plan of the selected session is read at once.
+- **For part 2 (answering from the buttons):** the pending entry and `pendingPrompts()` give session, agent, `since`
+  and `ask`; the entry is tied to the call's `tool_use_id` when it fits. The option labels on the bar are cut for
+  display: the exact labels for an answer must come from the PermissionRequest event itself (the hook has the whole
+  `tool_input`). Which option is highlighted is not in the state yet. Whether a PermissionRequest decision can answer
+  the question (an `updatedInput` with `answers`) was not tried.
+- **Not solved:** which of several questions is on screen; a dismissed question shown until the next event; the
+  plan's choices are not shown (not in the hooks).
+

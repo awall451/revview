@@ -373,3 +373,17 @@ DECISIONS "Push-to-talk while a permission prompt is open (cycle 47)".
 | # | Try | Should happen | State |
 |---|---|---|---|
 | PP-1 | On the Pi with the wheel: give the selected session a permission prompt (a command not on the allow list), tap push-to-talk once. Then answer the prompt with the wheel and tap push-to-talk again. Also once with the prompt in a session that is NOT selected | With the prompt pending: the bar shows "Answer the prompt first", the dialog on the pane is unchanged (`1. Yes` still highlighted, nothing ran), no recording starts, and the journal has `action push-to-talk: not done (permission prompt shown)`. After the answer the note is gone and the tap sends Space as usual. A prompt in another session does not block the tap on the selected one | untested |
+
+## Questions and plans 1 (cycle 59)
+
+Emulator and recorded hook events only (Claude Code 2.1.331 on the VM); never seen on the panel or in a car.
+DECISIONS "Questions and plans 1".
+
+| # | Try | Should happen | State |
+|---|---|---|---|
+| QP-1 | On the Pi, with the bar in the car or in daylight: ask Claude "Use the AskUserQuestion tool to ask me which colour to use, with three options" | Within a second the bar shows CLAUDE ASKS (lime band, speech bubble), the question in big type and the options numbered 1-3. Note whether the question and options read at a glance, whether the lime band is told apart from the amber NEEDS PERMISSION at a glance, and whether the Pi's fonts cut anything the emulator did not | untested |
+| QP-2 | Same, a question with a long text and four long options, and a call with two questions | Nothing overflows the panel; long texts end with an ellipsis; "1 of 2" shows; after answering both in the terminal the bar goes back to WORKING | untested |
+| QP-3 | Plan mode (Shift+Tab until "plan mode"), ask for a short plan | CLAUDE ASKS with "Plan: <title>", the step count and "Approve in the terminal when parked". Approve: WORKING. Reject with Esc: CLAUDE ASKS stays until you speak or type the next prompt (recorded on the VM: no hook fires on Esc) | untested |
+| QP-4 | With `speakOnStop` on and a speech engine: get a question, then a plan; also press read aloud | The question and its numbered options are spoken; the plan's title and step count are spoken. Note whether the voice is understandable over road noise | untested |
+| QP-5 | While CLAUDE ASKS shows: tap the wheel's press, deny and push-to-talk | Press and deny do nothing (the picker on the pane is unchanged); push-to-talk shows "Answer the prompt first" | untested |
+
