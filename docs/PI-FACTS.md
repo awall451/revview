@@ -16,6 +16,21 @@ package). Rows E11 and E13 count as checked but say which part was not. Download
 `/tmp` only, never installed, nothing from them was run. "Checked" does **not** mean "works on a Pi": every
 `docs/BENCH-TEST.md` item stays `untested`.
 
+**Status, 2026-11-25 (cycle 59): the scripts were run against a tree of the real packages.** `pi/tree/build.sh`
+rebuilds the tree on request (43 packages pinned with their SHA256 in `pi/tree/packages.lock`; each `.deb` hash and
+each index hash is checked against the archive's `InRelease`; the `InRelease` signature itself is checked only when
+a keyring is given, and this VM has neither archive's key). `pi/tree/check.sh` runs `install.sh --root`,
+`readonly.sh` (status and dry runs) and `kiosk.sh` (browser replaced by a recording stub) against a copy of the tree
+and checks every path, command, unit name and key, raspi-config function and edit, and Chromium switch they use.
+Run on 2026-11-25: 137 ok, 0 differences left after the fixes in section 9; the names it relies on are pinned for
+the gate in `tests/unit/fixtures/pi/real-tree/facts.txt` (test `tests/unit/pi-real-tree.test.js`, no network).
+Rows changed this cycle: S16 from memory to **fixed** (the log command shows nothing on Pi OS, see the row), E11
+from partly to fully **checked**; E13 stays partly checked (the default PBKDF is compiled in and only
+`cryptsetup --help` shows it: that is running an ARM program); 6 new rows in section 9 (4 **fixed**, 2 checked). Still `from memory`: **22** rows (all Pi-only or in no package). **What the tree cannot
+prove:** no ARM program runs here (no root, no ARM emulator) and nothing from the tree is executed, so this proves
+paths, file formats and unit files, not behaviour; and the tree is not an image (`cmdline.txt`, `config.txt`,
+`/etc/fstab`, users and the mount table were seeded from the team's fixtures).
+
 Rules for a later cycle:
 - A row can become `checked against <package> <version>` only with that package's evidence (its index entry, or a
   file from its unpacked `.deb`). That proves **names and file layouts only**. It does not prove that anything works
@@ -153,7 +168,7 @@ in the tests (`pi-readonly.test.js:12`, `pi-install.test.js:135`). For every row
 | S13 | `udevadm control --reload`, `udevadm trigger --subsystem-match=input`, `systemctl daemon-reload` | install.sh:202-204; data-setup.sh:350-351 | unpack udev/systemd: `man8/udevadm.8.gz` | checked against udev/systemd 257.13-1~deb13u1 (udevadm(8) documents `--reload` and `--subsystem-match`) (names/layout only) |
 | S14 | `/etc/profile.d/*.sh` is sourced by the terminals the kiosk user opens (sets `CLAUDE_CONFIG_DIR`) | data.mjs:274; README:179-180; bench S4B-12 | unpack base-files (D): `etc/profile` (sources profile.d for login shells only); whether a desktop terminal is a login shell: Pi S4B-12 | checked against base-files 13.8+deb13u8 (`/etc/profile` sources `/etc/profile.d/*.sh`, login shells only); desktop terminal: Pi S4B-12 (names/layout only) |
 | S15 | The unit's `DISABLE_AUTOUPDATER=1` turns Claude Code's auto-updater off (the name is in the 2.1.330 binary, the effect is from memory) | revview.service:34-36; DECISIONS:1185 | Not a Pi package. Pi: S4B-13 | from memory (not a Pi package) |
-| S16 | `journalctl --user -u revview` shows the user unit's log | install.sh:216; README:249 | Pi: P11 | from memory (Pi only) |
+| S16 | `journalctl --user -u revview` shows the user unit's log | install.sh:216; README:249 | Pi: P11 | fixed (cycle 59): was `journalctl --user -u revview`, now `sudo journalctl --user-unit=revview` per systemd 257.13-1~deb13u1 journalctl(1) ("`--user` only works if persistent logging is enabled") and raspberrypi-sys-mods 1:20260914 `usr/lib/systemd/journald.conf.d/40-rpi-volatile-storage.conf` (`Storage=volatile`); install.sh, pi/README.md and BENCH-TEST changed (DECISIONS and docs/agents still name the old command). That the lines show: Pi P11 |
 
 ## 7. Encrypted data partition (data-setup.sh, data.mjs, unlock.sh)
 
@@ -173,9 +188,9 @@ and `mounts` are WRITTEN FROM MEMORY (`fixtures/pi/data/README.md`).
 | E08 | `mountpoint -q DIR` exits 0 when DIR is a mount point | unlock.sh:7, 110; stub pi-unlock.test.js:17 | unpack util-linux: `man1/mountpoint.1.gz` | checked against util-linux 2.41.5-0+deb13u1 (mountpoint(1) `-q`) (names/layout only) |
 | E09 | Mount options: stick `ro,nosuid,nodev,noexec` (unlock) and `rw,nosuid,nodev,noexec` (set-up) on vfat/exfat/ext4; data `noatime,nosuid,nodev` | unlock.sh:145, 173; data-setup.sh:226, 277 | unpack mount (D): `man8/mount.8.gz`; Pi S4B-5 | checked against mount 2.41.5-0+deb13u1 (mount(8) option names) (names/layout only) |
 | E10 | `runuser -u USER -- CMD` | install.sh:196; data-setup.sh:287; stub pi-data-setup.test.js:37 | unpack util-linux: `man1/runuser.1.gz` | checked against util-linux 2.41.5-0+deb13u1 (runuser(1)) (names/layout only) |
-| E11 | `flock FD`, `stat -c %u` / `%s` (GNU coreutils) | unlock.sh:76, 139, 154 | unpack util-linux: `man1/flock.1.gz`; coreutils: `man1/stat.1.gz` | checked against util-linux 2.41.5-0+deb13u1 (flock(1) fd form); partly: `stat -c` (coreutils) was not unpacked, stays from memory (names/layout only) |
+| E11 | `flock FD`, `stat -c %u` / `%s` (GNU coreutils) | unlock.sh:76, 139, 154 | unpack util-linux: `man1/flock.1.gz`; coreutils: `man1/stat.1.gz` | checked against util-linux 2.41.5-0+deb13u1 (flock(1) fd form) and coreutils 9.7-3 (stat(1): `-c`/`--format`, `%u`, `%s`; cycle 59) (names/layout only) |
 | E12 | The mount table lists the data's source as `/dev/mapper/revview-data`, not `/dev/dm-N` | DECISIONS:1283-1285; src/server/datalock.js (reads /proc/self/mountinfo) | Pi only: `grep revview-data /proc/self/mountinfo` (S4B-5) | from memory (Pi only) |
-| E13 | `cryptsetup luksKillSlot`, `luksDump` shows the PBKDF per slot, the passphrase slot defaults to argon2id; `.credentials.json` is the sign-in file name | docs/REVOKE.md:10, 40-60; DECISIONS:1216; bench S4B-19 | man `cryptsetup-luksKillSlot.8.gz`, `cryptsetup-luksDump.8.gz`, and the compiled-in default PBKDF (`man8/cryptsetup.8.gz`, "--pbkdf"). `.credentials.json`: not a Pi package | checked against cryptsetup 2:2.7.5-2 (luksKillSlot(8), luksDump(8)); partly: the compiled-in default PBKDF (argon2id) was not verified, stays from memory (names/layout only) |
+| E13 | `cryptsetup luksKillSlot`, `luksDump` shows the PBKDF per slot, the passphrase slot defaults to argon2id; `.credentials.json` is the sign-in file name | docs/REVOKE.md:10, 40-60; DECISIONS:1216; bench S4B-19 | man `cryptsetup-luksKillSlot.8.gz`, `cryptsetup-luksDump.8.gz`, and the compiled-in default PBKDF (`man8/cryptsetup.8.gz`, "--pbkdf"). `.credentials.json`: not a Pi package | checked against cryptsetup 2:2.7.5-2 (luksKillSlot(8), luksDump(8)); partly: the default PBKDF for LUKS2 "is set during compilation time and is available in `cryptsetup --help` output" (cryptsetup-luksFormat(8)); the binary and libcryptsetup12 contain the string `argon2id` but that does not say it is the default; running `cryptsetup --help` is running an ARM program, so argon2id stays from memory (bench S4B-19) (names/layout only) |
 
 ## 8. Owner steps and other Pi-side facts
 
@@ -205,3 +220,26 @@ and `mounts` are WRITTEN FROM MEMORY (`fixtures/pi/data/README.md`).
    If it does not, fix `pi/` and the fixture (test first, no test deleted or weakened), set the status to
    `fixed: was X, now Y per <package> <version>`, and add a line to DECISIONS. `only on the Pi` rows stay
    `from memory` until the bench. Every BENCH-TEST item stays `untested`.
+
+## 9. Found by running the scripts against the real tree (cycle 59, 2026-11-25)
+
+Tree: `pi/tree/build.sh` (packages and versions in `pi/tree/packages.lock`, among them raspi-config-core 20261026+2,
+overlayroot 0.18.debian14, systemd 257.13-1~deb13u1, raspberrypi-sys-mods 1:20260914, rpd-wayland-core 1.39, chromium
+1:156.0.8078.108-1~deb13u1+rpt1). Check: `pi/tree/check.sh`. Read only; nothing from the tree was run.
+
+| # | Fact | Used in | Evidence | Status |
+|---|---|---|---|---|
+| O10 | An `overlayroot=` token in cmdline.txt turns the overlay on | readonly.sh status and enable checks; install.sh note | overlayroot `init-bottom/overlayroot`: `case "${overlayroot:-disabled}"`, `disabled` (and empty) is off | fixed: was "any `overlayroot=` is on", now "`overlayroot=V`, V not empty and not `disabled`" (`revview_cmdline_overlay` in lib.sh), per overlayroot 0.18.debian14 |
+| O11 | `do_overlayfs 1` removes `overlayroot=tmpfs` from cmdline.txt | readonly.sh disable round 1; the test stub | raspi-config `disable_overlayfs`: `sed -e "s/\(.*\)overlayroot=tmpfs \(.*\)/\1\2/"`: only with a space after it (enable always writes one) | fixed: the stub now uses the real sed; readonly.sh says so and exits 1 when the token is still there, per raspi-config-core 20261026+2 |
+| O12 | `enable_bootro` puts `ro` on the `/boot/firmware` fstab line | readonly.sh enable | raspi-config `enable_bootro`: `s#\(.*/boot$FIRMWARE.*\)defaults\(.*\)#\1defaults,ro\2#`: no `defaults` on the line, no change, no error | fixed: readonly.sh enable refuses (exit 2, also `--dry-run`) when that line has no `defaults`, per raspi-config-core 20261026+2 |
+| O13 | `disable_bootro` removes the `ro` | readonly.sh disable round 2 | raspi-config `disable_bootro` removes only the text `defaults,ro`, one per call; `get_bootro_conf` matches `defaults.*,ro[ ,]` | fixed: an `ro` in another place (`ro,defaults`, `defaults,noatime,ro`) is reported at once (exit 1, also `--dry-run`) instead of after 3 useless calls, per raspi-config-core 20261026+2 |
+| S17 | Commands the scripts call are on the image; awk is there | all pi/ scripts | every command found in the packages' `usr/bin`, `usr/sbin`, `bin`, `sbin`; `/usr/bin/awk` is in no package (update-alternatives makes it at install time; mawk 1.3.4.20250131-1 ships `/usr/bin/mawk`); node and claude are in no package (NodeSource, own installer) | checked against the packages in `pi/tree/packages.lock` (names/layout only) |
+| S18 | The directories install.sh and data-setup.sh write into exist | setup.mjs, data.mjs | shipped: `/etc/udev/rules.d`, `/etc/systemd/user`, `/etc/systemd/system`, `/etc/lightdm`, `/etc/profile.d`, `/var/lib/systemd`, `/etc/xdg/labwc`; not shipped (made at run time, as `systemctl enable` and `loginctl enable-linger` would): `/etc/systemd/user/default.target.wants`, `/etc/systemd/system/multi-user.target.wants`, `/var/lib/systemd/linger`; revview's own: `/etc/revview`, `/var/lib/revview` | checked against systemd and udev 257.13-1~deb13u1, lightdm, labwc, base-files (names/layout only); the tests create the missing ones, as on a Pi |
+
+Re-read, no change: L03, L06 and L08 cite rpd-wayland-core 1.35; 1.39 ships the same `labwc-pi` (`exec /usr/bin/labwc
+-m`, empty kanshi config when missing), `rpd-labwc.desktop` and system autostart (pcmanfm-pi, wf-panel-pi, kanshi).
+The chromium wrapper adds `--user-data-dir` only for its own `--temp-profile` option and passes kiosk.sh's flags on;
+`/etc/chromium.d/default-flags` already sets `--no-default-browser-check`. `systemd-analyze verify` (this host's
+systemd 255; the Pi has 257) found no unknown key in `pi/revview.service` or `pi/revview-unlock.service`; every key
+of both is in the 257 man pages.
+

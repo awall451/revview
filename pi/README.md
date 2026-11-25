@@ -25,6 +25,7 @@ not marked here (package names, paths, keys, flags), is listed with how to check
 | `unlock.sh` | Run as root at boot and when the stick is plugged in: opens and mounts the data with the key file on the stick. |
 | `revview-unlock.service` | System unit template that runs `unlock.sh` (installed by `data-setup.sh`). |
 | `72-revview-key.rules` | udev rule template: the stick's UUID starts the unlock when it is plugged in late. |
+| `tree/` | Not for the Pi: development checks. `build.sh OUT` unpacks the real Trixie arm64 packages of `packages.lock` (about 140 MB download, never installed or run); `check.sh OUT` runs install.sh, readonly.sh and kiosk.sh against a copy and checks the names they use (`docs/PI-FACTS.md` section 9). Run on request, never by the gate. |
 
 ### Exit codes
 
@@ -266,14 +267,18 @@ script.)* Without Piper, `espeak-ng` is used (the fallback). Do this with the ov
    `rhasspy/piper-voices` repository on Hugging Face into `/opt/piper/voices/`.
 4. Test: `echo 'Hello from revview.' | /opt/piper/piper --model /opt/piper/voices/en_US-lessac-medium.onnx --output-raw | aplay -r 22050 -f S16_LE -t raw -`
 5. Restart the server: `systemctl --user restart revview`. The log line `speech: piper` shows it was picked
-   (`journalctl --user -u revview -b`).
+   (`sudo journalctl --user-unit=revview -b`).
 
 Newer Piper versions (`piper1-gpl`, a Python package) have a different command line: `config/speech.json` would
 need changing. The paths in that file are the ones above.
 
 ## Day to day
 
-- Server status and log, as the kiosk user: `systemctl --user status revview`, `journalctl --user -u revview -b`.
+- Server status and log, as the kiosk user: `systemctl --user status revview`, `sudo journalctl --user-unit=revview -b`.
+  Not `journalctl --user -u revview`: raspberrypi-sys-mods ships `Storage=volatile` for journald
+  (`/usr/lib/systemd/journald.conf.d/40-rpi-volatile-storage.conf`), and journalctl(1) says `--user` only works with
+  persistent logging, so it would show nothing; the user unit's lines are in the system journal (read with `sudo`, or
+  without it when the user is in group `adm`). Seen in the packages, not tried on a Pi (bench P11).
   Restart it: `systemctl --user restart revview` (the Claude sessions in tmux survive, bench D3).
 - **Why a Claude ended** (key-on or any session revview started): the bar says "Session ended: <last line of its
   screen>", and the journal (command above) has a line `owned sessions: Claude of session <id> ... ended with status N`

@@ -230,7 +230,7 @@ cat << EOF
 done. Next:
   - reboot to start everything (kiosk, server, boot screen);
   - sign in to Claude Code as $user if not done: run \`claude\` once in a terminal;
-  - logs, as $user: journalctl --user -u revview
+  - logs: sudo journalctl --user-unit=revview  (Pi OS keeps the journal in memory only, so journalctl --user shows nothing)
   - dongle ids and keys: edit /etc/revview/buttons.json with sudo (sudoedit; the file is root-owned, mode 0644; USB ids and keys; kept by every re-run; an update merges it with the new default per key), then run
     sudo bash $dir/pi/install.sh --user $user $dir  again (with the same options as now) to regenerate the udev rule,
     and restart as $user:
