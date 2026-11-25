@@ -362,9 +362,11 @@ test('asking scenes: the real ask-question recording, events 1-4, in the compact
   const [asking, ...more] = buildLoop(1).slice(9);
   assert.equal(asking.name, 'asking');
   assert.equal(more.length, 0, 'asking is the last scene');
-  const claude = (scene) => scene.steps.map((x) => x.event).filter((e) => !e.hook_event_name.startsWith('Revview'));
+  const claude = (scene) => scene.steps.map((x) => x.event).filter((e) => !e.hook_event_name.startsWith('Revview') && e.hook_event_name !== 'DemoKey');
   const key = (e) => [e.hook_event_name, e.tool_name, e.notification_type].join('/');
   assert.deepEqual(claude(asking).map(key), rec.slice(1, 5).map(key));
+  // then the highlight moves: Down, Down, Up as laptop keys
+  assert.deepEqual(asking.steps.slice(4).map((x) => [x.event.hook_event_name, x.event.code]), [['DemoKey', 'ArrowDown'], ['DemoKey', 'ArrowDown'], ['DemoKey', 'ArrowUp']]);
   for (const e of claude(asking)) assert.equal(e.session_id, 'demo1-compaction');
   assert.deepEqual(asking.expect, { view: 'asking', sessions: 1 });
   const { live, url } = await demoServer();
@@ -379,10 +381,44 @@ test('asking scenes: the real ask-question recording, events 1-4, in the compact
     assert.equal(state.ask.kind, 'question');
     assert.ok(state.ask.options.length > 0);
     assert.equal(state.compacting, false);
+    assert.equal(state.ask.choice, 0, 'a jump shows the first option highlighted (the key taps are skipped)');
     // the demo key 0 is scene 10
     await player.jump(1);
     await player.handleKey('Digit0');
     assert.equal((await shown(url)).view, 'asking');
+  } finally {
+    player.stop();
+    await live.close();
+  }
+});
+
+test('asking scene played: Down, Down, Up as laptop keys move the highlighted option 1 -> 2 -> 3 -> 2', async () => {
+  const { live, url } = await demoServer();
+  const { clock, player } = newPlayer(url);
+  try {
+    player.start();
+    await player.idle();
+    await player.jump(9);
+    const choices = [];
+    for (let i = 0; i < 12 && choices.length < 3; i++) {
+      clock.runNext();
+      await player.idle();
+      await sleep(80); // the bridge's debounce (30 ms) and the tap's own release
+      const { state } = await get(url, '/state');
+      if (state.view === 'asking' && state.ask !== null) {
+        if (choices.length === 0 && state.ask.choice !== 0) continue;
+        if (choices.at(-1) !== state.ask.choice || choices.length === 0) choices.push(state.ask.choice);
+      }
+    }
+    // the choice after the question appeared, then after each tap (0, 1, 2, then back to 1)
+    for (let i = 0; i < 6; i++) {
+      clock.runNext();
+      await player.idle();
+      await sleep(80);
+      const { state } = await get(url, '/state');
+      if (state.ask?.choice !== undefined && choices.at(-1) !== state.ask.choice) choices.push(state.ask.choice);
+    }
+    assert.deepEqual(choices, [0, 1, 2, 1]);
   } finally {
     player.stop();
     await live.close();

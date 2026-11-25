@@ -1,4 +1,4 @@
-import { boardView, pendingPrompts, shownPrompt } from '../state/index.js';
+import { boardView, pendingPrompts, shownPrompt, shownAsk } from '../state/index.js';
 import { text } from './http.js';
 
 export const PING_MS = 15000;
@@ -34,7 +34,7 @@ export function apply(ctx, event, onlyIfChanged = false) {
   ctx.board = next;
   // permission requests: drop those whose prompt is gone, then note what the bar shows now
   ctx.registry.sweep(pendingPrompts(ctx.board));
-  ctx.registry.observe(shownPrompt(ctx.board));
+  ctx.registry.observe(shownPrompt(ctx.board) ?? shownAsk(ctx.board));
   broadcast(ctx);
   return true;
 }

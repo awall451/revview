@@ -1,0 +1,44 @@
+{
+  "view": "asking",
+  "activity": "asking",
+  "offline": false,
+  "locked": false,
+  "repo": "revview",
+  "branch": "main",
+  "tool": "AskUserQuestion",
+  "file": null,
+  "diff": {
+    "added": 0,
+    "removed": 0
+  },
+  "command": null,
+  "output": null,
+  "outputLines": [],
+  "failed": null,
+  "compacting": false,
+  "ask": {
+    "kind": "question",
+    "question": "Which colour should the new file use?",
+    "options": [
+      "Red",
+      "Green",
+      "Blue"
+    ],
+    "more": 0,
+    "multiSelect": false,
+    "questions": 1,
+    "answer": "pick",
+    "choice": 2
+  },
+  "others": 0,
+  "diffIncomplete": false,
+  "buttons": "unknown",
+  "hot": false,
+  "lowPower": false,
+  "voice": null,
+  "position": null,
+  "elsewhere": 0,
+  "nav": null,
+  "note": null,
+  "answered": null
+}

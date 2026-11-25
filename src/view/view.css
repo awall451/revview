@@ -194,6 +194,7 @@ span:empty { display: none; }
 }
 #ask-options { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 24px; }
 .ask-opt { height: 40px; display: flex; gap: 0.4em; min-width: 0; }
+.ask-chosen { background: #e6f25a; color: #000; outline: 3px solid #fff; outline-offset: -3px; padding: 0 8px; box-sizing: border-box; }
 .ask-n { flex: none; font-weight: 700; }
 .ask-t { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #ask-steps, #ask-hint { flex: none; height: 40px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

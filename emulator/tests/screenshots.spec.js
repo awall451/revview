@@ -106,6 +106,20 @@ test('screenshot asking-plan (CLAUDE ASKS, a plan to approve) is 1280x400', asyn
   expectPng1280x400(file);
 });
 
+for (const [id, hint, chosen] of [['asking-choice', 'Allow picks · Deny cancels', '#ask-o3'], ['asking-terminal', 'Answer in the terminal when parked', null]]) {
+  test(`screenshot ${id} (CLAUDE ASKS) is 1280x400`, async ({ openView, page }) => {
+    const file = path.join(shotsDir(), `${id}.png`);
+    await openView(loadFixture(id));
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'asking');
+    await expect(page.locator('#ask-hint')).toHaveText(hint);
+    if (chosen !== null) await expect(page.locator(chosen)).toHaveAttribute('data-chosen', 'true');
+    else await expect(page.locator('[data-chosen]')).toHaveCount(0);
+    await expectFits(page);
+    await page.screenshot({ path: file });
+    expectPng1280x400(file);
+  });
+}
+
 test('screenshot asking-long (CLAUDE ASKS, worst case) is 1280x400', async ({ openView, page }) => {
   const file = path.join(shotsDir(), 'asking-long.png');
   const content = loadAskingLong();

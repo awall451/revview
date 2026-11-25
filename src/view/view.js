@@ -234,7 +234,14 @@ export function render(input) {
     && (view === 'working' || view === 'waiting' || view === 'done' || (view === 'offline' && ['working', 'waiting', 'done'].includes(s.activity)))
     ? 'Compacting context' : '';
   // revview's own answer to the shown call, in words (not by colour alone): "Denied: Bash" / "Allowed: Bash"
-  const answerWord = (tool) => (tool !== '' && (s.answered === 'deny' || s.answered === 'allow') ? `${s.answered === 'deny' ? 'Denied' : 'Allowed'}: ${tool}` : '');
+  // (a question or a plan: "Answered" / "Question cancelled", "Plan approved" / "Kept planning")
+  const ANSWER_WORDS = { AskUserQuestion: ['Answered', 'Question cancelled'], ExitPlanMode: ['Plan approved', 'Kept planning'] };
+  const answerWord = (tool) => {
+    if (tool === '' || (s.answered !== 'deny' && s.answered !== 'allow')) return '';
+    const own = Object.hasOwn(ANSWER_WORDS, tool) ? ANSWER_WORDS[tool] : null;
+    if (own !== null) return own[s.answered === 'deny' ? 1 : 0];
+    return `${s.answered === 'deny' ? 'Denied' : 'Allowed'}: ${tool}`;
+  };
   if (note) {
     if (Object.hasOwn(NOTES, view)) {
       // no session at all: "Not known until Claude's next step" would promise a next step that cannot come (r6b-07)
@@ -410,6 +417,11 @@ export function render(input) {
 
 // ---- CLAUDE ASKS: the question (or the plan title) in big type, the options below, the counts in row A ----
 const ASK_NOTE = 'Claude asks: look at the terminal when parked';
+const ASK_HINTS = {
+  pick: 'Allow picks · Deny cancels',
+  plan: 'Allow approves · Deny keeps planning',
+  terminal: 'Answer in the terminal when parked',
+};
 const ASK_LINES = 2; // the big text takes at most 2 lines
 const ASK_LINE_HEIGHT = 1.1;
 const isCount = (n) => Number.isInteger(n) && n > 0;
@@ -427,13 +439,14 @@ function renderAsk(input, noteRows) {
   let big = ASK_NOTE;
   let options = [];
   let steps = '';
-  let hint = false;
+  // who answers: the buttons pick the highlighted option ('pick'), approve a plan ('plan'), or only the terminal can ('terminal')
+  const answer = a.answer === 'pick' || a.answer === 'plan' ? a.answer : 'terminal';
+  let hint = ASK_HINTS[answer];
   const meta = { 'ask-multi': '', 'ask-count': '', 'ask-more': '' };
   const full = { 'ask-multi': 'More than one option can be picked', 'ask-count': '', 'ask-more': '' };
   if (a.kind === 'plan') {
     big = str(a.title) !== '' ? `Plan: ${a.title}` : 'Claude has a plan';
     if (isCount(a.steps)) steps = `${a.steps} step${a.steps === 1 ? '' : 's'}`;
-    hint = true;
   } else if (a.kind === 'question') {
     if (str(a.question) !== '') big = a.question;
     options = Array.isArray(a.options) ? a.options.filter((o) => typeof o === 'string' && o !== '').slice(0, 4) : [];
@@ -455,10 +468,14 @@ function renderAsk(input, noteRows) {
   el['ask-meta'].hidden = Object.values(meta).every((t) => t === '');
   el.ask.hidden = false;
   set(el['ask-steps'], steps);
-  set(el['ask-hint'], hint ? 'Approve in the terminal when parked' : '');
   el['ask-options'].replaceChildren(...options.map((label, i) => {
     const cell = askRow(`ask-o${i + 1}`, 'ask-opt', '');
     cell.dataset.full = '';
+    if (answer === 'pick' && a.choice === i) {
+      // the highlighted choice: an inverted block with a thick frame (see view.css), not colour alone
+      cell.classList.add('ask-chosen');
+      cell.dataset.chosen = 'true';
+    }
     cell.append(askRow(`ask-n${i + 1}`, 'ask-n', `${i + 1}`), askRow(`ask-t${i + 1}`, 'ask-t', label));
     return cell;
   }));
@@ -466,10 +483,16 @@ function renderAsk(input, noteRows) {
   const lcs = getComputedStyle(el.lower);
   const inner = el.lower.clientHeight - parseFloat(lcs.paddingTop) - parseFloat(lcs.paddingBottom);
   const rowPx = parseFloat(getComputedStyle(el['ask-hint']).lineHeight) || 40;
-  const below = (Math.ceil(options.length / 2) + (steps !== '' ? 1 : 0) + (hint ? 1 : 0) + noteRows) * rowPx;
+  const rows = Math.ceil(options.length / 2) + (steps !== '' ? 1 : 0) + noteRows;
   const stateFont = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--state-font')) || 55;
   const q = el['ask-question'];
-  const font = askFontPx(stateFont, (inner - rowPx - below) / ASK_LINES / ASK_LINE_HEIGHT, mmToPx(RANGE_MM.ask[0]) / capRatio(q));
+  const minPx = mmToPx(RANGE_MM.ask[0]) / capRatio(q);
+  // The hint row is the first to go when, with the other rows (options, steps, the offline and voice notes), the question
+  // could not keep its 4.0 mm size: those rows say what is wrong, the hint only what the buttons do.
+  if ((inner - rowPx - (rows + 1) * rowPx) / ASK_LINES / ASK_LINE_HEIGHT < minPx) hint = '';
+  set(el['ask-hint'], hint);
+  const below = (rows + (hint !== '' ? 1 : 0)) * rowPx;
+  const font = askFontPx(stateFont, (inner - rowPx - below) / ASK_LINES / ASK_LINE_HEIGHT, minPx);
   q.style.fontSize = `${font}px`;
   q.dataset.full = big;
   const limit = ASK_LINES * font * ASK_LINE_HEIGHT + 1;

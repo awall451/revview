@@ -120,3 +120,16 @@ test('docs/EMULATOR-LAPTOP.md shows the real sheet and the real alias block, and
     assert.ok(doc.includes(`\`${o}`), `guide mentions ${o}`);
   }
 });
+
+test('the sheet says what the buttons do under CLAUDE ASKS: Up/Down choose, Enter answers, N cancels, several questions: terminal', async () => {
+  const lines = (await sheet()).split('\n');
+  const row = (button) => lines.find((l) => l.split(/\s+/)[1] === button);
+  assert.match(row('up'), /ASKS: choice up/);
+  assert.match(row('down'), /ASKS: choice down/);
+  assert.match(row('press'), /ASKS: answer/);
+  assert.match(row('deny'), /ASKS: cancel/);
+  assert.match(lines.join('\n'), /ASKS: several questions, pick-any: terminal/);
+  const doc = fs.readFileSync(new URL('../../docs/EMULATOR-LAPTOP.md', import.meta.url), 'utf8');
+  assert.match(doc, /Up and Down move the\s+highlight/);
+  assert.match(doc, /Answer in the terminal when parked/);
+});

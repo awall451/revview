@@ -225,8 +225,8 @@ test('pendingPrompts has ask; shownPrompt is null under asking (it is only for p
 
 // ---- actions: a tap on press or deny does not answer a question and does not open the list -------------------
 
-test('actions: press and deny taps under asking do not answer and do not open the list', async () => {
-  const b = run(ASKQ.slice(0, idx(ASKQ, 'Notification', NOTIF) + 1));
+test('actions: press and deny taps under asking never send a key nor open the list (a refused answer applies only a note)', async () => {
+  const b = run([{ hook_event_name: 'RevviewSelect', session_id: ASKQ[0].session_id }], run(ASKQ.slice(0, idx(ASKQ, 'Notification', NOTIF) + 1)));
   assert.equal(boardView(b).view, 'asking');
   const answers = [];
   const sent = [];
@@ -234,15 +234,15 @@ test('actions: press and deny taps under asking do not answer and do not open th
   const sid = ASKQ[0].session_id;
   const a = createActions({
     runner: { target: async () => ({ id: sid, window: '@1' }), send: async (k) => { sent.push(k); return { sent: true, id: sid, window: '@1' }; } },
-    registry: { answer: (kind) => { answers.push(kind); return { ok: true }; } },
+    registry: { answer: (kind) => { answers.push(kind); return { ok: false, reason: 'no-request' }; } },
     getBoard: () => b, apply: (e) => applied.push(e), log: () => {}, clock: () => 0,
   });
   for (const button of ['press', 'deny']) {
     const r = await a.handle({ button, gesture: 'tap', source: 'device', dropped: false });
     assert.equal(r.done, false, button);
-    assert.equal(r.reason, 'question shown', button);
+    assert.equal(r.reason, 'no-request', button);
   }
-  assert.deepEqual(answers, []);
+  assert.deepEqual(answers, ['allow', 'deny']);
   assert.deepEqual(sent, []);
-  assert.deepEqual(applied, []);
+  assert.ok(applied.every((e) => e.hook_event_name === 'RevviewNote' && e.kind === 'ask'));
 });

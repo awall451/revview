@@ -12,8 +12,10 @@ function session(name) {
 }
 
 // Events up to and including the first one matching `pred`.
-function upTo(events, pred) {
-  const i = events.findIndex(pred);
+// (`skip` matches are passed over first: 1 = the second match.)
+function upTo(events, pred, skip = 0) {
+  let i = -1;
+  for (let n = 0; n <= skip; n += 1) i = events.findIndex((ev, k) => k > i && pred(ev));
   if (i < 0) throw new Error('recipe: event not found in recording');
   return events.slice(0, i + 1);
 }
@@ -56,6 +58,8 @@ const working = withContext(upToLast(workingTurn, is('PostToolUse', { tool_name:
 // The working turn on a hot box with a weak supply: board-level marks (HOT and LOW POWER tags), the state stays WORKING.
 const thermal = [...working, { hook_event_name: 'RevviewThermal', hot: true, lowPower: true }];
 
+const NAV_DOWN = { hook_event_name: 'RevviewNav', button: 'down', gesture: 'tap' };
+
 export const RECIPES = Object.freeze({
   working,
   compacting,
@@ -64,6 +68,10 @@ export const RECIPES = Object.freeze({
   permission: withContext(upTo(permissionPrompt, is('Notification', { notification_type: 'permission_prompt' }))),
   // Claude asks the driver (AskUserQuestion; the first question of ask-question, 3 options) or for approval of a plan (the extra fixture).
   asking: withContext(upTo(askQuestion, is('Notification', { notification_type: 'permission_prompt' }))),
+  // the same question with the highlight moved to option 3 by two Down taps (what the buttons do)
+  'asking-choice': [...withContext(upTo(askQuestion, is('Notification', { notification_type: 'permission_prompt' }))), NAV_DOWN, NAV_DOWN],
+  // the recording's second AskUserQuestion call: two questions, which the buttons cannot answer (answer in the terminal)
+  'asking-terminal': withContext(upTo(askQuestion, is('Notification', { notification_type: 'permission_prompt' }), 1)),
   'asking-plan': withContext(upTo(planApprove, is('Notification', { notification_type: 'permission_prompt' }))),
   done: withContext(upTo(workingTurn, is('Stop'))),
   // A fresh start (e.g. a restarted server): nothing is known yet.

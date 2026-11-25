@@ -360,3 +360,45 @@ test('postPermission passes tool_input to the registry only for AskUserQuestion'
   assert.deepEqual(await run({ ...base, tool_name: 'AskUserQuestion', tool_input: [1] }), [null]);
   assert.deepEqual(await run({ ...base, tool_name: 'AskUserQuestion', tool_input: 'x' }), [null]);
 });
+
+// a real AskUserQuestion request (fixtures/sessions/ask-question.jsonl): down, down, allow answers with the label of option 2
+async function askPrompt(c) {
+  const ASKQ = readLines('sessions/ask-question.jsonl').map((e) => ({ ...e, session_id: SID }));
+  await c.ev(ASKQ[1]);
+  await c.ev(ASKQ[2]);
+  const r = c.perm(ASKQ[3]);
+  for (let i = 0; i < 100 && (await c.state()).state.view !== 'asking'; i++) await sleep(10);
+  assert.equal((await c.state()).state.view, 'asking');
+  await c.ev(ASKQ[4]); // the Notification: the same question, shown since the request
+  return { r, q: ASKQ[3].tool_input.questions };
+}
+
+test('question: down, down, allow answers the long poll with the exact label; too early before 1500 ms', async (t) => {
+  const c = await setup(t);
+  const { r, q } = await askPrompt(c);
+  c.ctx.now = 100;
+  await c.press('F18');
+  await c.press('F18');
+  assert.equal((await c.state()).state.ask.choice, 2);
+  await c.press('F21'); // shown for less than 1500 ms
+  assert.equal(await pending(r.p), 'pending');
+  assert.equal((await c.state()).state.note, 'Too early: press again');
+  c.ctx.now = 1600;
+  await c.press('F21');
+  const got = await r.p;
+  assert.equal(got.status, 200);
+  assert.deepEqual(JSON.parse(got.body), {
+    behavior: 'allow', updatedInput: { questions: q, answers: { [q[0].question]: q[0].options[2].label } },
+  });
+  assert.deepEqual(c.ctx.sent, []); // never a key for a question
+  assert.equal(c.s.permissionsWaiting(), 0);
+});
+
+test('question: deny answers the long poll with a deny; no key', async (t) => {
+  const c = await setup(t);
+  const { r } = await askPrompt(c);
+  c.ctx.now = 1600;
+  await c.press('F16');
+  assert.deepEqual(await r.p, { status: 200, body: JSON.stringify({ behavior: 'deny', message: DENY_MESSAGE }) });
+  assert.deepEqual(c.ctx.sent, []);
+});

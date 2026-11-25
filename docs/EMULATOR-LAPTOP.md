@@ -102,6 +102,12 @@ anything you can see:
   session that needs you most (permission first, then waiting, then done, then working; the oldest first) and closes
   the list or menu. Backspace **tapped** only does something inside the list or the menu (it steps back); on the
   plain bar it does nothing.
+- **CLAUDE ASKS (the last demo scene, key 0):** the bar shows Claude's question with its options and highlights one (an
+  inverted block with a thick frame). Up and Down move the highlight (no wrap), as they do on the real bar; the scene
+  taps Down, Down, Up by itself first so you see it move. On the real bar Enter (allow) would answer with the
+  highlighted option and N (deny) would cancel the question; for a plan Enter approves and N keeps planning. Here
+  nothing is sent to a Claude, so Enter and N only log the gesture. When Claude asks several questions at once, or
+  more than one option may be picked, the buttons cannot answer: the bar says "Answer in the terminal when parked".
 - **They do nothing you can see:** on the permission scene Enter (allow), N (deny) and Esc (cancel, Esc held = Ctrl+C),
   and on the done scene Space (talk) and R (read aloud). The bar logs the gesture (the server's `GET /buttons` lists
   them), but nothing on the screen changes. To see them take effect you need a real Claude Code session: run with
@@ -123,23 +129,23 @@ mapped. Click the window first so it gets the keys.
 ```
 Click the window first. Tap = press and release; hold = 0.4 s, long hold = 1 s.
 KEY       BUTTON        TAP             HOLD         LONG HOLD
-Up        up            list / up
-Down      down          list / down
+Up        up            list / ASKS: choice up
+Down      down          list / ASKS: choice down
 Left      left          prev session
 Right     right         next session
-Enter     press         allow / choose
+Enter     press         allow / choose / ASKS: answer
 Backspace back          back            home
 Space     push-to-talk  talk
 R         read-aloud    read aloud      stop speech
 Esc       cancel        Esc to Claude                Ctrl+C
-N         deny          deny
+N         deny          deny / ASKS: cancel
 M         menu          menu
 Demo keys (demo mode only; the demo player takes them, not the bar):
   1-9 and 0  jump: working, permission, done, waiting, offline, insert-key,
        ended, compaction (mid-turn), compact-cmd (/compact), asking (a question)
   P  pause / continue          [  slower          ]  faster
 In the demo these change the screen: Left, Right, Up, Down, M, Backspace held
-(go to the session that needs you most). Enter picks a row in a list or menu.
+(to the session needing you most). ASKS: several questions, pick-any: terminal.
 Enter, N, Esc, Space on a permission or done screen only log the gesture
 in the demo: nothing is sent to a Claude. With --live they go to the run's
 own Claude: Enter allows a shown permission, N denies, Esc and Space are sent.

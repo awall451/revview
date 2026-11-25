@@ -66,6 +66,27 @@ gesture.
   - allow/deny: `runner.target(selectedKey)`, then the board is read AGAIN; a list opened or a selection change during
     the await refuses (`selection changed`); then `registry.answer(kind, shownPrompt(board), id)`; on ok
     `RevviewAnswered`.
+  - **CLAUDE ASKS** (`boardView(b).view === 'asking'`, no list open; `shownAsk(board)` says what answers it). up/down move
+    the highlighted choice (`RevviewNav`). The server's feed observes the shown ask for the registry's "shown long enough"
+    clock (`observe(shownPrompt ?? shownAsk)`). Never a key for a question; only `2` for a plan.
+    - press tap: `answer: 'terminal'` -> note 'Answer in the terminal when parked', refused `answer in terminal`;
+      `'pick'` -> `answerAsk('allow')`: `before = shownAsk(board)` at dispatch, `runner.target(id)` (null: note 'Not sent: not a
+      session revview started'), then the board is read AGAIN: a list open, another selection, or a shownAsk that is not the
+      same (session, agent, since, choice) refuses with 'Not sent: the question changed'. Then
+      `registry.answer('allow', shown, id, { choice, label: ask.options[choice] })`; on ok `RevviewAnswered` (allow).
+      `'plan'` -> `approvePlan()`: the same pre-checks, `registry.check(shown, id)`, `runner.capture(id)` must show a line
+      with 'Would you like to proceed?' and the lines '2. Yes, manually approve edits' and '3. Tell Claude what to change'
+      (fixtures/answers/pane-10-plan.txt; else note 'Not sent: the terminal does not show the plan'), the board is
+      re-checked once more, and only then `runner.send('2', id)`; on sent `RevviewAnswered` (allow). The held hook request
+      is not answered (a hook allow does not approve a plan in Claude Code 2.1.332; Claude ends the hook, the route's close
+      handler removes it).
+    - deny tap: a plan -> `answerAsk('deny', { plan: true })`; a pick or terminal question -> `answerAsk('deny')` (a hook
+      deny cancels the whole call).
+    - Refusal notes (kind 'ask', except too-early): `too-early` -> 'Too early: press again' (kind too-early);
+      `not-shown-long-enough`, `label-changed` -> 'Not sent: the question changed'; `no-request` -> 'Not sent: the question
+      is not waiting any more'; every other reason (unbound, ambiguous, no-input, not-one-question, multi-select, choice,
+      needs-choice, session) -> 'Answer in the terminal when parked' ('Approve in the terminal when parked' for a plan).
+      Every refusal is `done: false` with the reason. Push-to-talk stays refused.
   - up, down, left, right, menu, back (tap and hold) are `RevviewNav`. spare does nothing.
   - **read-aloud tap** speaks for `selectedKey(board)` through the `readAloud` object (`src/speech`); none selected:
     refused. **read-aloud hold or long-hold** stops speech, also with a list open. With no speech engine a tap puts the

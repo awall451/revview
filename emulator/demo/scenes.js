@@ -12,7 +12,9 @@
 //
 // Scene 10: Claude asks (AskUserQuestion), from fixtures/sessions/ask-question.jsonl, in the compaction session (it is the only one
 // left, and the compaction ended with scene 9): CLAUDE ASKS with the question and its options. It ends on the asking state; the loop's
-// restart moves on. The demo keys are 1-9 and 0 (= 10).
+// restart moves on. After the question the scene taps Down, Down, Up (steps `DemoKey`, which the player sends as laptop keys through
+// POST /dev/key, the way a typed key goes): the highlighted option moves 1 -> 2 -> 3 -> 2 so the owner sees it; a jump (key 0) skips them
+// and shows option 1. The demo keys are 1-9 and 0 (= 10).
 import fs from 'node:fs';
 
 function recording(name) {
@@ -104,6 +106,7 @@ export function buildLoop(loop) {
     // the compaction ends, the turn finishes, then /compact at the prompt
     { name: 'compact-cmd', steps: steps(as(d, PARTS.compactManual)), expect: { view: 'done', sessions: 1, compacting: true } },
     // Claude asks a question in the same session
-    { name: 'asking', steps: steps(as(d, PARTS.ask)), expect: { view: 'asking', sessions: 1 } },
+    // then the highlight moves like the driver's own taps would: down, down, up (the scene ends on option 2)
+    { name: 'asking', steps: [...steps(as(d, PARTS.ask)), ...['ArrowDown', 'ArrowDown', 'ArrowUp'].map((code) => ({ event: { hook_event_name: 'DemoKey', code } }))], expect: { view: 'asking', sessions: 1 } },
   ];
 }

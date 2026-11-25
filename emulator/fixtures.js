@@ -10,7 +10,7 @@ export const REDUCER_FIXTURE_IDS = STATES;
 // Extra fixtures: not a view of their own, a state of one view with a flag set or another shape (`compacting`: WORKING while Claude
 // compacts its context; `thermal`: WORKING on a hot box with a weak supply; `asking-plan`: ASKING with a plan to approve, the
 // `asking` fixture is a question). Each has a recipe and a screenshot (screenshots.spec.js), but they are not iterated with the views.
-export const EXTRA_FIXTURE_IDS = Object.freeze(['compacting', 'thermal', 'asking-plan']);
+export const EXTRA_FIXTURE_IDS = Object.freeze(['compacting', 'thermal', 'asking-plan', 'asking-choice', 'asking-terminal']);
 
 export const FIXTURE_DIR = new URL('./fixtures/', import.meta.url);
 

@@ -24,7 +24,26 @@ function postHttp(url, event) {
   });
 }
 
-export function createPlayer({ url, clock = { setTimeout, clearTimeout }, post = (event) => postHttp(url, event), log = (m) => console.log(m), gapMs = 1500, holdMs = 5000 }) {
+// A key step (`DemoKey`, see scenes.js) is a tap of a laptop key through the dev bridge (POST /dev/key down, then up): the same
+// path a typed key takes, so the bar reacts as it does to the driver's own press.
+export const isKeyStep = (event) => event.hook_event_name === 'DemoKey';
+function postKey(url, code) {
+  return new Promise((resolve, reject) => {
+    const one = (type) => new Promise((res, rej) => {
+      const body = JSON.stringify({ code, type });
+      const req = http.request(`${url}/dev/key`, { method: 'POST', agent: false, headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) } }, (r) => {
+        r.resume();
+        r.on('end', () => res(r.statusCode));
+        r.on('error', rej);
+      });
+      req.on('error', rej);
+      req.end(body);
+    });
+    one('down').then(() => one('up')).then(resolve, reject);
+  });
+}
+
+export function createPlayer({ url, clock = { setTimeout, clearTimeout }, post = (event) => (isKeyStep(event) ? postKey(url, event.code) : postHttp(url, event)), log = (m) => console.log(m), gapMs = 1500, holdMs = 5000 }) {
   let loop = 1;
   let scenes = buildLoop(loop);
   let si = 0; // the next step to post: scene si, step ti
@@ -120,7 +139,8 @@ export function createPlayer({ url, clock = { setTimeout, clearTimeout }, post =
     await inflight;
     if (!live(g) || !await closeLoop(g)) return;
     for (let s = 0; s < n; s++) {
-      for (const step of scenes[s].steps) if (!await send(g, step.event)) return;
+      // a jump shows the scene as its events leave it: the key taps are for the watched play only (taps this close would bounce)
+      for (const step of scenes[s].steps) if (!isKeyStep(step.event) && !await send(g, step.event)) return;
     }
     si = n - 1;
     ti = scenes[si].steps.length - 1;

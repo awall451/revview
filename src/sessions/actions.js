@@ -3,7 +3,7 @@
 // live windows right now; never anything a POSTed event could set. While a list or menu is open a gesture only
 // navigates: it can never send a key or answer a permission request.
 import { performance } from 'node:perf_hooks';
-import { shownPrompt, selectedKey, boardView, sessionStarting, STARTING_PTT_NOTE } from '../state/index.js';
+import { shownPrompt, shownAsk, selectedKey, boardView, sessionStarting, STARTING_PTT_NOTE } from '../state/index.js';
 
 export const PROMPT_PTT_NOTE = 'Answer the prompt first';
 
@@ -87,6 +87,98 @@ export function createActions({
     // only the too-early refusal says so on the bar (QA r4-07); every other refusal stays silent
     if (res?.ok !== true && res?.reason === 'too-early') note('Too early: press again', 'too-early');
     return out(kind, res?.ok === true, res?.ok === true ? undefined : res?.reason ?? 'refused');
+  }
+
+  // ---- CLAUDE ASKS (a question or a plan on the bar). Never a key for a question; only '2' for a plan.
+  const askNote = (text) => note(text, 'ask');
+  const TERMINAL_NOTE = 'Answer in the terminal when parked';
+  const PLAN_TERMINAL_NOTE = 'Approve in the terminal when parked';
+  const CHANGED_NOTE = 'Not sent: the question changed';
+  const sameAsk = (a, b) => a !== null && b !== null && a.session === b.session && a.agent === b.agent
+    && a.since === b.since && a.choice === b.choice;
+
+  // the note for a registry refusal (too-early keeps its own kind)
+  function refuseAsk(action, reason, terminalNote) {
+    if (reason === 'too-early') note('Too early: press again', 'too-early');
+    else if (reason === 'not-shown-long-enough' || reason === 'label-changed') askNote(CHANGED_NOTE);
+    else if (reason === 'no-request') askNote('Not sent: the question is not waiting any more');
+    else askNote(terminalNote);
+    return out(action, false, reason ?? 'refused');
+  }
+
+  // the shared pre-checks of answerAsk and approvePlan; resolves { before, id, t } or { res } (the refusal)
+  async function askTarget(action) {
+    if (!runner) return { res: out(action, false, 'no sessions') };
+    const before = shownAsk(getBoard());
+    const id = selectedKey(getBoard());
+    if (id === null || before === null) return { res: out(action, false, 'no session selected') };
+    const t = await runner.target(id);
+    if (!t) {
+      askNote('Not sent: not a session revview started');
+      return { res: out(action, false, 'no session selected') };
+    }
+    return { before, id, t };
+  }
+  // after an await: still the same question, the same choice, the same selection, no list open
+  function stillAsked(action, before, id) {
+    const board = getBoard();
+    if (board.nav !== null || selectedKey(board) !== id) {
+      askNote(CHANGED_NOTE);
+      return { res: out(action, false, 'selection changed') };
+    }
+    const now = shownAsk(board);
+    if (!sameAsk(before, now)) {
+      askNote(CHANGED_NOTE);
+      return { res: out(action, false, 'question changed') };
+    }
+    return { now };
+  }
+  const answeredAs = (now, decision) => apply({
+    hook_event_name: 'RevviewAnswered', session_id: now.session, agent: now.agent, since: now.since, decision,
+  });
+
+  async function answerAsk(kind, opts = {}) {
+    const g = await askTarget(kind);
+    if (g.res) return g.res;
+    const s = stillAsked(kind, g.before, g.id);
+    if (s.res) return s.res;
+    const { now } = s;
+    const res = registry.answer(kind, now, g.t.id,
+      kind === 'allow' ? { choice: now.choice, label: now.ask.options[now.choice] } : opts);
+    if (res?.ok !== true) return refuseAsk(kind, res?.reason, TERMINAL_NOTE);
+    answeredAs(now, kind);
+    return out(kind, true);
+  }
+
+  const PLAN_LINES = [/Would you like to proceed\?/, /^\s*(?:❯\s*)?2\.\s+Yes, manually approve edits$/, /^\s*(?:❯\s*)?3\.\s+Tell Claude what to change$/];
+
+  async function approvePlan() {
+    const g = await askTarget('allow');
+    if (g.res) return g.res;
+    let s = stillAsked('allow', g.before, g.id);
+    if (s.res) return s.res;
+    const chk = registry.check(s.now, g.t.id);
+    if (chk?.ok !== true) return refuseAsk('allow', chk?.reason, PLAN_TERMINAL_NOTE);
+    let cap;
+    try { cap = await runner.capture(g.id); } catch { cap = null; }
+    if (cap?.ok !== true || !Array.isArray(cap.lines)) {
+      askNote('Not sent: the terminal does not show the plan');
+      return out('allow', false, cap?.reason ?? 'capture failed');
+    }
+    const lines = cap.lines.map((l) => String(l).trimEnd());
+    if (!PLAN_LINES.every((re) => lines.some((l) => re.test(l)))) {
+      askNote('Not sent: the terminal does not show the plan');
+      return out('allow', false, 'plan not on screen');
+    }
+    s = stillAsked('allow', g.before, g.id);
+    if (s.res) return s.res;
+    const r = await runner.send('2', g.id);
+    if (!r?.sent) {
+      if (r?.reason === 'selected session gone') await refreshOwned();
+      return out('allow', false, r?.reason ?? 'not sent');
+    }
+    answeredAs(s.now, 'allow');
+    return out('allow', true);
   }
 
   async function newSession(b) {
@@ -173,12 +265,24 @@ export function createActions({
       // a prompt on the bar: allow attempt only (a refusal never falls through to the list)
       // a question or a plan on the bar (the "asks me" state): the buttons cannot answer it yet, and a press must not
       // open the list over it or allow the call without an answer; it is answered in the terminal
-      if (boardView(b).view === 'asking') return out('allow', false, 'question shown');
+      if (boardView(b).view === 'asking') {
+        const a = shownAsk(b);
+        if (a === null) return out('allow', false, 'question shown');
+        if (a.answer === 'terminal') {
+          askNote(TERMINAL_NOTE);
+          return out('allow', false, 'answer in terminal');
+        }
+        return a.answer === 'plan' ? approvePlan() : answerAsk('allow');
+      }
       if (shownPrompt(b) !== null) return answer('allow');
       return navigate(button, gesture);
     }
     if (button === 'deny' && gesture === 'tap') {
-      if (boardView(b).view === 'asking') return out('deny', false, 'question shown');
+      if (boardView(b).view === 'asking') {
+        const a = shownAsk(b);
+        if (a === null) return out('deny', false, 'question shown');
+        return a.answer === 'plan' ? answerAsk('deny', { plan: true }) : answerAsk('deny');
+      }
       return answer('deny');
     }
     if (NAV_BUTTONS.has(button)) return navigate(button, gesture);

@@ -38,8 +38,8 @@ test('fixture no-link is exactly the page-only view', () => {
 });
 
 // the extra fixtures are a state of one view (see EXTRA_FIXTURE_IDS), so they get the view's validity checks
-const VIEW_OF = { compacting: 'working', thermal: 'working', 'asking-plan': 'asking' };
-const FLAGS_OF = { compacting: { compacting: true }, thermal: { hot: true, lowPower: true }, 'asking-plan': {} };
+const VIEW_OF = { compacting: 'working', thermal: 'working', 'asking-plan': 'asking', 'asking-choice': 'asking', 'asking-terminal': 'asking' };
+const FLAGS_OF = { compacting: { compacting: true }, thermal: { hot: true, lowPower: true }, 'asking-plan': {}, 'asking-choice': {}, 'asking-terminal': {} };
 for (const id of [...REDUCER_FIXTURE_IDS, ...EXTRA_FIXTURE_IDS]) {
   test(`fixture ${id} is the board view for its recipe`, () => {
     const actual = replayView(RECIPES[id], initialBoard()).at(-1) ?? boardView(initialBoard());
@@ -57,6 +57,9 @@ for (const id of [...REDUCER_FIXTURE_IDS, ...EXTRA_FIXTURE_IDS]) {
     assert.equal(fx.ask !== null, fx.view === 'asking', `${id}.ask`);
     if (id === 'asking') assert.equal(fx.ask.kind, 'question');
     if (id === 'asking-plan') assert.equal(fx.ask.kind, 'plan');
+    if (id === 'asking-choice') assert.deepEqual([fx.ask.kind, fx.ask.answer, fx.ask.choice], ['question', 'pick', 2]);
+    if (id === 'asking-terminal') assert.deepEqual([fx.ask.kind, fx.ask.answer, fx.ask.choice, fx.ask.questions], ['question', 'terminal', null, 2]);
+    if (id === 'asking') assert.deepEqual([fx.ask.answer, fx.ask.choice], ['pick', 0]);
     assert.ok(isState(fx.view));
     if (EXTRA_FIXTURE_IDS.includes(id)) for (const [k, v] of Object.entries(FLAGS_OF[id])) assert.equal(fx[k], v, `${id}.${k}`);
     assert.ok(isState(fx.activity) && !['offline', 'insert-key'].includes(fx.activity));

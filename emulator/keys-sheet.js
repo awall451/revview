@@ -13,18 +13,19 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 export const DEFAULT_MAP = `${ROOT}config/buttons.laptop.json`;
 export const DEFAULT_SCENES = `${ROOT}emulator/demo/scenes.js`;
 
-// button -> what its tap / hold / long hold does (each at most 14 characters, so a row fits 80 columns)
+// button -> what its tap / hold / long hold does (a row fits 80 columns; "ASKS" = the CLAUDE ASKS screen: Up / Down move the
+// highlighted choice, Enter answers it or approves a plan, N cancels it or keeps planning)
 export const LABELS = {
-  up: { tap: 'list / up' },
-  down: { tap: 'list / down' },
+  up: { tap: 'list / ASKS: choice up' },
+  down: { tap: 'list / ASKS: choice down' },
   left: { tap: 'prev session' },
   right: { tap: 'next session' },
-  press: { tap: 'allow / choose' },
+  press: { tap: 'allow / choose / ASKS: answer' },
   back: { tap: 'back', hold: 'home' },
   'push-to-talk': { tap: 'talk' },
   'read-aloud': { tap: 'read aloud', hold: 'stop speech' },
   cancel: { tap: 'Esc to Claude', longHold: 'Ctrl+C' },
-  deny: { tap: 'deny' },
+  deny: { tap: 'deny / ASKS: cancel' },
   menu: { tap: 'menu' },
 };
 
@@ -51,7 +52,7 @@ export async function buildSheet({ mapPath = DEFAULT_MAP, scenesPath = DEFAULT_S
   out.push(`       ${names[6]}, ${names[7]} (mid-turn), ${names[8]} (/compact), ${names[9]} (a question)`);
   out.push('  P  pause / continue          [  slower          ]  faster');
   out.push('In the demo these change the screen: Left, Right, Up, Down, M, Backspace held');
-  out.push('(go to the session that needs you most). Enter picks a row in a list or menu.');
+  out.push('(to the session needing you most). ASKS: several questions, pick-any: terminal.');
   out.push('Enter, N, Esc, Space on a permission or done screen only log the gesture');
   out.push('in the demo: nothing is sent to a Claude. With --live they go to the run\'s');
   out.push('own Claude: Enter allows a shown permission, N denies, Esc and Space are sent.');
