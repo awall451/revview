@@ -5,7 +5,7 @@ import { createSessionRunner } from '../../src/sessions/index.js';
 
 const A = '11111111-1111-4111-8111-111111111111';
 const B = '22222222-2222-4222-8222-222222222222';
-const CMDS = ['list-windows', 'has-session', 'new-session', 'new-window', 'set-option', 'send-keys', 'kill-window', 'kill-server'];
+const CMDS = ['list-windows', 'has-session', 'new-session', 'new-window', 'set-option', 'send-keys', 'capture-pane', 'kill-window', 'kill-server'];
 
 // Fake exec: records calls, answers by tmux subcommand from a mutable state.
 function fake(state = {}) {
@@ -22,6 +22,10 @@ function fake(state = {}) {
       return { stdout: '' };
     }
     if (cmd === 'new-session' || cmd === 'new-window') return { stdout: '@7\n' };
+    if (cmd === 'capture-pane') {
+      if (state.captureFails) throw new Error('boom');
+      return { stdout: state.screen ?? '' };
+    }
     return { stdout: '' };
   };
   return { calls, exec, state };
@@ -148,4 +152,34 @@ test('start: cwd or name with # or control characters is refused before any tmux
   for (const bad of ['/tmp/#(x)', '/tmp/a#b', '/tmp/a\nb', '/tmp/a\u0001b']) await assert.rejects(r.start({ cwd: bad }), /cwd/);
   for (const bad of ['#(x)', 'a#', 'a\nb', 'a\u007fb']) await assert.rejects(r.start({ cwd: os.tmpdir(), name: bad }), /name/);
   assert.equal(f.calls.length, 0);
+});
+
+test('send allows 2 (plan approval) as a literal key; other digits are still rejected', async () => {
+  const f = fake({ windows: [row('@1', A)] });
+  const r = createSessionRunner({ exec: f.exec });
+  assert.deepEqual(await r.send('2', A), { sent: true, id: A, window: '@1' });
+  assert.deepEqual(sub(f.calls, 'send-keys')[0].args.slice(-3), ['-t', '@1', '2']);
+  for (const k of ['0', '1', '3', '4', '9', 2, '22']) await assert.rejects(r.send(k, A));
+  assert.equal(sub(f.calls, 'send-keys').length, 1);
+});
+
+test('capture: visible screen of the verified window, cleaned and cut', async () => {
+  const f = fake({ windows: [row('@4', A)], screen: '\u001b[1mone\u001b[0m  \ntwo\nthree\n\n\n' });
+  const r = createSessionRunner({ exec: f.exec });
+  assert.deepEqual(await r.capture(A, 2), { ok: true, lines: ['two', 'three'] });
+  const cp = sub(f.calls, 'capture-pane');
+  assert.equal(cp.length, 1);
+  assert.deepEqual(cp[0].args.slice(-4), ['-p', '-J', '-t', '@4']);
+  assert.ok(!cp[0].args.includes('-S'));
+  assert.deepEqual((await r.capture(A)).lines, ['one', 'two', 'three']);
+});
+
+test('capture: no id, gone session, failing tmux', async () => {
+  const f = fake({ windows: [row('@1', A)] });
+  const r = createSessionRunner({ exec: f.exec });
+  for (const id of [undefined, '', 'x', 5]) assert.deepEqual(await r.capture(id), { ok: false, reason: 'no session selected' });
+  assert.deepEqual(await r.capture(B), { ok: false, reason: 'selected session gone' });
+  assert.equal(sub(f.calls, 'capture-pane').length, 0);
+  f.state.captureFails = true;
+  assert.deepEqual(await r.capture(A), { ok: false, reason: 'capture failed' });
 });

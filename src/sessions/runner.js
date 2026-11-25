@@ -12,7 +12,11 @@ const TIMEOUT_MS = 5000; // a tmux command that takes longer is killed and count
 const defaultExec = (bin, args, { timeoutMs = TIMEOUT_MS } = {}) =>
   execFileP(bin, args, { encoding: 'utf8', timeout: timeoutMs, killSignal: 'SIGKILL' });
 
-export const SEND_KEYS = Object.freeze(['Escape', 'C-c', 'Space']);
+export const SEND_KEYS = Object.freeze([
+  'Escape', 'C-c', 'Space',
+  // plan approval: "2. Yes, manually approve edits" (fixtures/answers/pane-15-plan-digit2.txt); the caller checks the pane first
+  '2',
+]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const WINDOW_RE = /^@\d+$/;
 const NO_SERVER_RE = /no server running|error connecting|no sessions|can't find session|No such file or directory|server exited/i;
@@ -146,6 +150,20 @@ export function createSessionRunner({
     return { sent: true, id: t.id, window: t.window };
   }
 
+  // The visible screen of the session's window, cleaned (never the scrollback).
+  async function capture(id, maxLines = 40) {
+    if (typeof id !== 'string' || !UUID_RE.test(id)) return { ok: false, reason: 'no session selected' };
+    let t;
+    try { t = await target(id); } catch { return { ok: false, reason: 'capture failed' }; }
+    if (!t || !WINDOW_RE.test(t.window)) return { ok: false, reason: 'selected session gone' };
+    try {
+      return { ok: true, lines: cleanScreen(await run(['capture-pane', '-p', '-J', '-t', t.window]), maxLines) };
+    } catch (e) {
+      log(`capture of ${id} failed: ${errText(e).trim()}`);
+      return { ok: false, reason: 'capture failed' };
+    }
+  }
+
   async function stop(id) {
     const hit = (await list()).find((s) => s.id === id);
     if (!hit) return false;
@@ -227,5 +245,5 @@ export function createSessionRunner({
     }
   }
 
-  return { start, list, target, send, stop, reap, killServer };
+  return { start, list, target, send, capture, stop, reap, killServer };
 }

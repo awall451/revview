@@ -20,6 +20,8 @@ const run = (events, b = initialBoard()) => events.reduce((acc, e) => reduceBoar
 const at = (events, i) => boardView(run(events.slice(0, i + 1)));
 const idx = (events, name, extra = {}, nth = 0) => events
   .map((e, i) => [e, i]).filter(([e]) => e.hook_event_name === name && Object.entries(extra).every(([k, v]) => e[k] === v))[nth][1];
+// the stored ask, without what only the view adds (who answers, the highlighted choice)
+const bare = (ask) => Object.fromEntries(Object.entries(ask).filter(([k]) => k !== 'answer' && k !== 'choice'));
 const NOTIF = { notification_type: 'permission_prompt' };
 
 test('every recording event is one of the known kinds (the fixtures are what the notes say)', () => {
@@ -28,7 +30,7 @@ test('every recording event is one of the known kinds (the fixtures are what the
 });
 
 test('question: asking at the PermissionRequest and the Notification, working again at the answer', () => {
-  const want = { kind: 'question', question: 'Which colour should the new file use?', options: ['Red', 'Green', 'Blue'], more: 0, multiSelect: false, questions: 1 };
+  const want = { kind: 'question', question: 'Which colour should the new file use?', options: ['Red', 'Green', 'Blue'], more: 0, multiSelect: false, questions: 1, answer: 'pick', choice: 0 };
   const pre = idx(ASKQ, 'PreToolUse', { tool_name: 'AskUserQuestion' });
   assert.equal(at(ASKQ, pre).view, 'working');
   assert.equal(at(ASKQ, pre).ask, null);
@@ -83,7 +85,7 @@ test('plan: asking with the recorded title and 3 steps; Esc then the next prompt
   const n = idx(APPROVE, 'Notification', NOTIF);
   const v = at(APPROVE, n);
   assert.equal(v.view, 'asking');
-  assert.deepEqual(v.ask, { kind: 'plan', title: 'add hello.sh and README line', steps: 3 });
+  assert.deepEqual(v.ask, { kind: 'plan', title: 'add hello.sh and README line', steps: 3, answer: 'plan', choice: null });
   // rejected with Esc: nothing fires, the driver's next prompt follows
   assert.equal(APPROVE[n + 1].hook_event_name, 'UserPromptSubmit');
   assert.equal(at(APPROVE, n + 1).view, 'working');
@@ -92,7 +94,7 @@ test('plan: asking with the recorded title and 3 steps; Esc then the next prompt
 
 test('plan approved: PostToolUse ExitPlanMode (tool_input {}) clears it', () => {
   const n = idx(APPROVE, 'Notification', NOTIF, 1);
-  assert.deepEqual(at(APPROVE, n).ask, { kind: 'plan', title: 'add hello.sh', steps: 3 });
+  assert.deepEqual(at(APPROVE, n).ask, { kind: 'plan', title: 'add hello.sh', steps: 3, answer: 'plan', choice: null });
   const post = idx(APPROVE, 'PostToolUse', { tool_name: 'ExitPlanMode' });
   assert.deepEqual(APPROVE[post].tool_input, {});
   assert.equal(at(APPROVE, post).view, 'working');
@@ -102,12 +104,12 @@ test('plan approved: PostToolUse ExitPlanMode (tool_input {}) clears it', () => 
 
 test('plan feedback: the plain UserPromptSubmit with the text clears it; the later Esc leaves it asking until SessionEnd', () => {
   const n = idx(FEEDBACK, 'Notification', NOTIF);
-  assert.deepEqual(at(FEEDBACK, n).ask, { kind: 'plan', title: 'Add notes.txt', steps: 2 });
+  assert.deepEqual(at(FEEDBACK, n).ask, { kind: 'plan', title: 'Add notes.txt', steps: 2, answer: 'plan', choice: null });
   assert.equal(FEEDBACK[n + 1].hook_event_name, 'UserPromptSubmit');
   assert.equal(at(FEEDBACK, n + 1).view, 'working');
   const n2 = idx(FEEDBACK, 'Notification', NOTIF, 1);
   assert.equal(n2, FEEDBACK.length - 2);
-  assert.deepEqual(at(FEEDBACK, n2).ask, { kind: 'plan', title: 'Add todo.txt', steps: 2 });
+  assert.deepEqual(at(FEEDBACK, n2).ask, { kind: 'plan', title: 'Add todo.txt', steps: 2, answer: 'plan', choice: null });
   assert.equal(at(FEEDBACK, n2).view, 'asking');
   assert.equal(at(FEEDBACK, n2 + 1).view, 'ended');
 });
@@ -153,19 +155,19 @@ test('missing or garbage tool_input still asks (question null / title null), nev
     const ev = withInput(ASKQ, 'AskUserQuestion', input);
     const v = at(ev, idx(ev, 'Notification', NOTIF));
     assert.equal(v.view, 'asking', JSON.stringify(input));
-    assert.deepEqual(v.ask, { kind: 'question', question: null, options: [], more: 0, multiSelect: false, questions: 1 }, JSON.stringify(input));
+    assert.deepEqual(v.ask, { kind: 'question', question: null, options: [], more: 0, multiSelect: false, questions: 1, answer: 'terminal', choice: null }, JSON.stringify(input));
   }
   for (const input of [undefined, null, 'x', {}, { plan: 5 }, []]) {
     const ev = withInput(APPROVE, 'ExitPlanMode', input);
     const v = at(ev, idx(ev, 'Notification', NOTIF));
     assert.equal(v.view, 'asking', JSON.stringify(input));
-    assert.deepEqual(v.ask, { kind: 'plan', title: null, steps: null }, JSON.stringify(input));
+    assert.deepEqual(v.ask, { kind: 'plan', title: null, steps: null, answer: 'plan', choice: null }, JSON.stringify(input));
   }
 });
 
 test('a plan with no headings and no numbered lines: title null, steps null; without a Steps heading all numbered lines count', () => {
-  assert.deepEqual(askOnly(APPROVE, 'ExitPlanMode', { plan: 'just do it\nthen stop' }), { kind: 'plan', title: null, steps: null });
-  assert.deepEqual(askOnly(APPROVE, 'ExitPlanMode', { plan: '# Plan: T\n1. a\n2. b\n   1. nested\n' }), { kind: 'plan', title: 'T', steps: 2 });
+  assert.deepEqual(askOnly(APPROVE, 'ExitPlanMode', { plan: 'just do it\nthen stop' }), { kind: 'plan', title: null, steps: null, answer: 'plan', choice: null });
+  assert.deepEqual(askOnly(APPROVE, 'ExitPlanMode', { plan: '# Plan: T\n1. a\n2. b\n   1. nested\n' }), { kind: 'plan', title: 'T', steps: 2, answer: 'plan', choice: null });
   assert.equal(Array.from(askOnly(APPROVE, 'ExitPlanMode', { plan: `# ${'t'.repeat(300)}\n` }).title).length, 120);
 });
 
@@ -177,7 +179,7 @@ test('a Notification alone (no PermissionRequest) still carries the ask', () => 
     const v = at(dropped, n);
     assert.equal(v.view, 'asking');
     assert.deepEqual(v.ask, at(events, perm).ask);
-    assert.deepEqual(pendingPrompts(run(dropped.slice(0, n + 1)))[0].ask, v.ask);
+    assert.deepEqual(pendingPrompts(run(dropped.slice(0, n + 1)))[0].ask, bare(v.ask));
   }
 });
 
@@ -213,7 +215,7 @@ test('pendingPrompts has ask; shownPrompt is null under asking (it is only for p
   const ps = pendingPrompts(b);
   assert.equal(ps.length, 1);
   assert.equal(ps[0].tool, 'AskUserQuestion');
-  assert.deepEqual(ps[0].ask, boardView(b).ask);
+  assert.deepEqual(ps[0].ask, bare(boardView(b).ask));
   assert.equal(shownPrompt(b), null);
   // a permission prompt next to it has ask null and is still what shownPrompt gives under 'permission'
   const p = run([{ session_id: 's', hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_use_id: 't', tool_input: { command: 'ls' } },

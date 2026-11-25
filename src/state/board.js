@@ -1,7 +1,7 @@
 // Pure board layer: many sessions + overlays -> the flat state the page renders.
 // No clock, I/O or timers; never throws; returns the SAME reference when nothing changes.
 import { initialState, isDriverPrompt, reduce } from './reducer.js';
-import { ASK_TOOLS, askOf, isAsk } from './ask.js';
+import { ASK_TOOLS, askOf, isAsk, answerOf } from './ask.js';
 
 export const MAX_SESSIONS = 8; // the band hint "+N" has room for one digit
 // Ids of ended sessions are remembered so that a late hook cannot resurrect one. The list is bounded; an id
@@ -188,6 +188,8 @@ function withContext(board, patch) {
 //   plain         any other note (RevviewNote, BootDone,     none
 //                 "Highlighted session ended: list closed")
 //   too-early     actions.js: an answer refused too early    goes when the prompt the bar shows changes
+//   ask           the server: an answer to the shown question   goes when the prompt the bar shows changes
+//                 refused ("Not sent: the question changed")
 //   starting-ptt  actions.js: push-to-talk during STARTING   goes when the selected session no longer shows STARTING
 //   answer-prompt actions.js: push-to-talk refused, the      goes when the selected session has no pending prompt left
 //                 selected session has a pending prompt
@@ -198,12 +200,12 @@ function withContext(board, patch) {
 //   no-session    the server's boot (BootDone): "No session    hidden while the data is locked; not an ended note
 //                 yet: open the menu for New session"         (a push-to-talk tap does not clear it)
 const NOTE_RULES = {
-  plain: {}, 'too-early': {}, 'starting-ptt': {}, 'answer-prompt': {}, 'no-session': { hiddenLocked: true },
+  plain: {}, 'too-early': {}, ask: {}, 'starting-ptt': {}, 'answer-prompt': {}, 'no-session': { hiddenLocked: true },
   ended: { ended: true }, 'ended-last': { ended: true, hiddenLocked: true },
 };
 export const NOTE_KINDS = Object.freeze(Object.keys(NOTE_RULES));
 // the kinds a RevviewNote may carry (absent = plain); the ended kinds are made by the board and BootDone only
-const POSTED_NOTE_KINDS = ['plain', 'too-early', 'starting-ptt', 'answer-prompt'];
+const POSTED_NOTE_KINDS = ['plain', 'too-early', 'ask', 'starting-ptt', 'answer-prompt'];
 const noteOf = (kind, text) => ({ kind, text });
 const isNoteText = (t) => typeof t === 'string' && t.length >= 1 && t.length <= 120;
 const isEndedNote = (n) => isObj(n) && NOTE_RULES[n.kind]?.ended === true;
@@ -242,6 +244,11 @@ export function reduceBoard(board, event) {
   }
   if (noteKind(b.note) === 'too-early' && noteKind(next.note) === 'too-early') {
     const id = (x) => { const p = shownPrompt(x); return p === null ? null : `${p.session}\u0000${p.agent}\u0000${p.since}`; };
+    if (id(b) !== id(next)) next = { ...next, note: null };
+  }
+  // the server's refusal under CLAUDE ASKS belongs to the question it was set for
+  if (noteKind(b.note) === 'ask' && noteKind(next.note) === 'ask') {
+    const id = (x) => { const p = shownAsk(x); return p === null ? null : `${p.session}\u0000${p.agent}\u0000${p.since}`; };
     if (id(b) !== id(next)) next = { ...next, note: null };
   }
   // the selected session ended and others remain: the selection falls to another one, and the bar says so
@@ -364,6 +371,19 @@ function reduceNav(b, event) {
       return withNav(b, order[to], null);
     }
     if (button === 'back' && gesture === 'hold') return goHome(b);
+    if (tap && (button === 'up' || button === 'down')) {
+      // a question the buttons can answer: up / down move its highlighted choice (no wrap), not the list
+      const e = shownPickEntry(b);
+      if (e !== null) {
+        const last = e.ask.options.length - 1;
+        const cur = choiceOf(e, e.ask);
+        const to = Math.min(last, Math.max(0, cur + (button === 'up' ? -1 : 1)));
+        if (to === cur) return b;
+        const key = shownKeyOf(b);
+        const s = b.sessions[key];
+        return { ...b, sessions: withSession(b.sessions, key, { ...s, pending: s.pending.map((p, i) => (i === 0 ? { ...p, choice: to } : p)) }) };
+      }
+    }
     if (tap && (button === 'up' || button === 'down' || button === 'press')) {
       const row = Math.max(0, order.indexOf(shownKeyOf(b)));
       return { ...b, nav: n > 0 ? { kind: 'list', row, id: order[row] } : { kind: 'list', row } };
@@ -786,10 +806,42 @@ const shownKeyOf = (b) => selectedOf(b) ?? (b.focus !== null && has(b.sessions, 
 const askIn = (p) => (isAsk(p.ask) ? p.ask : null);
 const promptOf = (session, p) => ({ session, agent: p.agent, since: p.since, tool: p.tool, file: p.file, command: p.command, ask: askIn(p) });
 
+// the highlighted choice of a pending entry: an integer inside its options, else 0
+const choiceOf = (p, ask) => (Number.isInteger(p.choice) ? Math.min(Math.max(0, p.choice), Math.max(0, ask.options.length - 1)) : 0);
+
+// the shown session's first pending entry (with its valid ask) when the bar shows 'asking' and the buttons pick, else null
+function shownPickEntry(b) {
+  const k = shownKeyOf(b);
+  if (k === null || b.sessions[k].pending.length === 0 || boardView(b).view !== 'asking') return null;
+  const p = b.sessions[k].pending[0];
+  const ask = askIn(p);
+  return ask !== null && answerOf(ask) === 'pick' ? { ...p, ask } : null;
+}
+
+// the view's form of an ask: who answers it and, for a pick, the highlighted choice
+const askViewOf = (p) => {
+  const ask = askIn(p);
+  if (ask === null) return null;
+  const answer = answerOf(ask);
+  return { ...ask, answer, choice: answer === 'pick' ? choiceOf(p, ask) : null };
+};
+
 // Every pending permission prompt of every session.
 export function pendingPrompts(board) {
   const b = isValidBoard(board) ? board : initialBoard();
   return Object.keys(b.sessions).flatMap((k) => b.sessions[k].pending.map((p) => promptOf(k, p)));
+}
+
+// The ask the bar shows (view 'asking', nothing open over it): the shown session's first pending entry, with
+// who answers it (`answer`) and the highlighted `choice` (null unless 'pick'); else null.
+export function shownAsk(board) {
+  const b = isValidBoard(board) ? board : initialBoard();
+  if (b.nav !== null || boardView(b).view !== 'asking') return null;
+  const k = shownKeyOf(b);
+  if (k === null || b.sessions[k].pending.length === 0) return null;
+  const p = b.sessions[k].pending[0];
+  const ask = askViewOf(p);
+  return ask === null ? null : { ...promptOf(k, p), answer: ask.answer, choice: ask.choice };
 }
 
 // The prompt the bar shows (the shown session's first pending one), or null when the view is not 'permission'.
@@ -926,7 +978,7 @@ export function boardView(board) {
     failed: failed === null ? null : { error: failed.error, message: failed.message },
     // compaction is under way: the view says so beside what it shows (it needs no prompt, no failure, a settled activity)
     compacting: s.compacting === true && ask === null && failed === null && (activity === 'working' || activity === 'waiting' || activity === 'done'),
-    ask: asks,
+    ask: asks === null ? null : askViewOf(ask),
     others: Object.keys(b.sessions).filter((k) => k !== '').length - (shownKey === '' ? 0 : 1),
     diffIncomplete: shown.dropped,
     buttons,

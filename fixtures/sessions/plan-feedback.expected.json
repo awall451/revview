@@ -294,7 +294,9 @@
       "ask": {
         "kind": "plan",
         "title": "Add notes.txt",
-        "steps": 2
+        "steps": 2,
+        "answer": "plan",
+        "choice": null
       },
       "others": 0,
       "diffIncomplete": false,
@@ -332,7 +334,9 @@
       "ask": {
         "kind": "plan",
         "title": "Add notes.txt",
-        "steps": 2
+        "steps": 2,
+        "answer": "plan",
+        "choice": null
       },
       "others": 0,
       "diffIncomplete": false,
@@ -506,7 +510,9 @@
       "ask": {
         "kind": "plan",
         "title": "Add todo.txt",
-        "steps": 2
+        "steps": 2,
+        "answer": "plan",
+        "choice": null
       },
       "others": 0,
       "diffIncomplete": false,
@@ -544,7 +550,9 @@
       "ask": {
         "kind": "plan",
         "title": "Add todo.txt",
-        "steps": 2
+        "steps": 2,
+        "answer": "plan",
+        "choice": null
       },
       "others": 0,
       "diffIncomplete": false,

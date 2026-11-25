@@ -36,13 +36,15 @@ export function postPermission(ctx, req, res) {
       prompt = { session: ev.session_id, agent, since: null, tool: ev.tool_name, file: null, command: null };
       console.error('permission request not bound to a prompt on the bar: buttons cannot answer it');
     }
+    const input = ev.tool_name === 'AskUserQuestion' && ev.tool_input !== null && typeof ev.tool_input === 'object'
+      && !Array.isArray(ev.tool_input) ? ev.tool_input : null;
     let over = false;
     const id = ctx.registry.add(prompt, (decision) => {
       if (over || res.writableEnded) return;
       over = true;
       if (decision === null) return res.writeHead(204).end();
       res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(decision));
-    });
+    }, input);
     if (id === null) return text(res, 503, 'too many waiting permission requests');
     res.on('close', () => {
       over = true;

@@ -85,3 +85,13 @@ export function isAsk(a) {
     && a.options.every((o) => typeof o === 'string') && isCount(a.more) && typeof a.multiSelect === 'boolean'
     && Number.isInteger(a.questions) && a.questions >= 1;
 }
+
+// Who answers this ask: 'pick' = the wheel buttons choose one of 1..4 options (a single, single-select question);
+// 'plan' = allow / deny; 'terminal' = anything else (several questions, multi-select, no or too many options,
+// too little payload, no valid ask): the driver answers in the terminal.
+export function answerOf(ask) {
+  if (!isAsk(ask)) return 'terminal';
+  if (ask.kind === 'plan') return 'plan';
+  return ask.question !== null && ask.options.length >= 1 && ask.options.length <= ASK_LIMITS.options
+    && ask.more === 0 && ask.multiSelect === false && ask.questions === 1 ? 'pick' : 'terminal';
+}

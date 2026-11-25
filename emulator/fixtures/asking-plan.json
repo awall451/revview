@@ -19,7 +19,9 @@
   "ask": {
     "kind": "plan",
     "title": "add hello.sh and README line",
-    "steps": 3
+    "steps": 3,
+    "answer": "plan",
+    "choice": null
   },
   "others": 0,
   "diffIncomplete": false,

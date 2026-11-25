@@ -146,3 +146,39 @@ test('hook wait: default 570 s, clamped below the 600 s settings timeout', async
   assert.equal(resolveWaitMs('99999999'), MAX_WAIT_MS);
   assert.ok(MAX_WAIT_MS < 600000);
 });
+
+// ---- AskUserQuestion answers
+const QS = [{ question: 'Which colour?', header: 'Colour', multiSelect: false, options: [{ label: 'Red', description: 'r' }, { label: 'Green', description: 'g' }] }];
+const ASK = JSON.stringify({ session_id: 'sess-a', hook_event_name: 'PermissionRequest', tool_name: 'AskUserQuestion', tool_input: { questions: QS } });
+const ans = (o = {}) => ({ behavior: 'allow', updatedInput: { questions: QS, answers: { 'Which colour?': 'Green' }, ...o } });
+
+test('AskUserQuestion: a valid updatedInput is printed', async () => {
+  const s = await stub((q, r) => json(r, 200, ans()));
+  const r = await runHook(s.port, { input: ASK });
+  s.srv.close();
+  assert.equal(r.code, 0);
+  assert.equal(r.out.trim(), wrap(ans()));
+});
+
+test('AskUserQuestion: each mismatch prints nothing', async () => {
+  const bad = [
+    ['other tool', ans(), REQ],
+    ['extra key in updatedInput', ans({ extra: 1 }), ASK],
+    ['extra key in decision', { ...ans(), message: 'x' }, ASK],
+    ['questions differ', ans({ questions: [{ ...QS[0], header: 'Other' }] }), ASK],
+    ['unknown question', ans({ answers: { 'Which fruit?': 'Green' } }), ASK],
+    ['label not an option', ans({ answers: { 'Which colour?': 'Purple' } }), ASK],
+    ['label not a string', ans({ answers: { 'Which colour?': 1 } }), ASK],
+    ['empty answers', ans({ answers: {} }), ASK],
+    ['answers an array', ans({ answers: ['Green'] }), ASK],
+    ['no answers key', { behavior: 'allow', updatedInput: { questions: QS } }, ASK],
+    ['updatedInput not an object', { behavior: 'allow', updatedInput: 'x' }, ASK],
+  ];
+  for (const [name, decision, input] of bad) {
+    const s = await stub((q, r) => json(r, 200, decision));
+    const r = await runHook(s.port, { input });
+    s.srv.close();
+    assert.equal(r.code, 0, name);
+    assert.equal(r.out, '', name);
+  }
+});

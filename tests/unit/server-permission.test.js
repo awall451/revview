@@ -331,3 +331,32 @@ for (const [name, file, tool] of [['question', 'sessions/ask-question.jsonl', 'A
     assert.equal(c.s.permissionsWaiting(), 1);
   });
 }
+
+// ---- the AskUserQuestion input reaches the registry; nothing else does
+test('postPermission passes tool_input to the registry only for AskUserQuestion', async () => {
+  const { PassThrough } = await import('node:stream');
+  const { postPermission } = await import('../../src/server/routes-permission.js');
+  const run = async (ev) => {
+    const added = [];
+    const ctx = {
+      board: {}, apply: () => true, sessions: {}, registry: { add: (p, r, input) => { added.push(input); return 'id'; }, remove() {} },
+    };
+    const req = new PassThrough();
+    req.headers = {};
+    req.socket = { destroy() {} };
+    const res = new PassThrough();
+    res.writeHead = () => res;
+    postPermission(ctx, req, res);
+    req.end(JSON.stringify(ev));
+    for (let i = 0; i < 50 && added.length === 0; i++) await sleep(10);
+    return added;
+  };
+  const base = { hook_event_name: 'PermissionRequest', session_id: 's' };
+  const qin = { questions: [{ question: 'Q?', options: [{ label: 'A' }] }] };
+  assert.deepEqual(await run({ ...base, tool_name: 'AskUserQuestion', tool_input: qin }), [qin]);
+  assert.deepEqual(await run({ ...base, tool_name: 'Bash', tool_input: qin }), [null]);
+  assert.deepEqual(await run({ ...base, tool_name: 'ExitPlanMode', tool_input: { plan: 'x' } }), [null]);
+  assert.deepEqual(await run({ ...base, tool_name: 'AskUserQuestion' }), [null]);
+  assert.deepEqual(await run({ ...base, tool_name: 'AskUserQuestion', tool_input: [1] }), [null]);
+  assert.deepEqual(await run({ ...base, tool_name: 'AskUserQuestion', tool_input: 'x' }), [null]);
+});

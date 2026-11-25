@@ -185,6 +185,9 @@ Claude asks the driver a question (`AskUserQuestion`) or for approval of a plan 
   `question` at most 200 code points, one line; at most 4 option labels of at most 60 code points; `more` counts the labels past the fourth)
   or `{ kind: 'plan', title: string|null, steps: int|null }` (`title`: first markdown heading, at most 120 code points, a leading
   `Plan:` dropped; `steps`: the numbered items under the first heading that says "steps", else all unindented numbered items, null when none).
+  In the view only, the ask also has `answer` (`answerOf(ask)` in `ask.js`: `'pick'` = one single-select question with 1..4 options and `more` 0, the wheel buttons choose;
+  `'plan'` = allow / deny; `'terminal'` = anything else, answered in the terminal) and `choice` (the highlighted option index for `'pick'`, else `null`).
+  The stored ask (pending entries, `pendingPrompts`) has neither. The choice lives on the pending entry (`choice`, absent = 0), so a new or changed question starts at 0.
   Longer text ends with `…`; ANSI and control characters are removed, white space (newlines too) becomes one space.
   A payload that carries too little still asks (`question` / `title` null): the bar then only says that Claude asks.
 - The entry comes from the `PermissionRequest` (its `tool_input`); a bare `permission_prompt` Notification takes the ask from the last open main-thread ask call
@@ -193,6 +196,11 @@ Claude asks the driver a question (`AskUserQuestion`) or for approval of a plan 
 - Limits (recorded): an answer typed into the terminal is invisible until `PostToolUse`. A question or a plan dismissed with Esc
   fires NOTHING: the bar keeps `asking` until the driver's next prompt (a plan rejected with "Tell Claude what to change" arrives as that plain
   `UserPromptSubmit`), or until `SessionEnd` when there is no more. Which of several questions is on screen is unknown.
+- Choosing: with `nav` null and a `'pick'` ask shown, a tap of `up` / `down` moves `choice` one step (clamped to 0..options-1, no wrap; at an edge the same board comes back)
+  and does not open the session list; for `'plan'` and `'terminal'` asks, and under an open list, they behave as usual. Hold gestures are unchanged.
+- `shownAsk(board)`: `null` unless `nav` is null and the view is `asking`, else `{ session, agent, since, tool, file, command, ask, answer, choice }` of the shown
+  session's first pending entry (`shownPrompt` stays for `permission` only).
+- Note kind `ask` (posted by the server, e.g. "Not sent: the question changed"): goes when the shown ask (session, agent, since) changes or none is shown, like `too-early`.
 - `sessions/actions.js`: a press or deny tap does nothing (reason `question shown`) while the bar shows `asking`; the buttons cannot answer a question yet.
 - `PostToolBatch` (new in 2.1.331) is ignored.
 

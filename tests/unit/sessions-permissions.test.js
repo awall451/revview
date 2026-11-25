@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import {
   createPermissionRegistry,
   DENY_MESSAGE,
+  PLAN_DENY_MESSAGE,
   MIN_SHOWN_MS,
   REQUEST_WAIT_MS,
 } from '../../src/sessions/permissions.js';
+import { optionLabel } from '../../src/state/ask.js';
 
 const P = (o = {}) => ({ session: 'sess-a', agent: null, since: 100, tool: 'Bash', file: null, command: 'ls', ...o });
 
@@ -250,4 +252,119 @@ test('finding 2: a prompt that is not the shown one is not-shown-long-enough, ne
   reg.observe(P());
   tick(5000);
   assert.deepEqual(reg.answer('allow', P({ command: 'other' }), 'sess-a'), { ok: false, reason: 'not-shown-long-enough' }); // key mismatch
+});
+
+// ---- AskUserQuestion answers, plan deny, check()
+const QIN = {
+  questions: [{ question: 'Which colour?', header: 'Colour', multiSelect: false,
+    options: [{ label: 'Red', description: 'r' }, { label: 'Green', description: 'g' }, { label: 'Blue', description: 'b' }] }],
+};
+const Q = (o = {}) => P({ tool: 'AskUserQuestion', command: null, ...o });
+function ready(input = QIN, prompt = Q()) {
+  const c = setup();
+  const log = [];
+  const id = c.reg.add(prompt, (d) => log.push(d), input);
+  c.reg.observe(prompt);
+  c.tick(1500);
+  return { ...c, id, log, prompt };
+}
+
+test('question allow answers with the exact label from the request', () => {
+  const { reg, id, log, prompt } = ready();
+  assert.deepEqual(reg.answer('allow', prompt, 'sess-a', { choice: 1, label: 'Green' }), { ok: true, id });
+  assert.deepEqual(log, [{ behavior: 'allow', updatedInput: { questions: QIN.questions, answers: { 'Which colour?': 'Green' } } }]);
+  assert.equal(log[0].updatedInput.questions, QIN.questions);
+  assert.equal(reg.size(), 0);
+});
+
+test('question allow: the label is cut by optionLabel, the answer is the full label', () => {
+  const long = 'Rewrite the whole module in a different language and then also port every test to it';
+  const input = { questions: [{ question: 'How?', multiSelect: false, options: [{ label: long }, { label: 'No' }] }] };
+  const { reg, log, prompt } = ready(input);
+  const bar = optionLabel(long);
+  assert.notEqual(bar, long);
+  assert.equal(reg.answer('allow', prompt, 'sess-a', { choice: 0, label: bar }).ok, true);
+  assert.equal(log[0].updatedInput.answers['How?'], long);
+});
+
+test('each question refusal leaves the request held, a later valid answer works', () => {
+  const manyQ = { questions: [QIN.questions[0], { ...QIN.questions[0], question: 'Other?' }] };
+  const multi = { questions: [{ ...QIN.questions[0], multiSelect: true }] };
+  const cases = [
+    ['label-changed', QIN, { choice: 1, label: 'Red' }],
+    ['label-changed', QIN, { choice: 1 }],
+    ['choice', QIN, { choice: 3, label: 'Red' }],
+    ['choice', QIN, { choice: -1, label: 'Red' }],
+    ['choice', QIN, { choice: 1.5, label: 'Green' }],
+    ['choice', QIN, { choice: '1', label: 'Green' }],
+    ['choice', { questions: [{ question: 'Q?', options: [{ label: '' }] }] }, { choice: 0, label: '' }],
+    ['choice', { questions: [{ question: 'Q?', options: [{ label: 5 }] }] }, { choice: 0, label: '5' }],
+    ['choice', { questions: [{ question: 'Q?' }] }, { choice: 0, label: 'x' }],
+    ['not-one-question', manyQ, { choice: 0, label: 'Red' }],
+    ['not-one-question', { questions: [] }, { choice: 0, label: 'Red' }],
+    ['not-one-question', { questions: 'x' }, { choice: 0, label: 'Red' }],
+    ['not-one-question', {}, { choice: 0, label: 'Red' }],
+    ['multi-select', multi, { choice: 0, label: 'Red' }],
+    ['no-input', null, { choice: 0, label: 'Red' }],
+  ];
+  for (const [reason, input, opts] of cases) {
+    const { reg, id, log, prompt } = ready(input);
+    assert.deepEqual(reg.answer('allow', prompt, 'sess-a', opts), { ok: false, reason }, JSON.stringify([reason, opts]));
+    assert.equal(reg.size(), 1);
+    assert.deepEqual(log, []);
+    if (input === QIN) assert.deepEqual(reg.answer('allow', prompt, 'sess-a', { choice: 0, label: 'Red' }), { ok: true, id });
+  }
+});
+
+test('a bare allow on a request with an input is refused: needs-choice', () => {
+  const { reg, id, log, prompt } = ready();
+  assert.deepEqual(reg.answer('allow', prompt, 'sess-a'), { ok: false, reason: 'needs-choice' });
+  assert.deepEqual(reg.answer('allow', prompt, 'sess-a', {}), { ok: false, reason: 'needs-choice' });
+  assert.equal(reg.size(), 1);
+  assert.deepEqual(reg.answer('deny', prompt, 'sess-a'), { ok: true, id });
+  assert.deepEqual(log, [{ behavior: 'deny', message: DENY_MESSAGE }]);
+});
+
+test('the old guards still come first for a question', () => {
+  const { reg, prompt } = ready();
+  assert.equal(reg.answer('allow', prompt, 'other', { choice: 0, label: 'Red' }).reason, 'session');
+  assert.equal(reg.answer('allow', Q({ since: null }), 'sess-a', { choice: 0, label: 'Red' }).reason, 'unbound');
+});
+
+test('deny with plan: the plan message; otherwise the normal one', () => {
+  const plan = P({ tool: 'ExitPlanMode', command: null });
+  const a = ready(null, plan);
+  a.reg.answer('deny', a.prompt, 'sess-a', { plan: true });
+  assert.deepEqual(a.log, [{ behavior: 'deny', message: PLAN_DENY_MESSAGE }]);
+  assert.equal(PLAN_DENY_MESSAGE, 'Not yet: keep planning. Denied with the wheel button.');
+  const b = ready(null, plan);
+  b.reg.answer('deny', b.prompt, 'sess-a', { plan: false });
+  assert.deepEqual(b.log, [{ behavior: 'deny', message: DENY_MESSAGE }]);
+});
+
+test('check() runs the guards and finishes nothing', () => {
+  const { reg, id, log, prompt } = ready();
+  assert.deepEqual(reg.check(prompt, 'sess-a'), { ok: true, id });
+  assert.deepEqual(reg.check(prompt, 'sess-a'), { ok: true, id });
+  assert.equal(reg.size(), 1);
+  assert.deepEqual(log, []);
+  assert.equal(reg.check(null, 'sess-a').reason, 'no-prompt');
+  assert.equal(reg.check(prompt, 'x').reason, 'session');
+  assert.equal(reg.check(Q({ since: null }), 'sess-a').reason, 'unbound');
+  assert.equal(reg.check(Q({ tool: 'Other' }), 'sess-a').reason, 'not-shown-long-enough');
+  const e = setup();
+  e.reg.add(P(), () => {});
+  e.reg.observe(P());
+  assert.equal(e.reg.check(P(), 'sess-a').reason, 'too-early');
+  const n = setup();
+  n.reg.observe(P());
+  n.tick(1500);
+  assert.equal(n.reg.check(P(), 'sess-a').reason, 'no-request');
+  const d = setup();
+  d.reg.add(P(), () => {});
+  d.reg.add(P(), () => {});
+  d.reg.observe(P());
+  d.tick(1500);
+  assert.equal(d.reg.check(P(), 'sess-a').reason, 'ambiguous');
+  assert.equal(d.reg.answer('allow', P(), 'sess-a').reason, 'ambiguous');
 });

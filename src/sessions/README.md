@@ -13,8 +13,10 @@ The selection lives on the board (`board.selected`, `selectedKey(board)`): the r
   `name` with `#` or a control character are refused (`isUnsafeText`, exported).
 - `list()` windows whose `@revview_id` is a uuid.
 - `target(id)` re-verifies `id` now (looks the window up by `@revview_id`); `id` must be a uuid string, else `null`.
-- `send(key, id)` key is `Escape`, `C-c` or `Space` only (else it throws). Goes only to the re-verified window of
+- `send(key, id)` key is `Escape`, `C-c`, `Space` or `2` (plan approval, "2. Yes, manually approve edits") only (else it throws). Goes only to the re-verified window of
   `id`; no valid uuid gives `{ sent: false, reason: 'no session selected' }`.
+- `capture(id, maxLines = 40)` the visible screen of the re-verified window (`capture-pane -p -J`, cleaned):
+  `{ ok: true, lines }` or `{ ok: false, reason: 'no session selected' | 'selected session gone' | 'capture failed' }`.
 - `stop(id)`, `killServer()`.
 - `reap({ maxLines = 20 })` why a session ended. Every window is created with tmux `remain-on-exit on` (set in the
   same tmux command line as the window, so a Claude that dies at once is still kept). `reap` finds the windows whose

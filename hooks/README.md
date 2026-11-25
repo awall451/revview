@@ -7,7 +7,9 @@ Two Claude Code command hooks feed the bar from a real Claude Code session (char
   (repo and branch). Never prints, never blocks for long: see "event.mjs" below.
 - `permission-request.mjs`: the `PermissionRequest` hook. It posts the request JSON (unchanged) to
   `/permission` and waits. If the driver answers with a wheel button, the server replies with `{behavior:'allow'}` or
-  `{behavior:'deny',message}` and the hook prints the matching `hookSpecificOutput` for Claude Code.
+  `{behavior:'deny',message}` and the hook prints the matching `hookSpecificOutput` for Claude Code. For an `AskUserQuestion` request it also accepts
+  `{behavior:'allow',updatedInput:{questions,answers}}` (the request's own `questions` unchanged; each answer an exact
+  option label of a question in them); any other shape is refused and the terminal dialog stays.
 
 `settings.json` is the complete hooks block (with the placeholder `$REVVIEW_DIR`). `install.mjs` writes it into a
 Claude Code settings file.

@@ -131,7 +131,9 @@
         ],
         "more": 0,
         "multiSelect": false,
-        "questions": 1
+        "questions": 1,
+        "answer": "pick",
+        "choice": 0
       },
       "others": 0,
       "diffIncomplete": false,
@@ -176,7 +178,9 @@
         ],
         "more": 0,
         "multiSelect": false,
-        "questions": 1
+        "questions": 1,
+        "answer": "pick",
+        "choice": 0
       },
       "others": 0,
       "diffIncomplete": false,
@@ -526,7 +530,9 @@
         ],
         "more": 0,
         "multiSelect": false,
-        "questions": 2
+        "questions": 2,
+        "answer": "terminal",
+        "choice": null
       },
       "others": 0,
       "diffIncomplete": false,
@@ -570,7 +576,9 @@
         ],
         "more": 0,
         "multiSelect": false,
-        "questions": 2
+        "questions": 2,
+        "answer": "terminal",
+        "choice": null
       },
       "others": 0,
       "diffIncomplete": false,
@@ -818,7 +826,9 @@
         ],
         "more": 0,
         "multiSelect": false,
-        "questions": 1
+        "questions": 1,
+        "answer": "pick",
+        "choice": 0
       },
       "others": 0,
       "diffIncomplete": false,
@@ -862,7 +872,9 @@
         ],
         "more": 0,
         "multiSelect": false,
-        "questions": 1
+        "questions": 1,
+        "answer": "pick",
+        "choice": 0
       },
       "others": 0,
       "diffIncomplete": false,
