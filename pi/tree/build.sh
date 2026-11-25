@@ -20,6 +20,11 @@
 # match both the index and the lock. The InRelease signature is checked with gpgv only when a keyring is given
 # (REVVIEW_TREE_KEYRING_D / REVVIEW_TREE_KEYRING_R, a .gpg keyring file); this VM has neither archive's key, so
 # without them it says "signature NOT verified" and relies on the hashes pinned in the lock.
+# What the script itself checks: every member name of each .deb (dpkg-deb -c) is relative and has no ".." component
+# (else it stops before unpacking); the merge copies symlinks only to paths that do not exist yet and stops on any
+# tar failure (a link that would replace something is listed in OUT/merge-conflicts, not an error). What it does
+# NOT check: that dpkg-deb -x and tar never write through a symlink inside a package (that rests on their own
+# defaults and on the .deb hashes pinned in the lock), or anything about the package contents beyond the names.
 # Exit: 0 built; 2 bad arguments; 1 a download or a hash check failed (OUT is left as it is: delete it).
 set -euo pipefail
 
@@ -32,6 +37,8 @@ R_URL="http://archive.raspberrypi.com/debian"
 
 die() { echo "build.sh: $*" >&2; exit 2; }
 fail() { echo "build.sh: $*" >&2; exit 1; }
+# shellcheck source=pi/tree/guards.sh
+. "$here/guards.sh"
 
 refresh=0
 out=""
@@ -120,13 +127,15 @@ grep -Ev '^[[:space:]]*(#|$)' "$lock" | while read -r a name ver sha file; do
   fetch "$url/$file" "$deb"
   got="$(sha256sum "$deb" | cut -d' ' -f1)"
   [ "$got" = "$sha" ] || fail "$name: .deb hash $got is not the pinned $sha"
+  check_deb_names "$deb"
   mkdir "$out/pkg/$name"
   dpkg-deb -x "$deb" "$out/pkg/$name"
   echo "$a $name $ver $sha" >> "$out/MANIFEST"
   echo "unpacked $name $ver ($a)"
 done
 
-# Merge into OUT/root without ever writing through a symlink: first every directory and regular file of every
+# Merge into OUT/root, ordered so that nothing should be written through a symlink (by the order, not verified):
+# first every directory and regular file of every
 # package (no symlink exists in root yet, so every parent is a real directory; a later package overwrites a file of
 # an earlier one), then the symlinks, never replacing anything that is already there (a link at a path that another
 # package ships as a directory is dropped and listed in OUT/merge-conflicts).
@@ -134,8 +143,5 @@ done
 for p in "$out"/pkg/*/; do
   (cd "$p" && find . -mindepth 1 ! -type l -print0 | tar --null --no-recursion -T - -cf -) | tar -C "$out/root" -xf -
 done
-for p in "$out"/pkg/*/; do
-  (cd "$p" && find . -type l -print0 | tar --null --no-recursion -T - -cf -) |
-    tar -C "$out/root" --skip-old-files -xf - 2>> "$out/merge-conflicts" || true
-done
+for p in "$out"/pkg/*/; do merge_links "$p" "$out/root" "$out/merge-conflicts"; done
 echo "built $out/root from $(grep -c '' "$out/MANIFEST") packages (unpacked only, nothing installed or run)"

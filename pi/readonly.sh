@@ -141,13 +141,13 @@ case "$cmd" in
       if [ "$bootfs" = ro ]; then remount_boot_rw; fi
       run_rc do_overlayfs 1
       if [ "$dry" -eq 0 ] && [ "$(next_overlay)" = on ]; then
-        echo "warning: $cmdline still turns the overlay on after do_overlayfs 1 (raspi-config only removes overlayroot=tmpfs when a space follows it); edit the file by hand" >&2
+        echo "warning: $cmdline still turns the overlay on after do_overlayfs 1 (raspi-config only removes overlayroot=tmpfs when a space follows it); edit the file by hand (remove overlayroot=tmpfs), then reboot and run \`sudo bash pi/readonly.sh disable\` once more" >&2
         exit 1
       fi
       echo "reboot, then run \`sudo bash pi/readonly.sh disable\` once more"
     elif [ "$bootfs" = ro ] || [ "$(next_bootro)" = on ]; then
       if [ "$(next_bootro)" = on ] && [ "$(bootro_removable)" = no ]; then
-        echo "readonly.sh: fstab ($fstab) has ro on /boot/firmware, but raspi-config only removes defaults,ro; edit /etc/fstab by hand (remove ro from the /boot/firmware line), then run disable again" >&2
+        echo "readonly.sh: fstab ($fstab) has ro on /boot/firmware, but raspi-config only removes defaults,ro; edit /etc/fstab by hand (remove ro from the /boot/firmware line), then run \`sudo bash pi/readonly.sh disable\` again" >&2
         exit 1
       fi
       # disable_bootro removes ONE ,ro: repeat while fstab still has ro (an old ,ro,ro), at most 3 calls.
@@ -158,7 +158,7 @@ case "$cmd" in
         tries=$((tries + 1))
       done
       if [ "$dry" -eq 0 ] && [ "$(next_bootro)" = on ]; then
-        echo "warning: fstab ($fstab) still has ro on /boot/firmware after $tries calls of disable_bootro; edit it by hand" >&2
+        echo "warning: fstab ($fstab) still has ro on /boot/firmware after $tries calls of disable_bootro; edit /etc/fstab by hand (remove ro from the /boot/firmware line), then run \`sudo bash pi/readonly.sh disable\` again" >&2
         exit 1
       fi
       if [ "$bootfs" = ro ]; then remount_boot_rw; fi

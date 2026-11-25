@@ -1111,7 +1111,7 @@ Owner steps: `pi/README.md`. Bench items P1-P14 in `docs/BENCH-TEST.md`, all unt
   `User=` and `SupplementaryGroups=` do not belong in user units, so the groups come from the account. The unit keeps
   `--input --sessions`, never `--dev-bridge`, and no ordering lines (the WB6 test still holds unchanged); it adds
   `--boot --netmon` and `PATH=%h/.local/bin:...` (Claude Code's native install puts `claude` in `~/.local/bin`, from
-  memory). Logs: `journalctl --user -u revview` as that user. `KillMode=process` stays (bench D3).
+  memory). Logs: `sudo journalctl --user-unit=revview` (Pi OS keeps the journal volatile, so plain `journalctl --user` shows nothing; see the cycle 59 entry). `KillMode=process` stays (bench D3).
 - **The repository lives outside the home** (`/opt/revview` suggested), readable by the user. Node is checked (22 or
   newer; a warning when missing, older or inside a home), never installed: the unit uses `command -v node` as found.
 - **Kiosk.** `~/.config/labwc/autostart` (DESIGN) is generated: `wlr-randr --output HDMI-A-1 --transform 90`, then
@@ -2019,3 +2019,13 @@ binds 127.0.0.1 only.
 - **Not solved:** which of several questions is on screen; a dismissed question shown until the next event; the
   plan's choices are not shown (not in the hooks).
 
+
+## The pi/ scripts against the real package tree (cycle 59, branch work/pi-real-tree; nothing run on a Pi)
+
+Evidence: `pi/tree/build.sh` unpacks the pinned Trixie arm64 packages (Debian and Raspberry Pi archives) without installing or running anything; `pi/tree/check.sh` checks the pi/ scripts against that tree. Names, layouts and the text of raspi-config only; every bench item stays `untested`.
+
+- **Journal command.** `sudo journalctl --user-unit=revview`, not `journalctl --user -u revview`: Pi OS keeps the journal volatile, so the per-user journal is not written and the plain user form shows nothing. Docs and the old stage 4A line above corrected.
+- **`overlayroot=disabled` or empty is off.** `readonly.sh` no longer reads such a token in `cmdline.txt` as the overlay being on; only a real value (`tmpfs`, ...) is.
+- **`disable` and `enable` refusals.** `enable` refuses (exit 2) while the overlay is on, without the overlayroot package, or when the `/boot/firmware` fstab line has no `defaults`. `disable` stops with exit 1 when fstab has `ro` in a form raspi-config cannot remove (only `defaults,ro` is removed) or when `overlayroot=tmpfs` stays in `cmdline.txt`; the message now says what to run after the hand edit (`sudo bash pi/readonly.sh disable` again).
+- **The tree tool and what it cannot prove.** It proves that a name, path, switch string, unit or raspi-config function exists in the packages. It does not prove behaviour, ordering at boot, maintainer scripts (never run), files made at install time, or anything about Node and Claude Code (not Pi OS packages). `build.sh` checks that no package member name is absolute or has `..`, and stops on any tar failure while merging; it does not verify that `dpkg-deb -x` and tar never write through a package's own symlinks (that rests on their defaults and on the pinned hashes). `check.sh` only reads the tree and passes its paths to host tools; it runs nothing from it.
+- **InRelease signature not verified here.** This VM has neither archive's key, so `build.sh` checks the Packages hashes against InRelease and each `.deb` against the pinned lock, but not the signature, unless `REVVIEW_TREE_KEYRING_D` / `REVVIEW_TREE_KEYRING_R` give a keyring. The lock's hashes were fetched over plain http through the proxy.
