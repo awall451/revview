@@ -176,6 +176,14 @@ test('install.sh: overlayroot= in cmdline.txt (overlay not active yet) is a note
   assert.match(res.out, /the read-only root is turned on for the next boot: what this run writes is kept/);
 }));
 
+test('install.sh: overlayroot=disabled in cmdline.txt gives no "turned on" note', withRoot((r) => {
+  const f = path.join(r, 'boot/firmware/cmdline.txt');
+  fs.writeFileSync(f, `overlayroot=disabled ${fs.readFileSync(f, 'utf8').trim()}\n`);
+  const res = run(base(r));
+  assert.equal(res.code, 0, res.out + res.err);
+  assert.doesNotMatch(res.out, /read-only root is turned on/);
+}));
+
 test('install.sh: ~/.claude pointing to a missing locked data dir skips the hooks, exits 1, writes the rest', withRoot((r) => {
   fs.mkdirSync(path.join(r, 'home/alice'), { recursive: true });
   fs.symlinkSync('/srv/revview-data/claude', path.join(r, 'home/alice/.claude'));

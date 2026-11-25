@@ -43,3 +43,11 @@ revview_refuse_if_readonly() {
     exit 2
   fi
 }
+
+# "on" when cmdline.txt FILE has a token overlayroot=V with V non-empty and not "disabled" (the real overlayroot
+# treats an empty value and "disabled" as off), "off" when it has none, "unknown" when FILE cannot be read.
+revview_cmdline_overlay() {
+  [ -r "$1" ] || { echo unknown; return 0; }
+  awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^overlayroot=./ && $i != "overlayroot=disabled") on = 1 }
+       END { print (on ? "on" : "off") }' "$1"
+}

@@ -81,7 +81,7 @@ if [ "$root" = "/" ] && [ "$given_root" != "/" ]; then die "--root $given_root r
 . "$here/lib.sh"
 # Before anything is written (also with --dry-run): not under the read-only root, and /boot/firmware is written.
 revview_refuse_if_readonly "$root" install.sh boot
-if [ -r "$root/boot/firmware/cmdline.txt" ] && grep -Eq '(^|[[:space:]])overlayroot=' "$root/boot/firmware/cmdline.txt"; then
+if [ "$(revview_cmdline_overlay "$root/boot/firmware/cmdline.txt")" = on ]; then
   echo "note: the read-only root is turned on for the next boot: what this run writes is kept"
 fi
 

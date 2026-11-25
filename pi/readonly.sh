@@ -16,7 +16,14 @@
 #   --dry-run  print the commands, run nothing
 # The environment variable REVVIEW_RASPI_CONFIG replaces the raspi-config command: it exists ONLY so tests can
 # point at a stub.
-# Exit: 0 done; 2 bad arguments or refused (enable while the overlay is on); 1 raspi-config did not do what we expected.
+# Exit codes:
+#   0  done (or already off)
+#   2  bad arguments, or refused before anything ran: enable while the overlay is on; enable without the overlayroot
+#      package; enable when the /boot/firmware line in fstab has no "defaults" in its options (enable_bootro would
+#      silently do nothing). The enable refusals apply to enable --dry-run too.
+#   1  raspi-config did not do what we expected: cmdline.txt or fstab not as wanted afterwards; disable found ro in
+#      fstab in a form raspi-config cannot remove (only defaults,ro is removed: edit /etc/fstab by hand); disable
+#      left overlayroot=tmpfs in cmdline.txt. (disable's checks after raspi-config ran are skipped with --dry-run.)
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -52,16 +59,24 @@ rc_bin="${REVVIEW_RASPI_CONFIG:-raspi-config}"
 cmdline="$root/boot/firmware/cmdline.txt"
 fstab="$root/etc/fstab"
 
-# "on" when cmdline.txt has an overlayroot= token, "off" when it has none, "unknown" when it cannot be read.
-next_overlay() {
-  [ -r "$cmdline" ] || { echo unknown; return; }
-  if grep -Eq '(^|[[:space:]])overlayroot=' "$cmdline"; then echo on; else echo off; fi
-}
+# "on" / "off" / "unknown" for the overlay at the next boot (revview_cmdline_overlay in lib.sh).
+next_overlay() { revview_cmdline_overlay "$cmdline"; }
 # "on" when the /boot/firmware line of fstab has ro in its options, "off" when it has none, "unknown" without fstab.
 next_bootro() {
   [ -r "$fstab" ] || { echo unknown; return; }
   awk '$1 !~ /^#/ && $2 == "/boot/firmware" { found = 1; if (("," $4 ",") ~ /,ro,/) ro = 1 }
        END { print (ro ? "on" : (found ? "off" : "unknown")) }' "$fstab"
+}
+
+# "yes" when the /boot/firmware line of fstab has ro in the form raspi-config's disable_bootro removes (defaults,ro).
+bootro_removable() {
+  [ -r "$fstab" ] || { echo no; return; }
+  awk '$1 !~ /^#/ && $2 == "/boot/firmware" && (("," $4 ",") ~ /,defaults,ro,/) { f = 1 } END { print (f ? "yes" : "no") }' "$fstab"
+}
+# "yes" when fstab has a /boot/firmware line whose options lack defaults (enable_bootro would do nothing).
+bootro_unsettable() {
+  [ -r "$fstab" ] || { echo no; return; }
+  awk '$1 !~ /^#/ && $2 == "/boot/firmware" && (("," $4 ",") !~ /,defaults,/) { f = 1 } END { print (f ? "yes" : "no") }' "$fstab"
 }
 
 # run_rc ARGS...: raspi-config nonint ARGS (only printed with --dry-run).
@@ -98,6 +113,10 @@ case "$cmd" in
       echo "readonly.sh: overlayroot is not installed; raspi-config would apt-get it (needs a network). Install it while online: sudo apt-get install overlayroot" >&2
       exit 2
     fi
+    if [ "$(bootro_unsettable)" = yes ]; then
+      echo "readonly.sh: the /boot/firmware line in $fstab has no \"defaults\" in its options; raspi-config's enable_bootro would do nothing and leave the boot partition writable. Add defaults to the options by hand, then run enable again." >&2
+      exit 2
+    fi
     run_rc do_overlayfs 0
     # do_overlayfs 0 already sets ro in fstab when the overlay is not active now; a second enable_bootro would give ,ro,ro.
     if [ "$dry" -eq 1 ]; then
@@ -121,8 +140,16 @@ case "$cmd" in
       # raspi-config's disable_overlayfs also remounts /boot/firmware rw itself; our remount is kept, harmless.
       if [ "$bootfs" = ro ]; then remount_boot_rw; fi
       run_rc do_overlayfs 1
+      if [ "$dry" -eq 0 ] && [ "$(next_overlay)" = on ]; then
+        echo "warning: $cmdline still turns the overlay on after do_overlayfs 1 (raspi-config only removes overlayroot=tmpfs when a space follows it); edit the file by hand" >&2
+        exit 1
+      fi
       echo "reboot, then run \`sudo bash pi/readonly.sh disable\` once more"
     elif [ "$bootfs" = ro ] || [ "$(next_bootro)" = on ]; then
+      if [ "$(next_bootro)" = on ] && [ "$(bootro_removable)" = no ]; then
+        echo "readonly.sh: fstab ($fstab) has ro on /boot/firmware, but raspi-config only removes defaults,ro; edit /etc/fstab by hand (remove ro from the /boot/firmware line), then run disable again" >&2
+        exit 1
+      fi
       # disable_bootro removes ONE ,ro: repeat while fstab still has ro (an old ,ro,ro), at most 3 calls.
       run_rc disable_bootro
       tries=1

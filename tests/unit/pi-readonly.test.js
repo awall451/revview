@@ -19,7 +19,7 @@ const FSTAB_RW = 'proc /proc proc defaults 0 0\n/dev/mmcblk0p1 /boot/firmware vf
 // opts: mounts (text), cmdline (text), fstab (text or null), noOverlayroot (bool: overlayroot package absent),
 // stub: 'real' (default; mirrors raspi-config-core 20261026+2) | 'nobootro' (do_overlayfs does not set bootro)
 //       | 'stuck' (disable_bootro never clears ro).
-// The stub mirrors the real raspi-config: do_overlayfs 0 PREPENDS "overlayroot=tmpfs " to cmdline.txt and, when the
+// The stub mirrors raspi-config-core 20261026+2 as read in the unpacked package (the seds are copied from it): do_overlayfs 0 PREPENDS "overlayroot=tmpfs " to cmdline.txt and, when the
 // overlay is not active now, applies enable_bootro (do_overlayfs 1: disable_bootro); enable_bootro / disable_bootro
 // are the real seds on etc/fstab and refuse (message, exit 1) when the overlay is active now. The fake root has no
 // /proc/cmdline, so "active now" is whether <root>/proc/mounts shows / as overlay.
@@ -56,7 +56,7 @@ do_overlayfs() {
     sed -i "$R/boot/firmware/cmdline.txt" -e "s/^/overlayroot=tmpfs /"
     ${mode === 'nobootro' ? ':' : 'if ! active; then enable_bootro; fi'}
   else
-    sed -i "$R/boot/firmware/cmdline.txt" -e "s/overlayroot=tmpfs *//"
+    sed -i "$R/boot/firmware/cmdline.txt" -e "s/\\(.*\\)overlayroot=tmpfs \\(.*\\)/\\1\\2/"
     if ! active; then disable_bootro; fi
   fi
 }
@@ -230,6 +230,77 @@ test('disable, round 2 where ro never clears: at most 3 calls, warning, exit 1',
   assert.equal(res.code, 1);
   assert.equal(calls(e).length, 3);
   assert.match(res.err, /still has ro/);
+}));
+
+test('disable, round 1: overlayroot=tmpfs as the last token is left by the real sed: warning naming the file, exit 1', withEnv({
+  mounts: OVERLAY + BOOT_RW, cmdline: 'console=tty1 root=/dev/x overlayroot=tmpfs\n',
+}, (e) => {
+  const res = run(e, ['disable']);
+  assert.equal(res.code, 1);
+  assert.deepEqual(calls(e), ['nonint do_overlayfs 1']);
+  assert.match(res.err, /cmdline\.txt/);
+  assert.match(res.err, /overlayroot/);
+  assert.doesNotMatch(res.out, /reboot, then run/);
+}));
+
+test('disable, round 1: overlayroot=tmpfs at the start is removed, exit 0', withEnv({
+  mounts: OVERLAY + BOOT_RW, cmdline: 'overlayroot=tmpfs console=tty1\n',
+}, (e) => {
+  const res = run(e, ['disable']);
+  assert.equal(res.code, 0, res.out + res.err);
+  assert.equal(fs.readFileSync(path.join(e.r, 'boot/firmware/cmdline.txt'), 'utf8'), 'console=tty1\n');
+}));
+
+for (const opts of ['ro,defaults', 'defaults,noatime,ro']) {
+  test(`disable, round 2 with fstab options ${opts}: raspi-config cannot remove it, say so at once, exit 1, no call`, withEnv({
+    fstab: `proc /proc proc defaults 0 0\n/dev/mmcblk0p1 /boot/firmware vfat ${opts} 0 2\n`,
+  }, (e) => {
+    const res = run(e, ['disable']);
+    assert.equal(res.code, 1);
+    assert.deepEqual(calls(e), []);
+    assert.match(res.err, /only removes defaults,ro/);
+    assert.match(res.err, /edit \/etc\/fstab by hand/);
+    const dry = run(e, ['disable', '--dry-run']);
+    assert.equal(dry.code, 1, 'the dry run reads fstab too and says the same');
+    assert.deepEqual(calls(e), []);
+    assert.match(dry.err, /only removes defaults,ro/);
+  }));
+}
+
+test('enable: fstab /boot/firmware line without defaults is refused (exit 2), also with --dry-run, nothing called', withEnv({
+  fstab: 'proc /proc proc defaults 0 0\n/dev/mmcblk0p1 /boot/firmware vfat rw,noatime 0 2\n',
+}, (e) => {
+  for (const args of [['enable'], ['enable', '--dry-run']]) {
+    const res = run(e, args);
+    assert.equal(res.code, 2, args.join(' '));
+    assert.match(res.err, /defaults/);
+  }
+  assert.deepEqual(calls(e), []);
+}));
+
+test('enable --dry-run without the overlayroot package exits 2', withEnv({ noOverlayroot: true }, (e) => {
+  assert.equal(run(e, ['enable', '--dry-run']).code, 2);
+}));
+
+test('enable: no fstab keeps today\'s behaviour', withEnv({ fstab: null }, (e) => {
+  const res = run(e, ['enable', '--dry-run']);
+  assert.equal(res.code, 0, res.out + res.err);
+}));
+
+test('enable: no /boot/firmware line in fstab keeps today\'s behaviour', withEnv({ fstab: 'proc /proc proc defaults 0 0\n' }, (e) => {
+  const res = run(e, ['enable', '--dry-run']);
+  assert.equal(res.code, 0, res.out + res.err);
+}));
+
+test('status: overlayroot=disabled or an empty value in cmdline.txt is off at next boot', withEnv({
+  cmdline: 'overlayroot=disabled console=tty1 root=/dev/x\n',
+}, (e) => {
+  const f = path.join(e.r, 'boot/firmware/cmdline.txt');
+  assert.match(run(e, ['status']).out, /^overlay at next boot: off$/m);
+  fs.writeFileSync(f, 'console=tty1 overlayroot= root=/dev/x\n');
+  assert.match(run(e, ['status']).out, /^overlay at next boot: off$/m);
+  fs.writeFileSync(f, 'console=tty1 overlayroot=disabled overlayroot=tmpfs:swap=1\n');
+  assert.match(run(e, ['status']).out, /^overlay at next boot: on$/m);
 }));
 
 test('disable --dry-run calls nothing', withEnv({ mounts: OVERLAY + BOOT_RO }, (e) => {
