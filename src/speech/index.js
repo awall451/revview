@@ -1,8 +1,8 @@
 // Read aloud (wheel button F14). See config/speech.json for the engines.
 import { pendingPrompts } from '../state/index.js';
-import { spokenText, closingText } from './text.js';
+import { spokenText, closingText, askText } from './text.js';
 
-export { permissionText, closingText, spokenText, SPEECH_LIMITS, NOTHING_TO_READ } from './text.js';
+export { permissionText, askText, closingText, spokenText, SPEECH_LIMITS, NOTHING_TO_READ } from './text.js';
 export { createClosingMemo } from './memo.js';
 export { DEFAULT_SPEECH_CONFIG_PATH, loadSpeechConfig, pickEngine, describeChoice, SpeechConfigError } from './config.js';
 export { createSpeaker } from './speaker.js';
@@ -10,7 +10,7 @@ export { createSpeaker } from './speaker.js';
 // Ties the speaker, the memo of closing messages and the board together.
 //   textFor(board, id)             what a press would say for session id (a pending prompt, else the closing words)
 //   speakFor(board, id)            says it; resolves with the speaker's result plus { text }
-//   onEvent(event, board, selectedId)  remembers Stop messages; with speakOnStop it also reads the selected session's
+//   onEvent(event, board, selectedId)  remembers Stop messages; with speakOnStop it also reads a new question or plan of the selected session, and reads the selected session's
 //                                  closing words when its turn really ended. `board` is the board after the event.
 export function createReadAloud({ speaker, memo, speakOnStop = false, log = () => {} }) {
   const textFor = (board, id) => {
@@ -29,6 +29,13 @@ export function createReadAloud({ speaker, memo, speakOnStop = false, log = () =
   const onEvent = (event, board, selectedId) => {
     try {
       memo.note(event);
+      // a question or plan that waits for the driver is read out the same way (same switch)
+      if (speakOnStop && event?.hook_event_name === 'PermissionRequest' && typeof selectedId === 'string' && event.session_id === selectedId
+        && (event.tool_name === 'AskUserQuestion' || event.tool_name === 'ExitPlanMode')) {
+        const first = pendingPrompts(board).find((p) => p.session === selectedId);
+        if (!first || !first.ask) return null;
+        return Promise.resolve(speaker.speak(askText(first.ask))).catch((e) => { log(`read aloud failed: ${String(e?.message ?? e)}`); });
+      }
       if (!speakOnStop || event?.hook_event_name !== 'Stop' || typeof selectedId !== 'string' || event.session_id !== selectedId) return null;
       // a Stop with background subagents still running leaves the session working: that is not the end
       if (board?.sessions?.[selectedId]?.state?.activity === 'working') return null;

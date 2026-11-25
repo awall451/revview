@@ -79,6 +79,44 @@ const dropPathWords = (line) => line.split(/\s+/).map((w) => {
   return m[2].includes('/') ? m[1] + m[2].replace(/\//g, ' ') + m[3] : w; // and/or -> "and or"
 }).join(' ');
 
+
+// One question, option label or plan title as plain spoken words: paths, markdown, [[ ]] and < > removed. '' if nothing is left.
+function askWords(raw) {
+  if (!isStr(raw)) return '';
+  const t = flat(scrub(dropPathWords(flat(raw))
+    .replace(/\*+|~~|`/g, '')
+    .replace(/(^|[\s(])_+(?=\S)/g, '$1')
+    .replace(/(?<=\S)_+(?=$|[\s).,!?;:])/g, '')
+    .replace(/^#{1,6}\s+/, '')));
+  const out = t.replace(/\s+([,;:!?])/g, '$1');
+  return /[\p{L}\p{N}]/u.test(out) ? out : '';
+}
+
+const endsSentence = (s) => /[.!?\u2026]$/.test(s);
+const sentence = (s) => (endsSentence(s) ? s : `${s}.`);
+const noEnd = (s) => s.replace(/[\s.,;:!?\u2026]+$/, '');
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+// ask: the `ask` of a pending prompt (src/state/ask.js): a question, or a plan waiting for approval
+export function askText(ask) {
+  const a = ask !== null && typeof ask === 'object' ? ask : {};
+  if (a.kind === 'plan') {
+    const title = askWords(a.title);
+    const steps = Number.isInteger(a.steps) && a.steps > 0 ? ` ${plural(a.steps, 'step')}.` : '';
+    if (title === '') return `Claude has a plan ready.${steps} Approve it in the terminal when parked.`;
+    return cutWords(`Claude has a plan: ${noEnd(title)}.${steps} Approve it in the terminal when parked.`, SPEECH_LIMITS.maxChars);
+  }
+  const question = askWords(a.question);
+  if (question === '') return 'Claude asks a question. Look at the terminal when parked.';
+  const n = Number.isInteger(a.questions) && a.questions > 1 ? a.questions : 1;
+  const labels = (Array.isArray(a.options) ? a.options : []).map(askWords).filter((l) => l !== '');
+  const parts = [n > 1 ? `Claude asks ${n} questions. First: ${sentence(question)}` : `Claude asks: ${sentence(question)}`];
+  if (labels.length > 0) parts.push(`Options: ${labels.map((l, i) => `${i + 1}, ${noEnd(l)}.`).join(' ')}`);
+  if (Number.isInteger(a.more) && a.more > 0) parts.push(`And ${a.more} more.`);
+  if (a.multiSelect === true && labels.length > 0) parts.push('Pick one or more.');
+  return cutWords(parts.join(' '), SPEECH_LIMITS.maxChars);
+}
+
 // one markdown line -> plain words ('' when nothing is left)
 function plainLine(raw) {
   if (/^[\s|:*_=-]*$/.test(raw)) return ''; // rules and table separators
@@ -139,7 +177,7 @@ export function closingText(message) {
 
 // The text for one read-aloud press: a pending prompt wins, then the closing words, then a fixed phrase.
 export function spokenText({ prompt = null, closing = null } = {}) {
-  if (prompt !== null && typeof prompt === 'object') return permissionText(prompt);
+  if (prompt !== null && typeof prompt === 'object') return prompt.ask !== null && typeof prompt.ask === 'object' ? askText(prompt.ask) : permissionText(prompt);
   const c = closingText(closing);
   return c === '' ? NOTHING_TO_READ : c;
 }

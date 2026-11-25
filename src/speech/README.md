@@ -10,6 +10,11 @@ the read-aloud wheel button (`docs/BUTTONS.md` section 5, DECISIONS "wheel butto
   characters plus "..."; other tools "Permission: <tool> <file base name>"). Else the last Stop message: code
   blocks, inline code, URLs, links (text kept), file paths and markdown removed, at most 3 sentences and 300
   characters. Nothing to say gives "Nothing to read." (`NOTHING_TO_READ`).
+  A pending prompt whose `ask` is set (a question or plan waiting for the driver, see `src/state/ask.js`) is read by
+  `askText` instead: "Claude asks: <question> Options: 1, <label>. 2, <label>. ... And <n> more. Pick one or more."
+  (several questions: "Claude asks 2 questions. First: ..."; no question text: "Claude asks a question. Look at
+  the terminal when parked."), or "Claude has a plan: <title>. <n> steps. Approve it in the terminal when parked."
+  (title or steps missing: left out). Same cleaning as other text, whole text cut at a word to 300 characters.
   Path rule: a word is dropped if it starts with /, ./, ../, ~/ or a drive letter, has two or more slashes, is one slash plus a file extension, or is name.ext (index.js, README.md); and/or, input/output stay spoken (slash as a space), Node.js and Next.js (Capitalized.js) are names, .env is spoken. [[ ]] and < > are replaced by spaces.
 - `memo.js`: the last Stop message per session, kept outside the state core (the board and view stay unchanged).
   At most 16 sessions and 8000 characters each; forgotten on SessionEnd.
@@ -32,7 +37,7 @@ the read-aloud wheel button (`docs/BUTTONS.md` section 5, DECISIONS "wheel butto
 
 Engines are in order of preference. An engine is a list of stages (argv arrays); `needs` is an optional list of
 absolute files that must exist. The first engine whose programs and files exist is used. Arguments are used
-exactly as written: there is no placeholder substitution. `speakOnStop` is false by default. The Piper entry in
+exactly as written: there is no placeholder substitution. `speakOnStop` is false by default; with it on, a PermissionRequest for AskUserQuestion or ExitPlanMode of the selected session is read aloud too. The Piper entry in
 the shipped file is from memory and untested.
 
 ## Safety rules

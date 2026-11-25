@@ -289,3 +289,49 @@ test('read aloud: onEvent never throws', T, async () => {
   await ra.onEvent(null, null, null);
   assert.equal(typeof ra.textFor(null, SID), 'string');
 });
+
+// a question or plan that waits for the driver
+const QUESTION = { tool_name: 'AskUserQuestion', tool_input: { questions: [{ question: 'Which colour?', options: [{ label: 'Red' }, { label: 'Blue' }] }] } };
+const askingBoard = (extra) => boardAfter(ev('UserPromptSubmit', { prompt: 'x' }), ev('PermissionRequest', extra));
+
+test('read aloud: textFor and speakFor say the question', T, async () => {
+  const { ra, calls } = setup();
+  const b = askingBoard(QUESTION);
+  assert.equal(ra.textFor(b, SID), 'Claude asks: Which colour? Options: 1, Red. 2, Blue.');
+  await ra.speakFor(b, SID);
+  assert.deepEqual(calls, [['speak', 'Claude asks: Which colour? Options: 1, Red. 2, Blue.']]);
+});
+
+test('read aloud: speakOnStop reads a new question or plan of the selected session', T, async () => {
+  const { ra, calls } = setup({ speakOnStop: true });
+  const q = ev('PermissionRequest', QUESTION);
+  await ra.onEvent(q, askingBoard(QUESTION), SID);
+  const plan = { tool_name: 'ExitPlanMode', tool_input: { plan: '# Do it\n1. a\n2. b' } };
+  await ra.onEvent(ev('PermissionRequest', plan), askingBoard(plan), SID);
+  assert.deepEqual(calls, [
+    ['speak', 'Claude asks: Which colour? Options: 1, Red. 2, Blue.'],
+    ['speak', 'Claude has a plan: Do it. 2 steps. Approve it in the terminal when parked.'],
+  ]);
+});
+
+test('read aloud: a question stays silent when off, for another session, or for a normal permission', T, async () => {
+  const off = setup();
+  await off.ra.onEvent(ev('PermissionRequest', QUESTION), askingBoard(QUESTION), SID);
+  assert.deepEqual(off.calls, []);
+  const on = setup({ speakOnStop: true });
+  await on.ra.onEvent(ev('PermissionRequest', QUESTION), askingBoard(QUESTION), OTHER);
+  await on.ra.onEvent(ev('PermissionRequest', QUESTION), askingBoard(QUESTION), null);
+  const bash = { tool_name: 'Bash', tool_input: { command: 'ls' } };
+  await on.ra.onEvent(ev('PermissionRequest', bash), askingBoard(bash), SID);
+  await on.ra.onEvent(ev('PermissionRequest', QUESTION), initialBoard(), SID);
+  assert.deepEqual(on.calls, []);
+});
+
+test('read aloud: the question reaches the stand-in engine on stdin only', T, () => withDir((dir) => withSpeaker({ engine: engineOf([fake(dir)]) }, async (speaker) => {
+  const ra = createReadAloud({ speaker, memo: { note: () => {}, get: () => null }, speakOnStop: true, log: () => {} });
+  await ra.onEvent(ev('PermissionRequest', QUESTION), askingBoard(QUESTION), SID);
+  const [text] = await until(() => readOne(dir, 'text'), 'the text');
+  assert.equal(text, 'Claude asks: Which colour? Options: 1, Red. 2, Blue.\n');
+  const [argv] = readOne(dir, 'argv');
+  assert.ok(!argv.includes('colour'));
+})));

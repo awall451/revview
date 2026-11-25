@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { permissionText, closingText, spokenText, SPEECH_LIMITS, NOTHING_TO_READ } from '../../src/speech/text.js';
+import { permissionText, askText, closingText, spokenText, SPEECH_LIMITS, NOTHING_TO_READ } from '../../src/speech/text.js';
 import { createClosingMemo } from '../../src/speech/memo.js';
+import { initialBoard, reduceBoard, pendingPrompts, boardView } from '../../src/state/index.js';
 
 test('limits are the documented numbers', () => {
   assert.deepEqual(SPEECH_LIMITS, { maxChars: 300, maxSentences: 3, maxCommandChars: 100 });
@@ -150,4 +151,82 @@ test('permissionText: WebFetch speaks the host, WebSearch the query cut by words
   const long = Array.from({ length: 80 }, () => 'word').join(' ');
   const t = permissionText({ tool: 'WebSearch', file: long, command: null });
   assert.ok(t.length <= 'Permission: WebSearch '.length + SPEECH_LIMITS.maxCommandChars + 5);
+});
+
+// the asks-me state: built with the real state core
+const AS = 's1';
+const askBoard = (tool_name, tool_input) => [
+  { hook_event_name: 'SessionStart' }, { hook_event_name: 'UserPromptSubmit', prompt: 'x' },
+  { hook_event_name: 'PermissionRequest', tool_name, tool_input },
+].reduce((b, e) => reduceBoard(b, { session_id: AS, cwd: '/tmp/rec/repo', ...e }), initialBoard());
+const askLine = (tool_name, tool_input) => spokenText({ prompt: pendingPrompts(askBoard(tool_name, tool_input))[0] });
+const opts = (...labels) => labels.map((label) => ({ label, description: `About ${label}.` }));
+const ask = (questions) => askLine('AskUserQuestion', { questions });
+const q1 = (question, options, extra = {}) => ({ question, header: 'H', options, multiSelect: false, ...extra });
+
+test('ask: a three option question', () => {
+  const b = askBoard('AskUserQuestion', { questions: [q1('Which colour should the new file use?', opts('Red', 'Green', 'Blue'))] });
+  assert.equal(boardView(b).view, 'asking');
+  assert.equal(spokenText({ prompt: pendingPrompts(b)[0] }), 'Claude asks: Which colour should the new file use? Options: 1, Red. 2, Green. 3, Blue.');
+});
+
+test('ask: no final punctuation gets a period; a question mark stays', () => {
+  assert.equal(ask([q1('Pick a colour', opts('Red'))]), 'Claude asks: Pick a colour. Options: 1, Red.');
+});
+
+test('ask: options past the fourth are counted', () => {
+  assert.equal(ask([q1('Which?', opts('A', 'B', 'C', 'D', 'E', 'F'))]), 'Claude asks: Which? Options: 1, A. 2, B. 3, C. 4, D. And 2 more.');
+});
+
+test('ask: several questions say how many, and read the first', () => {
+  assert.equal(ask([q1('Which?', opts('A', 'B')), q1('And then?', opts('C'))]), 'Claude asks 2 questions. First: Which? Options: 1, A. 2, B.');
+});
+
+test('ask: multiSelect says to pick one or more', () => {
+  assert.equal(ask([q1('Which?', opts('A', 'B'), { multiSelect: true })]), 'Claude asks: Which? Options: 1, A. 2, B. Pick one or more.');
+});
+
+test('ask: no question text', () => {
+  assert.equal(ask([{ options: opts('A') }]), 'Claude asks a question. Look at the terminal when parked.');
+  assert.equal(askLine('AskUserQuestion', {}), 'Claude asks a question. Look at the terminal when parked.');
+});
+
+test('ask: a question with no options', () => {
+  assert.equal(ask([q1('Anything else?', [])]), 'Claude asks: Anything else?');
+});
+
+test('ask: a plan with a title and steps', () => {
+  const plan = '# Plan: add hello.sh\n\n## Steps\n1. Create hello.sh\n2. Add a comment\n3. Make it executable\n';
+  assert.equal(askLine('ExitPlanMode', { plan, planFilePath: '/tmp/x.md' }), 'Claude has a plan: add. 3 steps. Approve it in the terminal when parked.'); // hello.sh is a file name: dropped like everywhere else
+  assert.equal(askLine('ExitPlanMode', { plan: '# Plan: tidy the repo\n## Steps\n1. a\n2. b\n3. c' }), 'Claude has a plan: tidy the repo. 3 steps. Approve it in the terminal when parked.');
+});
+
+test('ask: a plan without title or steps; one step', () => {
+  assert.equal(askLine('ExitPlanMode', { plan: 'just words' }), 'Claude has a plan ready. Approve it in the terminal when parked.');
+  assert.equal(askText({ kind: 'plan', title: null, steps: 3 }), 'Claude has a plan ready. 3 steps. Approve it in the terminal when parked.');
+  assert.equal(askText({ kind: 'plan', title: 'Fix it', steps: 1 }), 'Claude has a plan: Fix it. 1 step. Approve it in the terminal when parked.');
+  assert.equal(askText({ kind: 'plan', title: 'Fix it.', steps: null }), 'Claude has a plan: Fix it. Approve it in the terminal when parked.');
+});
+
+test('ask: the longest question and labels are capped at a word, no crash', () => {
+  const words = (n) => Array.from({ length: n }, (_, i) => `w${i}`).join(' ').slice(0, 200);
+  const labels = ['a', 'b', 'c', 'd'].map((c) => Array.from({ length: 20 }, () => `${c}${c}`).join(' ').slice(0, 59));
+  const t = ask([q1(words(60), opts(...labels))]);
+  assert.ok(t.length <= 303 && t.endsWith('...'), t);
+  assert.ok(t.startsWith('Claude asks: w0 w1 w2'));
+  assert.doesNotThrow(() => askText(undefined));
+  assert.doesNotThrow(() => askText({ kind: 'question', question: 5, options: 'x', more: 'y', questions: -1 }));
+});
+
+test('ask: paths, markdown and engine markup are scrubbed', () => {
+  const t = ask([q1('Edit `src/app/main.js` in **[[ph]]** <b>now</b>?', opts('Use ~/x/y.txt', 'Keep <it>', 'and/or'))]);
+  assert.equal(t, 'Claude asks: Edit in ph b now b? Options: 1, Use. 2, Keep it. 3, and or.');
+  assert.ok(!/[[\]<>`*/~]/.test(t.replace(/\/b/, '')), t);
+});
+
+test('ask: a normal permission prompt reads as before', () => {
+  const b = askBoard('Bash', { command: 'ls -la' });
+  const p = pendingPrompts(b)[0];
+  assert.equal(p.ask, null);
+  assert.equal(spokenText({ prompt: p }), 'Permission: Bash ls -la');
 });
