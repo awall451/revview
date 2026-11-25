@@ -14,6 +14,12 @@ screenshots should use them too. There were no placeholder fixtures before these
 | `subagent-permission` | two async subagents in one message; A's Bash needs permission (PermissionRequest with `agent_id`, no `tool_use_id`), B reads three files and runs `ls` meanwhile, the main turn Stops (`background_tasks` running), B's `<task-notification>` prompt, a late `permission_prompt` Notification, approval 45 s later, A's notification turn, Stop, `idle_prompt` |
 | `permission-interrupted` | a main-thread prompt rejected with Esc (no Post, Stop or PermissionDenied follows), the driver's next prompt starts a subagent whose Bash prompt is approved after the main Stop |
 | `compaction` | auto compaction twice in the middle of a turn (PreCompact `auto`, SessionStart `compact`, PostCompact) with `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=1`, then `/compact` at the prompt (`manual`), then one more turn |
+| `ask-question` | `AskUserQuestion` in acceptEdits mode: a question answered (PreToolUse, PermissionRequest, Notification `permission_prompt`, PostToolUse), a call with two questions answered, a third question dismissed with Esc (nothing fires afterwards until SessionEnd) |
+| `ask-bypass` | the same under `bypassPermissions`: the PermissionRequest still fires; question answered, Stop, SessionEnd |
+| `plan-approve` | plan mode: `ExitPlanMode` (PreToolUse, PermissionRequest, Notification `permission_prompt`) rejected with Esc (nothing fires, the driver's next prompt follows), a second plan approved (PostToolUse with `tool_input {}`), Write, Bash, Stop, `idle_prompt` |
+| `plan-feedback` | plan mode: "Tell Claude what to change" with text arrives as a plain `UserPromptSubmit` with the text; the revised plan is then dismissed with Esc (nothing fires), SessionEnd |
+
+The four ask/plan recordings (`ask-question`, `ask-bypass`, `plan-approve`, `plan-feedback`) were recorded on 2026-11-25 with Claude Code 2.1.331 (model haiku) in `/tmp/rec/repo` with its own `CLAUDE_CONFIG_DIR`, driven by a pexpect script through a pty; nothing was changed in them. They also contain `PostToolBatch` (new, ignored by the state core).
 
 The first three were **recorded on this VM with Claude Code 2.1.330** (model haiku) on 2026-11-21, in a throwaway
 repo under `/tmp`, with a hook on every event appending its stdin as a JSON line. Changed afterwards: only

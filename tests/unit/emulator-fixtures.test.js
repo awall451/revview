@@ -19,6 +19,8 @@ function shapeOf(state) {
   );
 }
 const NULLABLE = ['repo', 'branch', 'tool', 'file', 'command', 'output'];
+// null, or an object (the question or plan Claude asks, src/state/ask.js)
+const NULL_OR_OBJECT = ['ask'];
 
 test('one fixture per view, no extras', () => {
   const files = fs.readdirSync(FIXTURE_DIR).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5)).sort();
@@ -36,8 +38,8 @@ test('fixture no-link is exactly the page-only view', () => {
 });
 
 // the extra fixtures are a state of one view (see EXTRA_FIXTURE_IDS), so they get the view's validity checks
-const VIEW_OF = { compacting: 'working', thermal: 'working' };
-const FLAGS_OF = { compacting: { compacting: true }, thermal: { hot: true, lowPower: true } };
+const VIEW_OF = { compacting: 'working', thermal: 'working', 'asking-plan': 'asking' };
+const FLAGS_OF = { compacting: { compacting: true }, thermal: { hot: true, lowPower: true }, 'asking-plan': {} };
 for (const id of [...REDUCER_FIXTURE_IDS, ...EXTRA_FIXTURE_IDS]) {
   test(`fixture ${id} is the board view for its recipe`, () => {
     const actual = replayView(RECIPES[id], initialBoard()).at(-1) ?? boardView(initialBoard());
@@ -51,6 +53,10 @@ for (const id of [...REDUCER_FIXTURE_IDS, ...EXTRA_FIXTURE_IDS]) {
   test(`fixture ${id} is a valid view of the state core`, () => {
     const fx = loadFixture(id);
     assert.equal(fx.view, VIEW_OF[id] ?? id);
+    // the asking views carry what is asked, every other view none
+    assert.equal(fx.ask !== null, fx.view === 'asking', `${id}.ask`);
+    if (id === 'asking') assert.equal(fx.ask.kind, 'question');
+    if (id === 'asking-plan') assert.equal(fx.ask.kind, 'plan');
     assert.ok(isState(fx.view));
     if (EXTRA_FIXTURE_IDS.includes(id)) for (const [k, v] of Object.entries(FLAGS_OF[id])) assert.equal(fx[k], v, `${id}.${k}`);
     assert.ok(isState(fx.activity) && !['offline', 'insert-key'].includes(fx.activity));
@@ -59,7 +65,8 @@ for (const id of [...REDUCER_FIXTURE_IDS, ...EXTRA_FIXTURE_IDS]) {
     const want = shapeOf(ref);
     const got = shapeOf(fx);
     for (const k of Object.keys(ref)) {
-      if (NULLABLE.includes(k)) assert.ok(got[k] === 'null' || got[k] === 'string', `${id}.${k}: ${got[k]}`);
+      if (NULL_OR_OBJECT.includes(k)) assert.ok(got[k] === 'null' || got[k] === 'object', `${id}.${k}: ${got[k]}`);
+      else if (NULLABLE.includes(k)) assert.ok(got[k] === 'null' || got[k] === 'string', `${id}.${k}: ${got[k]}`);
       else assert.equal(got[k], want[k], `${id}.${k}`);
     }
     assert.deepEqual(Object.keys(fx.diff).sort(), ['added', 'removed']);

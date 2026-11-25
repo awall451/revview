@@ -171,10 +171,16 @@ export function createActions({
     }
     if (button === 'press' && gesture === 'tap') {
       // a prompt on the bar: allow attempt only (a refusal never falls through to the list)
+      // a question or a plan on the bar (the "asks me" state): the buttons cannot answer it yet, and a press must not
+      // open the list over it or allow the call without an answer; it is answered in the terminal
+      if (boardView(b).view === 'asking') return out('allow', false, 'question shown');
       if (shownPrompt(b) !== null) return answer('allow');
       return navigate(button, gesture);
     }
-    if (button === 'deny' && gesture === 'tap') return answer('deny');
+    if (button === 'deny' && gesture === 'tap') {
+      if (boardView(b).view === 'asking') return out('deny', false, 'question shown');
+      return answer('deny');
+    }
     if (NAV_BUTTONS.has(button)) return navigate(button, gesture);
     return out('none', false, 'no action');
   }

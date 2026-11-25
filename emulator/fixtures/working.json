@@ -20,6 +20,7 @@
   ],
   "failed": null,
   "compacting": false,
+  "ask": null,
   "others": 0,
   "diffIncomplete": false,
   "buttons": "unknown",

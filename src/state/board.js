@@ -1,6 +1,7 @@
 // Pure board layer: many sessions + overlays -> the flat state the page renders.
 // No clock, I/O or timers; never throws; returns the SAME reference when nothing changes.
 import { initialState, isDriverPrompt, reduce } from './reducer.js';
+import { ASK_TOOLS, askOf, isAsk } from './ask.js';
 
 export const MAX_SESSIONS = 8; // the band hint "+N" has room for one digit
 // Ids of ended sessions are remembered so that a late hook cannot resurrect one. The list is bounded; an id
@@ -689,7 +690,9 @@ function applyToSession(b, live, id, event) {
   if (isDriverPrompt(event)) pre = prevPre.length === 0 ? prevPre : [];
   if (name === 'PreToolUse' && toolUseId !== null && isStr(event.tool_name)) {
     // every open call is kept (bounded), so a prompt can be tied to the right one
-    pre = [...pre.filter((p) => p.tuid !== toolUseId), { agent, tuid: toolUseId, tool: event.tool_name, input: sig(event.tool_input) }].slice(-MAX_PRE);
+    // a call that asks the driver (AskUserQuestion, ExitPlanMode) keeps its ask, for a prompt that arrives as a bare Notification
+    const ask = ASK_TOOLS.includes(event.tool_name) ? askOf(event.tool_name, event.tool_input) : null;
+    pre = [...pre.filter((p) => p.tuid !== toolUseId), { agent, tuid: toolUseId, tool: event.tool_name, input: sig(event.tool_input), ...(ask === null ? {} : { ask }) }].slice(-MAX_PRE);
   }
 
   // Commits the result; the board is returned as is when nothing changed (an ignored event makes no session).
@@ -722,7 +725,9 @@ function applyToSession(b, live, id, event) {
     const tuid = fits.length === 1 ? fits[0].tuid : null;
     if (tuid !== null && pending.some((p) => p.agent === agent && p.tuid === tuid)) return b;
     const shown = reduce(prev, event);
-    pending = [...pending, { agent, tuid, tool: shown.tool, file: shown.file, command: shown.command, output: shown.output, outputLines: shown.outputLines, since: b.tick + 1 }];
+    // an AskUserQuestion / ExitPlanMode request is the "asks me" state: the entry carries what is asked
+    const ask = askOf(event.tool_name, event.tool_input);
+    pending = [...pending, { agent, tuid, tool: shown.tool, file: shown.file, command: shown.command, output: shown.output, outputLines: shown.outputLines, since: b.tick + 1, ...(ask === null ? {} : { ask }) }];
     // the state stays as it was (only a repo the session still lacks is taken from the event)
     const state = prev.repo === null && shown.repo !== null ? { ...prev, repo: shown.repo } : prev;
     return commit(state, prevOpen, prevDropped);
@@ -731,9 +736,12 @@ function applyToSession(b, live, id, event) {
     if (pending.length > 0 || finished) return b;
     // the notification carries no tool: describe the open call (if any) only, never the last finished one
     const open1 = prevOpen.length > 0;
+    // the last open main-thread call that asks the driver: the notification is its question or plan
+    const asking = pre.findLast((p) => p.agent === '' && prevOpen.includes(p.tuid) && p.ask !== undefined);
     pending = [{
       agent: null, tuid: null, tool: open1 ? prev.tool : null, file: open1 ? prev.file : null,
       command: open1 && prev.tool === 'Bash' ? prev.command : null, output: null, outputLines: [], since: b.tick + 1,
+      ...(asking === undefined ? {} : { ask: asking.ask }),
     }];
     return commit(prev, prevOpen, prevDropped);
   }
@@ -774,7 +782,9 @@ const buttonsView = (b) => (b.buttons === null ? 'unknown' : b.buttons ? 'presen
 // The session the bar shows: the focus when it is live, else what pickFocus would choose.
 const shownKeyOf = (b) => selectedOf(b) ?? (b.focus !== null && has(b.sessions, b.focus) ? b.focus : pickFocus(b, null));
 
-const promptOf = (session, p) => ({ session, agent: p.agent, since: p.since, tool: p.tool, file: p.file, command: p.command });
+// `ask`: null for a permission prompt, else what AskUserQuestion / ExitPlanMode asks (src/state/ask.js)
+const askIn = (p) => (isAsk(p.ask) ? p.ask : null);
+const promptOf = (session, p) => ({ session, agent: p.agent, since: p.since, tool: p.tool, file: p.file, command: p.command, ask: askIn(p) });
 
 // Every pending permission prompt of every session.
 export function pendingPrompts(board) {
@@ -790,7 +800,7 @@ export function shownPrompt(board) {
   return k === null || b.sessions[k].pending.length === 0 ? null : promptOf(k, b.sessions[k].pending[0]);
 }
 
-const WORDS = { permission: 'PERMISSION', waiting: 'WAITING', working: 'WORKING', done: 'DONE' };
+const WORDS = { permission: 'PERMISSION', asking: 'ASKS', waiting: 'WAITING', working: 'WORKING', done: 'DONE' };
 
 function navView(b) {
   if (b.nav === null) return null;
@@ -800,7 +810,7 @@ function navView(b) {
   if (kind === 'list') {
     rows = order.map((id) => {
       const s = b.sessions[id];
-      const a = act(s);
+      const a = s.pending.length > 0 && askIn(s.pending[0]) !== null ? 'asking' : act(s);
       const state = has(WORDS, a) ? a : 'unknown';
       return {
         label: typeof s.state.repo === 'string' ? s.state.repo : '',
@@ -860,7 +870,7 @@ export function boardView(board) {
   const shownKey = shownKeyOf(b);
   const shown = shownKey === null ? null : b.sessions[shownKey];
   // needing the driver outranks OFFLINE; `offline` stays true in the flat state as a secondary mark
-  const overlay = (activity) => (b.locked ? 'insert-key' : b.offline && activity !== 'permission' ? 'offline' : activity);
+  const overlay = (activity) => (b.locked ? 'insert-key' : b.offline && activity !== 'permission' && activity !== 'asking' ? 'offline' : activity);
   if (shown === null) {
     return {
       view: overlay(b.phase),
@@ -877,6 +887,7 @@ export function boardView(board) {
       outputLines: [],
       failed: null,
       compacting: false,
+      ask: null,
       others: 0,
       diffIncomplete: false,
       buttons,
@@ -887,11 +898,13 @@ export function boardView(board) {
   }
   const s = shown.state;
   const ask = shown.pending.length > 0 ? shown.pending[0] : null;
+  // the first pending prompt is a question or a plan: the "asks me" state (it pre-empts like a permission prompt)
+  const asks = ask === null ? null : askIn(ask);
   // the call revview answered (nothing pending): the bar shows that call, not the state's last tool/command
   const ans = ask === null && shown.answer !== undefined ? shown.answer : null;
   const ownOutput = ans === null || (ans.tool === 'Bash' && ans.command !== null && s.command === ans.command);
   // a quiet placeholder (no hook yet) is STARTING while the boot lasts or revview just started it, not UNKNOWN
-  const activity = startingOf(b, shown, shownKey) ? 'starting' : act(shown);
+  const activity = startingOf(b, shown, shownKey) ? 'starting' : asks !== null ? 'asking' : act(shown);
   // a failed turn (StopFailure, QA r3-05): the old call's tool, command and output do not sit under the message
   const failed = ask === null && ans === null && s.failed ? s.failed : null;
   const repo = s.repo ?? b.context.repo;
@@ -913,6 +926,7 @@ export function boardView(board) {
     failed: failed === null ? null : { error: failed.error, message: failed.message },
     // compaction is under way: the view says so beside what it shows (it needs no prompt, no failure, a settled activity)
     compacting: s.compacting === true && ask === null && failed === null && (activity === 'working' || activity === 'waiting' || activity === 'done'),
+    ask: asks,
     others: Object.keys(b.sessions).filter((k) => k !== '').length - (shownKey === '' ? 0 : 1),
     diffIncomplete: shown.dropped,
     buttons,

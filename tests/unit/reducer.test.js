@@ -27,7 +27,7 @@ test('initialState', () => {
   });
   assert.notEqual(initialState(), initialState());
   assert.ok(isState(initialState().view));
-  assert.equal(STATES.length, 9);
+  assert.equal(STATES.length, 10);
 });
 
 test('SessionStart -> waiting, sets repo, keeps per-turn data', () => {

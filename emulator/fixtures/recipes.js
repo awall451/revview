@@ -42,6 +42,8 @@ function withContext(events) {
 const workingTurn = session('working-turn');
 const permissionPrompt = session('permission-prompt');
 const idlePrompt = session('idle-prompt');
+const askQuestion = session('ask-question');
+const planApprove = session('plan-approve');
 
 // The last Bash PostToolUse of the working turn: command and its output line are both on screen.
 // A recorded mid-turn compaction: the second auto compaction, up to the SubagentStop that arrives during it
@@ -60,6 +62,9 @@ export const RECIPES = Object.freeze({
   thermal,
   waiting: withContext(upTo(idlePrompt, is('Notification', { notification_type: 'idle_prompt' }))),
   permission: withContext(upTo(permissionPrompt, is('Notification', { notification_type: 'permission_prompt' }))),
+  // Claude asks the driver (AskUserQuestion; the first question of ask-question, 3 options) or for approval of a plan (the extra fixture).
+  asking: withContext(upTo(askQuestion, is('Notification', { notification_type: 'permission_prompt' }))),
+  'asking-plan': withContext(upTo(planApprove, is('Notification', { notification_type: 'permission_prompt' }))),
   done: withContext(upTo(workingTurn, is('Stop'))),
   // A fresh start (e.g. a restarted server): nothing is known yet.
   unknown: [],

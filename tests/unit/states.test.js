@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { STATES, PAGE_ONLY_VIEWS, VIEWS, isState } from '../../src/state/states.js';
 
-test('STATES lists the nine reducer names, in order, without duplicates', () => {
-  assert.deepEqual([...STATES], ['working', 'waiting', 'permission', 'done', 'starting', 'offline', 'insert-key', 'unknown', 'ended']);
+test('STATES lists the ten reducer names, in order, without duplicates', () => {
+  assert.deepEqual([...STATES], ['working', 'waiting', 'permission', 'asking', 'done', 'starting', 'offline', 'insert-key', 'unknown', 'ended']);
   assert.equal(new Set(STATES).size, STATES.length);
 });
 

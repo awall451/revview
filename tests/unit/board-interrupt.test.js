@@ -88,7 +88,7 @@ test('shownPrompt: main-thread recording', () => {
   assert.equal(p.tool, 'Bash');
   assert.equal(typeof p.since, 'number');
   assert.ok(p.command);
-  assert.deepEqual(Object.keys(p).sort(), ['agent', 'command', 'file', 'session', 'since', 'tool']);
+  assert.deepEqual(Object.keys(p).sort(), ['agent', 'ask', 'command', 'file', 'session', 'since', 'tool']);
 });
 
 test('shownPrompt: subagent recording carries the agent id', () => {

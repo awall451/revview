@@ -3,6 +3,7 @@ export const STATES = Object.freeze([
   'working',
   'waiting',
   'permission',
+  'asking',
   'done',
   'starting',
   'offline',

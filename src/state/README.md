@@ -16,7 +16,7 @@ Pure logic that turns Claude Code hook events into the view state (no DOM, no I/
 - `initialBoard()`, `reduceBoard(board, event)`, `boardView(board)`, `replayView(events, board)`,
   `pendingPrompts(board)`, `shownPrompt(board)`, `MAX_SESSIONS` (board.js): the per-session layer, see "Board" below. `PAGE_ONLY_VIEWS`, `VIEWS` (states.js).
 
-`STATES` are the views the state core emits: `working`, `waiting`, `permission`, `done`, `starting`, `offline`,
+`STATES` are the views the state core emits: `working`, `waiting`, `permission`, `asking`, `done`, `starting`, `offline`,
 `insert-key`, `unknown` (nothing known yet: a fresh board or restarted server) and `ended` (Claude exited).
 `PAGE_ONLY_VIEWS = ['no-link']` is drawn by the page when its SSE link is down and is never emitted here;
 `VIEWS = [...STATES, ...PAGE_ONLY_VIEWS]`. `isState` accepts reducer states only.
@@ -25,7 +25,7 @@ Pure logic that turns Claude Code hook events into the view state (no DOM, no I/
 
 | field | meaning |
 | --- | --- |
-| `view` | what the screen shows: `locked ? 'insert-key' : offline && activity !== 'permission' ? 'offline' : activity` (needing the driver outranks OFFLINE; `offline` stays true as a secondary mark) |
+| `view` | what the screen shows: `locked ? 'insert-key' : offline && activity !== 'permission' && activity !== 'asking' ? 'offline' : activity` (needing the driver outranks OFFLINE; `offline` stays true as a secondary mark) |
 | `activity` | `unknown` (initial), `starting`, `working`, `waiting`, `permission` or `done` (derived from Claude events) |
 | `offline`, `locked` | overlays from the synthetic events below |
 | `repo` | last path segment of `cwd`; set by `SessionStart` and `RevviewContext`, otherwise only filled from a Claude event's `cwd` while still null |
@@ -165,10 +165,36 @@ closes from anywhere. `RevviewStarting` also clears `selected`, `want`, `nav`. M
 `{kind, row, rows}`; session rows `{label, word, state, target, voice}`, other rows `{label}`). `shownPrompt` is null while `nav` is open.
 
 Read helpers: `pendingPrompts(board)` is the flat list over all sessions of
-`{ session, agent, since, tool, file, command }` per pending entry (`agent`: `''` main thread, an agent id, or
+`{ session, agent, since, tool, file, command, ask }` per pending entry (`agent`: `''` main thread, an agent id, or
 `null` for a generic notification entry). `shownPrompt(board)` is `null` unless `boardView(board).view` is
-`'permission'`, else that record for the shown session's first pending entry; both use the same shown-session
+`'permission'` (so it is `null` under `asking`; its `ask` is always null), else that record for the shown session's first pending entry; both use the same shown-session
 helper.
+
+## Asking (AskUserQuestion, ExitPlanMode)
+
+Claude asks the driver a question (`AskUserQuestion`) or for approval of a plan (`ExitPlanMode`). Recorded
+(`fixtures/sessions/ask-*.jsonl`, `plan-*.jsonl`, Claude Code 2.1.331): both fire `PreToolUse`, then a
+`PermissionRequest` (also under `bypassPermissions`), then a `permission_prompt` Notification, exactly like a permission prompt.
+`src/state/ask.js` (`askOf`, `isAsk`, pure, never throws) reads what is asked from the tool input.
+
+- `boardView.view` / `activity` is `asking` (a state after `permission` in `STATES`) while the shown session's first pending entry has an `ask`. It pre-empts like a
+  permission prompt and outranks OFFLINE; `locked` still gives `insert-key`. List rows (`nav`) show state `asking`, word `ASKS`.
+- `boardView.ask` is `null` otherwise, else one of
+  `{ kind: 'question', question: string|null, options: string[], more: int, multiSelect: bool, questions: int >= 1 }`
+  (the FIRST question of the call: the terminal shows one at a time and no hook says which; `questions` is how many the call has;
+  `question` at most 200 code points, one line; at most 4 option labels of at most 60 code points; `more` counts the labels past the fourth)
+  or `{ kind: 'plan', title: string|null, steps: int|null }` (`title`: first markdown heading, at most 120 code points, a leading
+  `Plan:` dropped; `steps`: the numbered items under the first heading that says "steps", else all unindented numbered items, null when none).
+  Longer text ends with `…`; ANSI and control characters are removed, white space (newlines too) becomes one space.
+  A payload that carries too little still asks (`question` / `title` null): the bar then only says that Claude asks.
+- The entry comes from the `PermissionRequest` (its `tool_input`); a bare `permission_prompt` Notification takes the ask from the last open main-thread ask call
+  (the `pre` entries of ask tools carry their `ask`). `promptOf` (`pendingPrompts`) has `ask` (null for a permission prompt).
+- It clears exactly like a permission prompt: `PostToolUse` with the `tool_use_id` (answered; an approved plan's Post has `tool_input {}`), `Stop`, a driver prompt, `idle_prompt`, `SessionEnd`.
+- Limits (recorded): an answer typed into the terminal is invisible until `PostToolUse`. A question or a plan dismissed with Esc
+  fires NOTHING: the bar keeps `asking` until the driver's next prompt (a plan rejected with "Tell Claude what to change" arrives as that plain
+  `UserPromptSubmit`), or until `SessionEnd` when there is no more. Which of several questions is on screen is unknown.
+- `sessions/actions.js`: a press or deny tap does nothing (reason `question shown`) while the bar shows `asking`; the buttons cannot answer a question yet.
+- `PostToolBatch` (new in 2.1.331) is ignored.
 
 ## Diff counting
 
