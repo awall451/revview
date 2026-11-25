@@ -12,3 +12,8 @@ process.on('SIGUSR2', () => {
   const file = process.env.LONG_DRIVE_SKEW_FILE;
   if (file) skew = Number(fs.readFileSync(file, 'utf8')) || 0;
 });
+// The drive keeps this process's stdin open. When the drive is gone (even killed with SIGKILL) the pipe closes and the
+// server ends, so a dead drive leaves no server behind.
+process.stdin.on('end', () => process.exit(0));
+process.stdin.on('close', () => process.exit(0));
+process.stdin.resume();

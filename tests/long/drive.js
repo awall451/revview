@@ -24,6 +24,38 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..', '..');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// --- everything the drive starts (the server, Chromium) is stopped on every way out: the normal end, a thrown error, a
+// failed run, SIGINT/SIGTERM/SIGHUP, and process 'exit'. The server and Chromium each lead their own process group, so
+// the whole group is killed. If the drive itself is killed (SIGKILL) nothing can run here: the server then ends when its
+// stdin pipe closes (clock-skew.js) and Chromium ends when its DevTools pipe closes.
+const started = new Set(); // pids of group leaders
+function killGroup(pid) {
+  try { process.kill(-pid, 'SIGKILL'); } catch { try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ } }
+}
+function killAll() {
+  for (const pid of started) killGroup(pid);
+  started.clear();
+}
+let launching = null; // the pending chromium.launch, so a signal that comes during it can still stop that browser
+const browserPids = new Set();
+function trackBrowser() { // this Playwright has no browser.process(): the browser is the child of ours that is not tracked yet
+  for (const n of fs.readdirSync('/proc')) {
+    if (!/^\d+$/.test(n)) continue;
+    try {
+      const ppid = Number(fs.readFileSync(`/proc/${n}/stat`, 'utf8').replace(/^.*\) \S+ /, '').split(' ')[0]);
+      if (ppid === process.pid && !started.has(Number(n))) { started.add(Number(n)); browserPids.add(Number(n)); }
+    } catch { /* gone */ }
+  }
+}
+for (const [sig, code] of [['SIGINT', 130], ['SIGTERM', 143], ['SIGHUP', 129]]) {
+  process.on(sig, async () => {
+    killAll();
+    if (launching) { try { await launching, trackBrowser(); } catch { /* it did not start */ } killAll(); }
+    process.exit(code);
+  });
+}
+process.on('exit', killAll);
+
 // The state word the page shows for each view (the spec; same table as emulator/tests/live.spec.js).
 const LABELS = {
   working: 'WORKING', waiting: 'WAITING FOR ME', permission: 'NEEDS PERMISSION', done: 'DONE',
@@ -103,6 +135,10 @@ const procKb = (pid, field) => {
 };
 
 export async function main(argv) {
+  try { return await drive(argv); } finally { killAll(); }
+}
+
+async function drive(argv) {
   const opt = parseArgs(argv);
   fs.mkdirSync(opt.out, { recursive: true });
   const skewFile = path.join(opt.out, 'skew-ms');
@@ -121,8 +157,10 @@ export async function main(argv) {
   async function startServer() {
     serverStarts++;
     const child = spawn(process.execPath, ['--import', path.join(HERE, 'clock-skew.js'), path.join(ROOT, 'src/server/index.js'), String(port)], {
-      cwd: ROOT, env: { ...process.env, LONG_DRIVE_SKEW_FILE: skewFile, LONG_DRIVE_SKEW_MS: String(skewMs) }, stdio: ['ignore', 'pipe', 'pipe'],
+      cwd: ROOT, env: { ...process.env, LONG_DRIVE_SKEW_FILE: skewFile, LONG_DRIVE_SKEW_MS: String(skewMs) }, stdio: ['pipe', 'pipe', 'pipe'], detached: true, // stdin: a pipe, whose close ends the server (clock-skew.js)
     });
+    if (child.pid) started.add(child.pid);
+    child.once('exit', () => started.delete(child.pid));
     child.stdout.pipe(serverLog, { end: false });
     child.stderr.pipe(serverLog, { end: false });
     child.exited = new Promise((r) => child.once('exit', r));
@@ -141,7 +179,10 @@ export async function main(argv) {
   const serverState = async () => (await fetch(`${url}/state`)).json();
 
   // --- the page
-  const browser = await chromium.launch({ headless: true });
+  launching = chromium.launch({ headless: true, handleSIGINT: false, handleSIGTERM: false, handleSIGHUP: false });
+  const browser = await launching;
+  launching = null;
+  trackBrowser();
   const context = await browser.newContext({ viewport: { width: 1280, height: 400 }, deviceScaleFactor: 1 });
   const page = await context.newPage();
   const pageProblems = { errors: [], consoleErrors: 0, consoleTexts: {}, crashed: false };
@@ -157,6 +198,7 @@ export async function main(argv) {
   await cdp.send('Performance.enable');
 
   await startServer();
+  if (process.env.LONG_DRIVE_FAULT === 'throw') { await sleep(2000); throw new Error('injected fault'); } // self-check of the cleanup (cleanup.test.js)
   const proxy = await startProxy(port);
   await page.goto(`http://127.0.0.1:${proxy.port}/`);
   await page.waitForFunction(() => document.documentElement.dataset.link === 'up', null, { timeout: 15000 });
@@ -315,6 +357,7 @@ export async function main(argv) {
   log(`done: ${results.simulatedMin} simulated min in ${results.runningWallS} s running (${results.totalWallS} s total), ${replay.stats.posted} events (${replay.stats.failed} failed), ${results.failedChecks} failed comparisons; results in ${path.join(opt.out, 'long-drive.json')}`);
 
   await browser.close();
+  for (const p of browserPids) started.delete(p);
   proxy.close();
   await stopServer('SIGTERM');
   serverLog.end();

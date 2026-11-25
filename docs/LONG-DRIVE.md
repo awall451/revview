@@ -15,6 +15,8 @@ Needs `npm ci` (the script does it when `node_modules` is missing) and the prein
 (`PLAYWRIGHT_BROWSERS_PATH`; nothing is installed). It prints one line per step, writes `long-drive.json` (every
 number below, plus the page's console errors) and `server.log`, and exits 0 when the page agreed with the server
 after every disturbance and sample, 1 when it did not, 2 when the tool itself failed.
+The tool cleans up after itself: on a normal end, an error, SIGINT/SIGTERM/SIGHUP it stops its server and Chromium (and
+if it is killed with SIGKILL they end with it); `node --test tests/long/cleanup.test.js` checks that (run on request).
 
 ## Method
 
