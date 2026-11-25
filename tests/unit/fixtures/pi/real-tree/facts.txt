@@ -1,0 +1,234 @@
+# Extracted by pi/tree/check.sh from the real Raspberry Pi OS Trixie arm64 packages on 2026-11-25
+# package d apt 3.0.4
+# package d base-files 13.8+deb13u8
+# package d base-passwd 3.6.7
+# package d bash 5.2.37-2+b10
+# package d coreutils 9.7-3
+# package d cryptsetup 2:2.7.5-2
+# package d cryptsetup-bin 2:2.7.5-2
+# package d curl 8.14.1-2+deb13u7
+# package d dash 0.5.12-12
+# package d dpkg 1.22.22
+# package d e2fsprogs 1.47.2-3+b12
+# package d espeak-ng 1.52.0+dfsg-5
+# package d espeak-ng-data 1.52.0+dfsg-5
+# package d grep 3.11-4+b1
+# package d libcryptsetup12 2:2.7.5-2
+# package d mawk 1.3.4.20250131-1
+# package d mount 2.41.5-0+deb13u1
+# package d overlayroot 0.18.debian14
+# package d passwd 1:4.17.4-2
+# package d python3 3.13.5-1
+# package d python3-minimal 3.13.5-1
+# package d sed 4.9-2+deb13u1
+# package d sox 14.4.2+git20190427-5+b3
+# package d systemd 257.13-1~deb13u1
+# package d tmux 3.5a-3
+# package d udev 257.13-1~deb13u1
+# package d util-linux 2.41.5-0+deb13u1
+# package d wlr-randr 0.4.1-1
+# package r alsa-utils 1.2.14-1+rpt1
+# package r chromium 1:156.0.8078.108-1~deb13u1+rpt1
+# package r initramfs-tools-core 0.148.4+rpt2
+# package r labwc 0.20.2-1~bpo13+1
+# package r libc-bin 2.41-12+rpt1+deb13u4
+# package r libinput-bin 1.28.1-1+rpt1+deb13u1
+# package r libinput10 1.28.1-1+rpt1+deb13u1
+# package r lightdm 1.32.0-6+rpt2+deb13u1
+# package r pi-greeter 1.3
+# package r raspberrypi-sys-mods 1:20260914
+# package r raspi-config 20261026+2
+# package r raspi-config-core 20261026+2
+# package r raspi-utils-core 20260626-1
+# package r rpd-wayland-core 1.39
+# package r rpi-chromium-mods 20261111
+chromium-switch check-for-update-interval
+chromium-switch disable-features
+chromium-switch disable-infobars
+chromium-switch disable-pinch
+chromium-switch hide-crash-restore-bubble
+chromium-switch kiosk
+chromium-switch no-default-browser-check
+chromium-switch no-first-run
+chromium-switch noerrdialogs
+chromium-switch overscroll-history-navigation
+chromium-switch ozone-platform
+chromium-switch password-store
+chromium-switch user-data-dir
+cmd aplay /usr/bin/aplay
+cmd apt-get /usr/bin/apt-get
+cmd awk /usr/bin/mawk
+cmd bash /usr/bin/bash
+cmd cat /usr/bin/cat
+cmd chmod /usr/bin/chmod
+cmd chown /usr/bin/chown
+cmd chromium /usr/bin/chromium
+cmd cp /usr/bin/cp
+cmd cryptsetup /usr/sbin/cryptsetup
+cmd curl /usr/bin/curl
+cmd cut /usr/bin/cut
+cmd dirname /usr/bin/dirname
+cmd dpkg /usr/bin/dpkg
+cmd e2fsck /usr/sbin/e2fsck
+cmd espeak-ng /usr/bin/espeak-ng
+cmd flock /usr/bin/flock
+cmd getent /usr/bin/getent
+cmd grep /usr/bin/grep
+cmd head /usr/bin/head
+cmd id /usr/bin/id
+cmd install /usr/bin/install
+cmd journalctl /usr/bin/journalctl
+cmd ln /usr/bin/ln
+cmd lsblk /usr/bin/lsblk
+cmd mkdir /usr/bin/mkdir
+cmd mkfs.ext4 /usr/sbin/mkfs.ext4
+cmd mktemp /usr/bin/mktemp
+cmd mount /usr/bin/mount
+cmd mountpoint /usr/bin/mountpoint
+cmd python3 /usr/bin/python3
+cmd raspi-config /usr/bin/raspi-config
+cmd readlink /usr/bin/readlink
+cmd rec /usr/bin/rec
+cmd rm /usr/bin/rm
+cmd runuser /usr/sbin/runuser
+cmd sed /usr/bin/sed
+cmd sh /usr/bin/sh
+cmd sleep /usr/bin/sleep
+cmd sort /usr/bin/sort
+cmd stat /usr/bin/stat
+cmd sync /usr/bin/sync
+cmd systemctl /usr/bin/systemctl
+cmd tmux /usr/bin/tmux
+cmd tr /usr/bin/tr
+cmd udevadm /usr/bin/udevadm
+cmd umount /usr/bin/umount
+cmd usermod /usr/sbin/usermod
+cmd vcgencmd /usr/bin/vcgencmd
+cmd wlr-randr /usr/bin/wlr-randr
+path /etc
+path /etc/lightdm
+path /etc/lightdm/lightdm.conf
+path /etc/profile.d
+path /etc/systemd
+path /etc/systemd/system
+path /etc/systemd/user
+path /etc/udev
+path /etc/udev/rules.d
+path /etc/xdg
+path /etc/xdg/labwc
+path /etc/xdg/labwc/autostart
+path /usr
+path /usr/bin
+path /usr/bin/chromium
+path /usr/bin/labwc-pi
+path /usr/lib
+path /usr/lib/systemd
+path /usr/lib/systemd/user
+path /usr/lib/systemd/user/default.target
+path /usr/lib/udev
+path /usr/lib/udev/rules.d
+path /usr/lib/udev/rules.d/60-input-id.rules
+path /usr/lib/udev/rules.d/60-persistent-storage.rules
+path /usr/share
+path /usr/share/initramfs-tools
+path /usr/share/initramfs-tools/scripts
+path /usr/share/initramfs-tools/scripts/init-bottom
+path /usr/share/initramfs-tools/scripts/init-bottom/overlayroot
+path /usr/share/wayland-sessions
+path /usr/share/wayland-sessions/rpd-labwc.desktop
+path /var
+path /var/lib
+path /var/lib/systemd
+raspi-config-fn disable_bootro
+raspi-config-fn disable_overlayfs
+raspi-config-fn do_overlayfs
+raspi-config-fn enable_bootro
+raspi-config-fn enable_overlayfs
+raspi-config-sed disable_bootro s#\(.*/boot/firmware.*\)defaults,ro\(.*\)#\1defaults\2#
+raspi-config-sed disable_overlayfs s/\(.*\)overlayroot=tmpfs \(.*\)/\1\2/
+raspi-config-sed enable_bootro s#\(.*/boot/firmware.*\)defaults\(.*\)#\1defaults,ro\2#
+raspi-config-sed enable_overlayfs s/^/overlayroot=tmpfs /
+unit system basic.target
+unit system blockdev@.target
+unit system bluetooth.target
+unit system boot-complete.target
+unit system ctrl-alt-del.target
+unit system default.target
+unit system emergency.target
+unit system exit.target
+unit system factory-reset.target
+unit system final.target
+unit system first-boot-complete.target
+unit system getty-pre.target
+unit system getty.target
+unit system graphical.target
+unit system halt.target
+unit system hibernate.target
+unit system hybrid-sleep.target
+unit system initrd-fs.target
+unit system initrd-root-device.target
+unit system initrd-root-fs.target
+unit system initrd-switch-root.target
+unit system initrd-usr-fs.target
+unit system initrd.target
+unit system kexec.target
+unit system local-fs-pre.target
+unit system local-fs.target
+unit system multi-user.target
+unit system network-online.target
+unit system network-pre.target
+unit system network.target
+unit system nss-lookup.target
+unit system nss-user-lookup.target
+unit system paths.target
+unit system poweroff.target
+unit system printer.target
+unit system reboot.target
+unit system remote-fs-pre.target
+unit system remote-fs.target
+unit system rescue.target
+unit system rpcbind.target
+unit system runlevel0.target
+unit system runlevel1.target
+unit system runlevel2.target
+unit system runlevel3.target
+unit system runlevel4.target
+unit system runlevel5.target
+unit system runlevel6.target
+unit system shutdown.target
+unit system sigpwr.target
+unit system sleep.target
+unit system slices.target
+unit system smartcard.target
+unit system sockets.target
+unit system soft-reboot.target
+unit system sound.target
+unit system ssh-access.target
+unit system storage-target-mode.target
+unit system suspend-then-hibernate.target
+unit system suspend.target
+unit system swap.target
+unit system sysinit.target
+unit system system-update-pre.target
+unit system system-update.target
+unit system time-set.target
+unit system time-sync.target
+unit system timers.target
+unit system tpm2.target
+unit system umount.target
+unit system usb-gadget.target
+unit user basic.target
+unit user bluetooth.target
+unit user capsule@.target
+unit user default.target
+unit user exit.target
+unit user graphical-session-pre.target
+unit user graphical-session.target
+unit user paths.target
+unit user printer.target
+unit user shutdown.target
+unit user smartcard.target
+unit user sockets.target
+unit user sound.target
+unit user timers.target
+unit user xdg-desktop-autostart.target

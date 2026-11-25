@@ -41,3 +41,10 @@ curl                unlock.sh pokes the server
 passwd              usermod (install.sh adds the user to groups)
 libc-bin            getent
 mawk                awk (the /usr/bin/awk link is made by update-alternatives at install time, not shipped)
+# Essential tools the scripts call (on every Pi; listed so the command check can find them):
+bash                bash
+dash                /bin/sh
+sed                 sed
+grep                grep
+dpkg                dpkg -s
+apt                 apt-get
