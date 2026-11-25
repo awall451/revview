@@ -1,0 +1,21 @@
+# captured 23:25:36
+ ▐▛███▛█   Claude Code v2.1.332
+▝▜██████▀  Haiku 5.5 · Claude API
+ ▝▝   ▝▝   /tmp/q2/repo
+❯ Use the AskUserQuestion tool once to ask me "Which colour?" with the options Red, Green, Blue, Yellow (single choice). Then reply with only the
+  colour I chose.
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ☐ Colour
+Which colour?
+  1. Red
+     Choose red
+  2. Green
+     Choose green
+  3. Blue
+     Choose blue
+❯ 4. Yellow
+     Choose yellow
+  5. Type something.
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  6. Chat about this
+Enter to select · ↑/↓ to navigate · Esc to cancel

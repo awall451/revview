@@ -1,0 +1,12 @@
+# captured 23:31:11
+ ▐▛███▛█   Claude Code v2.1.332
+▝▜██████▀  Haiku 5.5 · Claude API
+ ▝▝   ▝▝   /tmp/q2/repo
+❯ Use the AskUserQuestion tool once to ask me "Which tea?" with the options Green, Black (single choice). Then reply with only the tea I chose, or
+  NONE.
+● Declined to answer Claude's questions:
+  ⎿  · Which tea? (Green / Black)
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts
