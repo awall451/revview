@@ -20,6 +20,9 @@ function clean(s, max) {
   return cps.length <= max ? one : `${cps.slice(0, max - 1).join('').trimEnd()}…`;
 }
 
+// An option label as the bar shows it (the registry compares the held request's exact label with the bar's)
+export const optionLabel = (s) => clean(s, ASK_LIMITS.option);
+
 // The plan's title: its first markdown heading (a leading "Plan:" dropped, the word is on the bar already);
 // steps: the numbered items under the first heading that says "steps", else every unindented numbered item.
 function planOf(input) {
