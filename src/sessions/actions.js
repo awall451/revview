@@ -150,7 +150,11 @@ export function createActions({
     return out(kind, true);
   }
 
-  const PLAN_LINES = [/Would you like to proceed\?/, /^\s*(?:❯\s*)?2\.\s+Yes, manually approve edits$/, /^\s*(?:❯\s*)?3\.\s+Tell Claude what to change$/];
+  // the plan dialog's three choices on consecutive lines, as recorded (fixtures/answers/pane-10-plan.txt; at the
+  // runner's 80 columns Claude wraps "Would you like to proceed?" over two lines, trial-7-plan.txt, so the
+  // question line is not used)
+  const PLAN_LINES = [/^\s*(?:❯\s*)?1\.\s+Yes\b/, /^\s*(?:❯\s*)?2\.\s+Yes, manually approve edits$/, /^\s*(?:❯\s*)?3\.\s+Tell Claude what to change$/];
+  const showsPlanDialog = (lines) => lines.some((_, i) => PLAN_LINES.every((re, j) => re.test(lines[i + j] ?? '')));
 
   async function approvePlan() {
     const g = await askTarget('allow');
@@ -166,7 +170,7 @@ export function createActions({
       return out('allow', false, cap?.reason ?? 'capture failed');
     }
     const lines = cap.lines.map((l) => String(l).trimEnd());
-    if (!PLAN_LINES.every((re) => lines.some((l) => re.test(l)))) {
+    if (!showsPlanDialog(lines)) {
       askNote('Not sent: the terminal does not show the plan');
       return out('allow', false, 'plan not on screen');
     }

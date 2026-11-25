@@ -191,9 +191,22 @@ test('plan: the dialog with the cursor on 2 is recognised too', async () => {
   assert.deepEqual(s.sent, ['2']);
 });
 
+test('plan: the real 80-column pane (the question line wrapped by Claude) is recognised', async () => {
+  const lines = fs.readFileSync(new URL('../../fixtures/answers/trial-7-plan.txt', import.meta.url), 'utf8').split('\n');
+  assert.ok(!lines.some((l) => /Would you like to proceed\?/.test(l)));
+  const s = setup({ board: planBoard(), capture: { ok: true, lines } });
+  assert.equal((await s.a.handle(dev('press'))).done, true);
+  assert.deepEqual(s.sent, ['2']);
+});
+
 test('plan: a capture without the recorded lines sends no key and says so', async () => {
-  for (const drop of [/Would you like to proceed/, /2\. Yes, manually approve edits/, /3\. Tell Claude what to change/]) {
-    const s = setup({ board: planBoard(), capture: { ok: true, lines: PLAN_PANE.filter((l) => !drop.test(l)) } });
+  const gap = (lines) => lines.flatMap((l) => (/2\. Yes, manually approve edits/.test(l) ? [l, '     something else'] : [l]));
+  const cases = [/1\. Yes, and use auto mode/, /2\. Yes, manually approve edits/, /3\. Tell Claude what to change/]
+    .map((drop) => PLAN_PANE.filter((l) => !drop.test(l)));
+  cases.push(gap(PLAN_PANE)); // the three choices, but not on consecutive lines
+  cases.push(PLAN_PANE.map((l) => l.replace('2. Yes, manually approve edits', '2. Yes, approve edits'))); // another wording
+  for (const lines of cases) {
+    const s = setup({ board: planBoard(), capture: { ok: true, lines } });
     const r = await s.a.handle(dev('press'));
     assert.equal(r.done, false);
     assert.equal(s.noteOf().text, 'Not sent: the terminal does not show the plan');

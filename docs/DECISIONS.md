@@ -2029,3 +2029,65 @@ Evidence: `pi/tree/build.sh` unpacks the pinned Trixie arm64 packages (Debian an
 - **`disable` and `enable` refusals.** `enable` refuses (exit 2) while the overlay is on, without the overlayroot package, or when the `/boot/firmware` fstab line has no `defaults`. `disable` stops with exit 1 when fstab has `ro` in a form raspi-config cannot remove (only `defaults,ro` is removed) or when `overlayroot=tmpfs` stays in `cmdline.txt`; the message now says what to run after the hand edit (`sudo bash pi/readonly.sh disable` again).
 - **The tree tool and what it cannot prove.** It proves that a name, path, switch string, unit or raspi-config function exists in the packages. It does not prove behaviour, ordering at boot, maintainer scripts (never run), files made at install time, or anything about Node and Claude Code (not Pi OS packages). `build.sh` checks that no package member name is absolute or has `..`, and stops on any tar failure while merging; it does not verify that `dpkg-deb -x` and tar never write through a package's own symlinks (that rests on their defaults and on the pinned hashes). `check.sh` only reads the tree and passes its paths to host tools; it runs nothing from it.
 - **InRelease signature not verified here.** This VM has neither archive's key, so `build.sh` checks the Packages hashes against InRelease and each `.deb` against the pinned lock, but not the signature, unless `REVVIEW_TREE_KEYRING_D` / `REVVIEW_TREE_KEYRING_R` give a keyring. The lock's hashes were fetched over plain http through the proxy.
+
+## 2026-11-25: Questions and plans 2: answered from the wheel buttons (cycle 60, owner issue #28, branch work/questions-2)
+
+**Recorded first** (Claude Code 2.1.332, `--model haiku`, tmux, the real picker; `fixtures/answers/`, its README
+lists every capture): arrows move the picker's cursor relative to where it is; a digit key picks that option at
+once, whatever the cursor; a PermissionRequest hook decision `allow` with `updatedInput {questions, answers:
+{question: label}}` answers the question (the picker closes, `Allowed by PermissionRequest hook`, PostToolUse
+carries the answer); a hook deny cancels it (Claude goes on, Stop fires, no PermissionDenied); Esc on the picker
+kills the waiting hook process at once; a hook deny on ExitPlanMode keeps Claude in plan mode; **a hook allow on
+ExitPlanMode is ignored** (the plan dialog stayed, no PostToolUse); the key `2` on the plan dialog approved it with
+"Yes, manually approve edits" (later events in `default` mode, the next Write asked for permission).
+
+**Decisions.**
+
+- **Questions go through the held hook request, not keys** (the owner's proposal was keys; the brief asked to weigh
+  the hook route if evidence showed it can carry the answer, and it does). Why: the answer names the option by its
+  exact label taken from the held request, so a wrong or lost key, a cursor the driver moved in the terminal, or a
+  redrawn picker cannot pick the wrong option; the request itself is the proof that this very picker is still
+  open (Claude ends the hook when the picker is answered or dismissed in the terminal), which is stronger than
+  reading the pane; the slot is released by the answer itself; nothing is typed into the terminal. The registry
+  checks the bar's cut label against `optionLabel(<request label>)` and refuses on any difference; the hook checks
+  again that the questions are its own stdin's and each answer is one of that question's labels. The key sequences
+  (digit = absolute pick) are recorded and kept as the fallback evidence; no code sends them for a question.
+- **Plans are approved by the key `2`**, because a hook allow is ignored for ExitPlanMode in 2.1.332. Before the key
+  the action requires the held request (same guard: shown 1.5 s, the same `since`, the selected owned session) and a
+  `capture-pane` showing the three choices on consecutive lines (`1. Yes…`, exactly `2. Yes, manually approve
+  edits`, exactly `3. Tell Claude what to change`); the board is checked again after the capture. The dialog's
+  question line is not used: at the runner's 80 columns Claude wraps "Would you like to proceed?" (seen in the
+  live trial, `trial-7-plan.txt`; the first version of the check refused there, safely). "2" (manual approval) and
+  not "1" (auto mode): later edits stay permission prompts the wheel can answer. A changed wording of choice 2
+  refuses ("the terminal does not show the plan").
+- **Deny**: a hook deny for a question ("Denied with the wheel button.") and for a plan ("Not yet: keep planning.
+  Denied with the wheel button."), not Esc: it fires events, and Claude knows the driver declined.
+- **Scope of `pick`** (`answerOf` in `src/state/ask.js`): one question in the call, not multi-select, 1-4 options,
+  a question text. Several questions and multi-select are refused with "Answer in the terminal when parked": no
+  hook tells which question is on screen, and a multi-select answer format was not recorded. Deny still cancels them.
+- **The choice lives on the pending entry** (`choice`, default 0): a new question is a new entry, so a highlight
+  can never carry over. `shownAsk(board)` gives the prompt, `answer` and `choice`; the actions take it at the
+  gesture and compare session, agent, `since` and `choice` after every await. Up/down under a `pick` move the
+  choice (no wrap) instead of opening the list; under a plan or `terminal` ask they open the list as before.
+- **Refusal notes** have the new kind `ask` (gone when the shown question changes, or at the next gesture); the
+  table is in BUTTONS section 10.
+- **Bar**: the highlighted option is an inverted lime block with a white frame; a hint row says what the buttons do;
+  the hint goes first when the notes take the room (the question keeps 4.0 mm). Answered: "Answered", "Question
+  cancelled", "Plan approved", "Kept planning". Gallery: `asking.png`, `asking-plan.png`, `asking-long.png` changed
+  (hint row; option 1 highlighted in `asking.png`), new `asking-choice.png`, `asking-terminal.png`.
+
+**Live trial** (2026-11-25, this VM, `emulator/run.sh --live /tmp/q2t/repo --no-browser`, a `claude` wrapper adding
+`--model haiku`, its own `CLAUDE_CONFIG_DIR`; the bar driven by laptop keys through `POST /dev/key`; prompts typed
+into the tmux pane; captures `fixtures/answers/trial-*.txt`): "Which colour?" (4 options): down, down, press -> the
+pane said `Which colour? → Blue`, `Allowed by PermissionRequest hook`, Claude replied Blue, the bar showed DONE
+"Answered". "Which pet?": deny -> `Denied by PermissionRequest hook`, Claude replied NONE. "Which tea?" dismissed
+with Esc in the terminal, then press -> nothing sent, "Not sent: the question is not waiting any more" (CLAUDE ASKS
+stayed: no event). Two questions in one call: press -> "Answer in the terminal when parked", nothing sent; deny ->
+the call cancelled. Plan mode: deny -> Claude stayed in plan mode and wrote nothing; a second plan: press -> refused
+by the first pane check (wrapped line, see above), fixed, server restarted, a new plan: press -> the key 2 approved
+it, Claude's Write then showed NEEDS PERMISSION, press allowed it, `hello.txt` was written. Afterwards no server,
+tmux or Chromium was left (`pgrep`), `~/.claude/settings.json` unchanged (md5 before and after).
+
+**Not solved:** a question dismissed with Esc stays on the bar until the next event (the server could clear it
+when the held request's connection closes without an answer; not done: a hook timeout looks the same); several
+questions and multi-select; "Type something" answers; nothing on the Pi or with the pods (bench QA2-1 to QA2-5).

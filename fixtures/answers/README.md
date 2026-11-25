@@ -49,3 +49,16 @@ connection close. No event fired (as in cycle 59).
 4. `pane-15-plan-digit2.txt`: the key `2` in the pane approved the plan ("Yes, manually approve edits"):
    PostToolUse ExitPlanMode, the next events have `permission_mode` default, and Claude's Write asked for
    permission normally (answered by the hook with allow; `hello.txt` was written).
+
+## Live trial through revview (`trial-*.txt`)
+
+The same day, `emulator/run.sh --live /tmp/q2t/repo --no-browser` from the branch (real server, real hooks from
+`hooks/install.mjs`, the owned tmux pane at its default 80x24), `claude` on PATH a wrapper adding `--model haiku`,
+its own `CLAUDE_CONFIG_DIR`. The bar was driven with laptop keys through `POST /dev/key` (ArrowDown, Enter = press,
+KeyN = deny); prompts were typed into the pane with `send-keys`. Captures (`capture-pane -p`, blank lines dropped):
+`trial-1-question` (the picker), `trial-2-answered` (down, down, press: `→ Blue`, `Allowed by PermissionRequest
+hook`), `trial-3-denied` (deny), `trial-4-esc-then-press` (Esc in the terminal, then press: nothing sent),
+`trial-5-two-questions` / `trial-6-two-denied` (two questions: press refused, deny cancelled), `trial-7-plan` (the
+plan dialog at 80 columns: "Would you like to proceed?" wrapped by Claude over two lines), `trial-8-plan-denied`
+(deny: still in plan mode), `trial-10-plan2` / `trial-11-plan-approved` (press: key 2, the Write permission prompt
+follows). DECISIONS "Questions and plans 2" has the story.

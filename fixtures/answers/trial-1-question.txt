@@ -1,0 +1,21 @@
+# captured 23:53:01
+▎ the ones it assesses as lower-risk, and blocks the rest.
+▎ https://code.claude.com/docs/en/permission-modes
+❯ Use the AskUserQuestion tool once to ask me "Which colour?" with the options
+  Red, Green, Blue, Yellow (single choice). Then reply with only the colour I
+  chose, or NONE.
+────────────────────────────────────────────────────────────────────────────────
+ ☐ Colour
+Which colour?
+❯ 1. Red
+     Choose red
+  2. Green
+     Choose green
+  3. Blue
+     Choose blue
+  4. Yellow
+     Choose yellow
+  5. Type something.
+────────────────────────────────────────────────────────────────────────────────
+  6. Chat about this
+Enter to select · ↑/↓ to navigate · Esc to cancel

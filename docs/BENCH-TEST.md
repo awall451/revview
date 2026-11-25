@@ -418,9 +418,9 @@ DECISIONS "Questions and plans 1".
 |---|---|---|---|
 | QP-1 | On the Pi, with the bar in the car or in daylight: ask Claude "Use the AskUserQuestion tool to ask me which colour to use, with three options" | Within a second the bar shows CLAUDE ASKS (lime band, speech bubble), the question in big type and the options numbered 1-3. Note whether the question and options read at a glance, whether the lime band is told apart from the amber NEEDS PERMISSION at a glance, and whether the Pi's fonts cut anything the emulator did not | untested |
 | QP-2 | Same, a question with a long text and four long options, and a call with two questions | Nothing overflows the panel; long texts end with an ellipsis; "1 of 2" shows; after answering both in the terminal the bar goes back to WORKING | untested |
-| QP-3 | Plan mode (Shift+Tab until "plan mode"), ask for a short plan | CLAUDE ASKS with "Plan: <title>", the step count and "Approve in the terminal when parked". Approve: WORKING. Reject with Esc: CLAUDE ASKS stays until you speak or type the next prompt (recorded on the VM: no hook fires on Esc) | untested |
+| QP-3 | Plan mode (Shift+Tab until "plan mode"), ask for a short plan | CLAUDE ASKS with "Plan: <title>", the step count and (since cycle 60) "Allow approves · Deny keeps planning". Approve: WORKING. Reject with Esc: CLAUDE ASKS stays until you speak or type the next prompt (recorded on the VM: no hook fires on Esc) | untested |
 | QP-4 | With `speakOnStop` on and a speech engine: get a question, then a plan; also press read aloud | The question and its numbered options are spoken; the plan's title and step count are spoken. Note whether the voice is understandable over road noise | untested |
-| QP-5 | While CLAUDE ASKS shows: tap the wheel's press, deny and push-to-talk | Press and deny do nothing (the picker on the pane is unchanged); push-to-talk shows "Answer the prompt first" | untested |
+| QP-5 | While CLAUDE ASKS shows: tap the wheel's press, deny and push-to-talk | Push-to-talk shows "Answer the prompt first". (Changed in cycle 60: press and deny now answer; see QA2-1 to QA2-4) | untested |
 
 
 ## Hours on the Pi (cycle 59)
@@ -435,3 +435,16 @@ DECISIONS "Questions and plans 1".
 | LD-4 | On the Pi, the real timers over real time: a session that sits in WAITING FOR ME for an hour, one in NEEDS PERMISSION for 10 minutes, a compaction that runs the full 180 s limit | The bar keeps the state; the compaction mark ends by itself at 180 s; nothing needs a reload. The replay runs 30 times faster than real time, so the VM run exercised none of the server's real-time timers | untested |
 | LD-5 | On the Pi, cut the Wi-Fi (hotspot off) for 2 minutes, then on, while Claude works, 10 times in an hour | The page shows NO LINK only if the server is unreachable; with the server up the bar keeps updating (the page and the server talk over the loopback, not over Wi-Fi), OFFLINE shows within 20 s of the network going and goes by itself after. The VM only cut the page's own link to the server (a proxy), not a network | untested |
 | LD-6 | On the Pi, `kill -9` of the server (`systemctl --user restart revview` after) four times in an hour with Chromium kept open | After each restart the bar leaves NO LINK within about 2 s of the server listening and shows UNKNOWN until the next hook event; Chromium keeps the same process and its memory does not step up by tens of MB per restart. Hook events posted while the server was down are lost (known): note how long the bar stays UNKNOWN in a live session | untested |
+
+## Questions and plans 2: answering from the wheel (cycle 60)
+
+Unit and emulator tests and a live trial on the VM (Claude Code 2.1.332, laptop keys); never seen with the pods,
+on the panel or in a car. DECISIONS "Questions and plans 2", BUTTONS section 10.
+
+| # | Try | Should happen | State |
+|---|---|---|---|
+| QA2-1 | On the Pi with the pods, in daylight: ask Claude "Use the AskUserQuestion tool to ask me which colour to use, with four options"; tap down twice, wait 2 s, tap press | The highlight (lime block, white frame) moves 1 -> 2 -> 3 with each tap; the pane's picker closes with `→` the third option and `Allowed by PermissionRequest hook`; the bar shows "Answered". Note whether the highlight reads at a glance and whether a tap was ever lost or doubled | untested |
+| QA2-2 | Same, then tap deny instead | The pane says `Denied by PermissionRequest hook`; the bar shows "Question cancelled" | untested |
+| QA2-3 | Plan mode, a short plan; tap deny; then a second plan, tap press | Deny: Claude stays in plan mode, the bar shows "Kept planning". Press: the pane's dialog closes with "Yes, manually approve edits", the next edit asks for permission on the bar | untested |
+| QA2-4 | A question; tap press at once (under 1.5 s), then dismiss a question with Esc in the terminal and tap press; a call with two questions, tap press | "Too early: press again"; "Not sent: the question is not waiting any more"; "Answer in the terminal when parked". Nothing changes on the pane in any of them | untested |
+| QA2-5 | With the Pi's real pane size (attach once from a laptop with a different size, then detach) get a plan and tap press | The key is sent only when the dialog's three choices are on screen; if the bar says "Not sent: the terminal does not show the plan", capture the pane (`tmux -L revview capture-pane -p`) and keep it | untested |

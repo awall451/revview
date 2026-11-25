@@ -372,6 +372,71 @@ the defaults are suggestions, the owner decides.
 - Two pods on one dongle is supported by the ZMK version you build (from memory: recent versions; check).
 - One spare of each part: a dead pod in the car is a real cost.
 
+## 10. Answering questions and plans from the wheel (cycle 60, owner issue #28)
+
+Built and tried on this VM with Claude Code 2.1.332 (recordings in `fixtures/answers/`, its README says what was
+seen). Nothing tried on the Pi, the pods or in a car ([untested hardware], bench QA2-1 to QA2-5). The state and the
+bar are part 1 (section 4 and DECISIONS "Questions and plans 1"). Same pods, no new button.
+
+**Gestures while CLAUDE ASKS shows for the selected session** (no list or menu open):
+
+| Ask on the bar | up / down tap | press tap (allow) | deny tap | push-to-talk |
+|---|---|---|---|---|
+| one question, one answer, 1-4 options (`pick`) | move the highlighted choice one option (no wrap; starts on 1, like the terminal's cursor) | answer the highlighted option | cancel the question | refused: "Answer the prompt first" (part 1) |
+| a plan (ExitPlanMode, `plan`) | open the session list (as before) | approve: "Yes, manually approve edits" | keep planning | same |
+| anything else (`terminal`): several questions in one call, "pick any" (multi-select), no options, a payload with too little | open the session list | nothing sent; the note "Answer in the terminal when parked" | cancel the whole call | same |
+
+"Other" (the terminal's "Type something") stays a voice or terminal answer: the bar does not offer it.
+
+**What the bar shows** (1280x400; the part 1 size rules hold: the question never under 4.0 mm, the options one line
+each with an ellipsis):
+
+- The highlighted option is an inverted block: lime `#e6f25a` background, black text, a 3 px white frame. Not by
+  colour alone: the block and the frame show it in black and white too. Only one option is ever highlighted; a plan
+  or a `terminal` ask has none. Gallery: `asking-choice.png` (option 3), `asking.png` (option 1).
+- A hint row under the options says what the buttons do: "Allow picks · Deny cancels", for a plan "Allow approves ·
+  Deny keeps planning", for a `terminal` ask "Answer in the terminal when parked" (`asking-terminal.png`). When the
+  offline and voice notes take the room, the hint row goes first (the question keeps its 4.0 mm).
+- After the answer the prompt leaves the bar at once (as allow/deny of a permission prompt): "Answered" / "Question
+  cancelled", "Plan approved" / "Kept planning" in the row where "Allowed: Bash" shows for a permission prompt.
+
+**How the answer reaches Claude** (DECISIONS "Questions and plans 2" weighs the routes):
+
+- **A question** is answered through revview's held PermissionRequest hook, never by keys: the decision is
+  `{behavior: allow, updatedInput: {questions: <the request's own questions>, answers: {<question>: <exact label>}}}`.
+  The label comes from the held request, by the highlighted index, and must equal the bar's (cut) label. Recorded:
+  the picker closes, the pane says `Which fruit? → Plum` and `Allowed by PermissionRequest hook`, and Claude gets
+  the answer as if picked in the terminal. The hook itself checks the answer again: the questions must be its own
+  stdin's, and every answer one of that question's option labels (`hooks/permission-request.mjs`).
+- **Cancel** (deny on a question) is a hook deny ("Denied with the wheel button."): the pane says `Denied by
+  PermissionRequest hook`, Claude goes on without an answer. Not the terminal's Esc (which ends the turn and fires no
+  event).
+- **Keep planning** (deny on a plan) is a hook deny with "Not yet: keep planning. Denied with the wheel button.":
+  Claude stays in plan mode (recorded: it then asked what to change, or said it would wait for changes).
+- **Approve a plan** is the key `2` sent into the owned tmux pane: a hook allow does not approve a plan in 2.1.332
+  (recorded: the dialog stayed). `2` picks "2. Yes, manually approve edits" at once whatever the cursor (recorded,
+  also for questions: a digit picks that option directly, arrows are relative). Manual approval keeps later edits
+  as permission prompts the wheel can answer; "auto mode" is never chosen by the buttons.
+
+**Guard: nothing is sent unless** (each refusal has a note on the bar, kind `ask`, gone when the question changes or
+at the next gesture):
+
+| Case | Bar says |
+|---|---|
+| the question on the bar changed between the gesture and the send (another `since`, the choice moved, a list opened, another session selected), or the label in the held request differs from the bar's | Not sent: the question changed |
+| the question is no longer held (answered or dismissed in the terminal: Claude ends the hook; timed out after 540 s; 16 requests already held) | Not sent: the question is not waiting any more |
+| shown for less than 1.5 s | Too early: press again (as for permission prompts) |
+| the session is not one revview started (no tmux window of its own) | Not sent: not a session revview started |
+| several questions, multi-select, a request with no questions | Answer in the terminal when parked (plan: Approve in the terminal when parked) |
+| plan: the pane does not show the dialog's three choices `1. Yes…`, `2. Yes, manually approve edits`, `3. Tell Claude what to change` on consecutive lines (read with `capture-pane` just before the key) | Not sent: the terminal does not show the plan |
+
+The held request releases its slot in every case: answered by the hook (the registry finishes it), or ended by
+Claude when the terminal answered or the key approved the plan (the hook process is killed, the server sees the
+connection close and drops it). There is never a second answer: a question gets no key, a plan gets no hook allow.
+
+**Not solved:** a question dismissed with Esc in the terminal stays on the bar until the next event (no hook fires;
+a press then says "not waiting any more"). Which of several questions is on screen (several are refused).
+
 ## Not recorded / not proven
 
 - `/voice` in any mode (no microphone on the recording VM), hold-to-talk, and voice inside tmux.

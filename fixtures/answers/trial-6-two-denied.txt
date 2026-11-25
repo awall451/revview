@@ -1,0 +1,17 @@
+# captured 23:54:24
+✻ Baked for 2s · done 11:53 PM
+❯ Use the AskUserQuestion tool once to ask me "Which tea?" with the options
+  Green, Black (single choice). Then reply with only the tea I chose, or NONE.
+● Declined to answer Claude's questions:
+  ⎿  · Which tea? (Green / Black)
+❯ Use the AskUserQuestion tool once with two questions in the same call: "Which
+  shell?" (Bash, Zsh) and "Which editor?" (Vim, Nano). Then reply with my
+  answers, or NONE.
+  ⎿  Error: Denied with the wheel button.
+  ⎿  Denied by PermissionRequest hook
+● NONE
+✻ Crunched for 2s · done 11:54 PM
+────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)

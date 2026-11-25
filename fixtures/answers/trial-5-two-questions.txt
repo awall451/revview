@@ -1,0 +1,19 @@
+# captured 23:54:18
+❯ Use the AskUserQuestion tool once to ask me "Which tea?" with the options
+  Green, Black (single choice). Then reply with only the tea I chose, or NONE.
+● Declined to answer Claude's questions:
+  ⎿  · Which tea? (Green / Black)
+❯ Use the AskUserQuestion tool once with two questions in the same call: "Which
+  shell?" (Bash, Zsh) and "Which editor?" (Vim, Nano). Then reply with my
+  answers, or NONE.
+────────────────────────────────────────────────────────────────────────────────
+←  ☐ Shell  ☐ Editor  ✔ Submit  →
+Which shell?
+❯ 1. Bash
+     Choose Bash
+  2. Zsh
+     Choose Zsh
+  3. Type something.
+────────────────────────────────────────────────────────────────────────────────
+  4. Chat about this
+Enter to select · Tab/Arrow keys to navigate · Esc to cancel
