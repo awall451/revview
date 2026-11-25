@@ -1,0 +1,43 @@
+# Package names whose real Trixie arm64 files pi/tree/check.sh reads. One name per line, then why.
+# pi/tree/build.sh --refresh picks the newest version of each (Debian d or Raspberry Pi r) into packages.lock.
+# Installed by pi/install.sh:
+chromium            kiosk browser (Raspberry Pi build); /usr/bin/chromium wrapper, /usr/lib/chromium/chromium
+rpi-chromium-mods   /etc/chromium.d defaults the wrapper sources
+tmux                tmux -L revview
+python3             grab helper
+python3-minimal     /usr/bin/python3 itself
+espeak-ng           read aloud
+espeak-ng-data      voice en-us
+wlr-randr           rotation in the labwc autostart
+sox                 rec for Claude Code's /voice
+overlayroot         read-only root (initramfs script readonly.sh checks for)
+# Login and desktop:
+labwc               compositor, labwc-config(5), /etc/xdg/labwc
+lightdm             /etc/lightdm/lightdm.conf
+pi-greeter          greeter session pi-greeter-labwc
+rpd-wayland-core    session rpd-labwc, labwc-pi, system autostart
+libinput-bin        libinput udev helpers
+libinput10          LIBINPUT_CALIBRATION_MATRIX
+# Read-only root and boot:
+raspi-config        metapackage
+raspi-config-core   /usr/bin/raspi-config (do_overlayfs, enable_bootro)
+raspi-utils-core    vcgencmd
+raspberrypi-sys-mods  udev rules (input, video)
+initramfs-tools-core  update-initramfs and the scripts dir overlayroot writes into
+# systemd, udev, base system:
+systemd             units, man pages, user default.target
+udev                rules.d, udevadm
+base-files          /etc/profile
+base-passwd         groups audio, video
+util-linux          lsblk, mountpoint, flock, runuser
+mount               mount, umount
+coreutils           stat -c
+e2fsprogs           e2fsck, mkfs.ext4
+cryptsetup          luks man pages
+cryptsetup-bin      /usr/sbin/cryptsetup
+libcryptsetup12     compiled-in default PBKDF
+alsa-utils          aplay
+curl                unlock.sh pokes the server
+passwd              usermod (install.sh adds the user to groups)
+libc-bin            getent
+mawk                awk (the /usr/bin/awk link is made by update-alternatives at install time, not shipped)
