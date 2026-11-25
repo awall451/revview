@@ -611,8 +611,10 @@ function renderNav(input) {
   title.className = 'title';
   const t = document.createElement('span');
   t.id = 'nav-title';
-  t.textContent = NAV_TITLES[input.kind];
-  t.dataset.full = NAV_TITLES[input.kind];
+  // the settings screen is read only unless it shows a changeable row
+  const titleText = input.kind === 'settings' && rows.some((r) => r.change === true) ? 'SETTINGS' : NAV_TITLES[input.kind];
+  t.textContent = titleText;
+  t.dataset.full = titleText;
   title.append(t);
   // more above / below: a chevron (a shape, not a colour)
   for (const [id, inner, on, n] of [['more-above', CHEVRON_UP, start > 0, start], ['more-below', CHEVRON_DOWN, end < rows.length, rows.length - end]]) {

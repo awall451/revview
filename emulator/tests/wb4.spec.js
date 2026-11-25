@@ -430,7 +430,7 @@ test('menu: the same widget with three items', async ({ openView, page }, testIn
 for (const [id, title, file] of [
   ['projects', 'PROJECTS', 'wb4-projects'],
   ['new-session', 'NEW SESSION: CHOOSE A PROJECT', 'wb4-new-session'],
-  ['settings', 'SETTINGS (READ ONLY)', 'wb4-settings'],
+  ['settings', 'SETTINGS', 'wb4-settings'],
 ]) {
   test(`${id}: title and rows`, async ({ openView, page }, testInfo) => {
     const state = wb4State(id);

@@ -128,7 +128,7 @@ export const RECIPES = Object.freeze({
   menu: [...three, owned('s1', 's2', 's3'), select('s2'), ...nav('menu', 'down')],
   projects: [...three, owned('s1', 's2', 's3'), select('s2'), projects(PROJECTS), ...nav('menu', 'down', 'press', 'down')],
   'new-session': [...three, owned('s1', 's2', 's3'), select('s2'), projects(PROJECTS), ...nav('menu', 'press', 'down')],
-  settings: [...three, owned('s1', 's2', 's3'), select('s2'), projects(PROJECTS), ...nav('menu', 'down', 'down', 'press')],
+  settings: [...three, owned('s1', 's2', 's3'), select('s2'), projects(PROJECTS), { hook_event_name: 'RevviewSounds', mode: 'cues' }, ...nav('menu', 'down', 'down', 'press')],
   // revview denied the prompt and the turn stopped: DONE must say the command was denied
   'denied-done': [...answered('s1', 'deny', { hook_event_name: 'Stop' }), owned('s1'), select('s1')],
   // r5-01: an Edit denied after a Bash call of the turn: "Denied: Edit", the old command and output do not come back

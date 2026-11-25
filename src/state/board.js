@@ -33,6 +33,7 @@ export function initialBoard() {
     nav: null, // null (normal view) or {kind, row[, id]}: a list/menu the driver has open; a list also holds the highlighted session id
     note: null, // the bottom note row: null or { kind, text } (see NOTE_RULES); cleared by the driver's next gesture
     projects: [], // project paths from the config file (display only)
+    sounds: null, // null = the server has no sound feature; else 'off' | 'cues' | 'speech' (cues and speech), RevviewSounds
   };
 }
 
@@ -43,7 +44,11 @@ export function initialBoard() {
 const MAX_LAUNCHING = 8;
 const NAV_KINDS = ['list', 'menu', 'new', 'projects', 'settings'];
 const MENU_ROWS = ['New session', 'Projects', 'Settings'];
-const SETTINGS_ROWS = 4;
+const SETTINGS_ROWS = 4; // the fixed rows; a 5th (Sounds) is there while b.sounds is not null
+const SOUNDS_MODES = ['off', 'cues', 'speech'];
+const SOUNDS_NEXT = { cues: 'speech', speech: 'off', off: 'cues' };
+const SOUNDS_LABELS = { off: 'Sounds: off', cues: 'Sounds: cues', speech: 'Sounds: cues and speech' };
+const soundsOn = (b) => SOUNDS_MODES.includes(b.sounds);
 
 function isValidSession(s) {
   return isObj(s) && isObj(s.state) && typeof s.state.activity === 'string' && isObj(s.state.diff)
@@ -56,6 +61,7 @@ function isValidBoard(b) {
     && Array.isArray(b.ended) && Number.isInteger(b.tick) && (b.focus === null || typeof b.focus === 'string')
     && (b.spokenTo === null || typeof b.spokenTo === 'string')
     && (b.buttons === null || typeof b.buttons === 'boolean')
+    && (b.sounds === undefined || b.sounds === null || SOUNDS_MODES.includes(b.sounds))
     && (b.hot === undefined || typeof b.hot === 'boolean') && (b.lowPower === undefined || typeof b.lowPower === 'boolean')
     && (b.selected === null || typeof b.selected === 'string') && (b.want === null || typeof b.want === 'string')
     && (b.owned === null || (Array.isArray(b.owned) && b.owned.every((x) => typeof x === 'string')))
@@ -333,7 +339,7 @@ const NAV_GESTURES = new Set(['tap', 'hold', 'long-hold']);
 function navRows(b, kind) {
   if (kind === 'list') return orderOf(b).length;
   if (kind === 'menu') return MENU_ROWS.length;
-  if (kind === 'settings') return SETTINGS_ROWS;
+  if (kind === 'settings') return SETTINGS_ROWS + (soundsOn(b) ? 1 : 0);
   return b.projects.length;
 }
 const clampRow = (row, rows) => (rows === 0 ? 0 : Math.min(row, rows - 1));
@@ -412,6 +418,7 @@ function reduceNav(b, event) {
     if (kind === 'list') return n > 0 ? withNav(b, order[row], null) : go(null);
     if (kind === 'menu') return go({ kind: ['new', 'projects', 'settings'][row], row: 0 });
     if (kind === 'new') return go(null);
+    if (kind === 'settings' && row === SETTINGS_ROWS && soundsOn(b)) return { ...b, sounds: SOUNDS_NEXT[b.sounds], nav: { kind, row } };
   }
   return b;
 }
@@ -430,6 +437,8 @@ function reduceInner(b, event) {
       return typeof event.locked === 'boolean' && b.locked !== event.locked ? { ...b, locked: event.locked } : b;
     case 'RevviewInput':
       return typeof event.present === 'boolean' && b.buttons !== event.present ? { ...b, buttons: event.present } : b;
+    case 'RevviewSounds':
+      return SOUNDS_MODES.includes(event.mode) && b.sounds !== event.mode ? { ...b, sounds: event.mode } : b;
     case 'RevviewThermal': { // the box's heat / supply, board-level; a non-boolean field keeps its old value
       const hot = typeof event.hot === 'boolean' ? event.hot : b.hot === true;
       const lowPower = typeof event.lowPower === 'boolean' ? event.lowPower : b.lowPower === true;
@@ -882,6 +891,7 @@ function navView(b) {
       `Sessions: ${order.length} on the bar, ${b.owned?.length ?? 0} started by revview`,
       `Projects: ${b.projects.length} in the config file`,
     ].map((label) => ({ label }));
+    if (soundsOn(b)) rows.push({ label: SOUNDS_LABELS[b.sounds], change: true });
   } else {
     const gone = kind === 'new' ? b.projectsMissing ?? [] : [];
     rows = b.projects.map((label) => (gone.includes(label) ? { label, missing: true } : { label }));

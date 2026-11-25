@@ -61,7 +61,8 @@ test('menu, projects, new session and settings', () => {
   assert.ok(p.rows.some((r) => r.label.length > 60));
   assert.equal(wb4State('new-session').nav.kind, 'new');
   assert.equal(wb4State('settings').nav.kind, 'settings');
-  assert.equal(wb4State('settings').nav.rows.length, 4);
+  assert.equal(wb4State('settings').nav.rows.length, 5); // 4 plus the Sounds row (RevviewSounds in the recipe)
+  assert.deepEqual(wb4State('settings').nav.rows[4], { label: 'Sounds: cues', change: true });
 });
 
 test('worst band: needs the 9+ hint, a prompt elsewhere, not-owned, position 12/13, no buttons', () => {

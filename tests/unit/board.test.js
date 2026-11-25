@@ -27,7 +27,7 @@ test('initialBoard shape', () => {
   assert.deepEqual(initialBoard(), {
     phase: 'unknown', offline: false, locked: false, context: { repo: null, branch: null },
     sessions: {}, ended: [], tick: 0, focus: null, spokenTo: null, buttons: null, hot: false, lowPower: false,
-    selected: null, want: null, owned: null, nav: null, note: null, projects: [],
+    selected: null, want: null, owned: null, nav: null, note: null, projects: [], sounds: null,
   });
 });
 
