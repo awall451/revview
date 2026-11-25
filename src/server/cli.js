@@ -175,6 +175,6 @@ export async function main(argv = process.argv.slice(2)) {
   if (args.boot && runner && args.dataLock) console.log(`boot: the key-on session waits for the data unlock (${args.dataLock})`);
   if (args.projects) console.log(`projects: ${projects.length} from ${args.projects}`);
   if (args.devKeysPath) console.log(`dev keys: ${args.devKeysPath}`);
-  if (args.devDemo) console.log('dev demo: GET /dev/demo (the demo player\'s keys 1-9 P [ ] go there, not to the bridge)');
+  if (args.devDemo) console.log('dev demo: GET /dev/demo (the demo player\'s keys 1-9 0 P [ ] go there, not to the bridge)');
   if (args.devBridge) console.log('dev bridge ON (POST /dev/key): never use this on the car');
 }

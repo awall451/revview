@@ -6,4 +6,5 @@
 // about 3.54 mm and measures 23 px = 3.41 mm). With the exact targets the measurement can fall to 5.9 and 3.3.
 // RANGE_MM is what the tests assert, two-sided: the state word, and every other text.
 export const TYPE_MM = Object.freeze({ state: 6.05, detail: 3.55 });
-export const RANGE_MM = Object.freeze({ state: Object.freeze([5.8, 6.3]), text: Object.freeze([3.3, 3.7]) });
+export const RANGE_MM = Object.freeze({ state: Object.freeze([5.8, 6.3]), text: Object.freeze([3.3, 3.7]), ask: Object.freeze([4.0, 6.3]) });
+// ask: the question of CLAUDE ASKS is larger than the 3.55 mm text: the state word's size when it fits, else the largest that does (never under 4.0 mm).

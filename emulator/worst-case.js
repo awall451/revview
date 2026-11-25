@@ -16,6 +16,13 @@ export function loadWorstCase(id) {
 // What the state core can emit under view 'permission': no output, and a command only for a Bash tool (the
 // requested command). Worst-case content merged over the permission fixture must go through this, or the
 // screenshot shows an Edit with an old `$ command` and output that no real state has.
+// The worst case of the CLAUDE ASKS view: a question at its limit, four long options, every count. Content merged over the
+// `asking` fixture (screenshot `asking-long.png`). It is not in WORST_CASE_IDS: the loops over those merge the content over
+// every view, and an `ask` object means nothing in them.
+export function loadAskingLong() {
+  return JSON.parse(fs.readFileSync(new URL('asking-long.json', WORST_CASE_DIR), 'utf8'));
+}
+
 export function asPermission(content) {
   const c = { ...content, output: null, outputLines: [] };
   if (c.tool !== 'Bash') c.command = null;

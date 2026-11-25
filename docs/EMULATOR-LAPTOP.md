@@ -135,8 +135,8 @@ Esc       cancel        Esc to Claude                Ctrl+C
 N         deny          deny
 M         menu          menu
 Demo keys (demo mode only; the demo player takes them, not the bar):
-  1-9  jump: working, permission, done, waiting, offline, insert-key, ended,
-       compaction (mid-turn auto), compact-cmd (/compact at the prompt)
+  1-9 and 0  jump: working, permission, done, waiting, offline, insert-key,
+       ended, compaction (mid-turn), compact-cmd (/compact), asking (a question)
   P  pause / continue          [  slower          ]  faster
 In the demo these change the screen: Left, Right, Up, Down, M, Backspace held
 (go to the session that needs you most). Enter picks a row in a list or menu.

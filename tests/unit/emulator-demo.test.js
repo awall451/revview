@@ -90,7 +90,8 @@ test('playing through: every scene reaches the state the bar shows, then the loo
     }
     const s1 = await shown(url);
     assert.deepEqual({ view: s1.view, sessions: s1.sessions, offline: s1.offline, locked: s1.locked, compacting: s1.compacting }, { view: 'working', sessions: 3, offline: false, locked: false, compacting: false });
-    assert.deepEqual(lines.slice(0, 10), ['working', 'permission', 'done', 'waiting', 'offline', 'insert-key', 'ended', 'compaction', 'compact-cmd', 'working'].map((n, i) => `demo: ${(i % 9) + 1} ${n}`));
+    const names = ['working', 'permission', 'done', 'waiting', 'offline', 'insert-key', 'ended', 'compaction', 'compact-cmd', 'asking'];
+    assert.deepEqual(lines.slice(0, names.length + 1), [...names, 'working'].map((n, i) => `demo: ${(i % names.length) + 1} ${n}`));
   } finally {
     player.stop();
     await live.close();
@@ -105,7 +106,7 @@ test('jump(n) reaches scene n for every n, from any state, and leaves no overlay
     await player.idle();
     const expects = buildLoop(1).map((s) => s.expect);
     // descending, then ascending: the old loop's sessions and overlays must not leak into the next scene
-    for (const n of [9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9]) {
+    for (const n of [10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
       await player.jump(n);
       const s = await shown(url);
       assert.deepEqual({ view: s.view, sessions: s.sessions, ...(expects[n - 1].compacting ? { compacting: true } : {}) }, expects[n - 1], `jump ${n}`);
@@ -113,9 +114,9 @@ test('jump(n) reaches scene n for every n, from any state, and leaves no overlay
       assert.equal(s.locked, n === 6, `locked after jump ${n}`);
     }
     await player.jump(0);
-    await player.jump(10);
+    await player.jump(11);
     await player.jump(1.5);
-    assert.equal((await shown(url)).view, 'done', 'jumps outside 1..9 do nothing');
+    assert.equal((await shown(url)).view, 'asking', 'jumps outside 1..10 do nothing (scene 10 stays)');
   } finally {
     player.stop();
     await live.close();
@@ -300,8 +301,8 @@ test('--dev-demo needs --dev-bridge; with it the flag is set', () => {
   assert.notEqual(parseArgs(['--dev-bridge']).devDemo, true);
 });
 
-test('DEMO_CODES: Digit1-9, P, [ and ], none of them bound in the laptop key map', () => {
-  assert.deepEqual([...DEMO_CODES], [...'123456789'].map((d) => `Digit${d}`).concat(['KeyP', 'BracketLeft', 'BracketRight']));
+test('DEMO_CODES: Digit1-9 and Digit0, P, [ and ], none of them bound in the laptop key map', () => {
+  assert.deepEqual([...DEMO_CODES], [...'1234567890'].map((d) => `Digit${d}`).concat(['KeyP', 'BracketLeft', 'BracketRight']));
   const bound = new Set(loadConfig(LAPTOP).bindings.map((b) => b.key));
   for (const code of DEMO_CODES) {
     const linux = Object.hasOwn(BROWSER_CODES, code) ? BROWSER_CODES[code] : undefined;
@@ -350,6 +351,38 @@ test('compaction scenes: the real recording, events 0-8 and 9-20, one session re
     assert.deepEqual([s.view, s.compacting], ['done', true]);
     await player.jump(7);
     assert.equal((await shown(url)).compacting, false, 'ending the sessions clears it');
+  } finally {
+    player.stop();
+    await live.close();
+  }
+});
+
+test('asking scenes: the real ask-question recording, events 1-4, in the compaction session; the bar shows the question', async () => {
+  const rec = fs.readFileSync(new URL('../../fixtures/sessions/ask-question.jsonl', import.meta.url), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  const [asking, ...more] = buildLoop(1).slice(9);
+  assert.equal(asking.name, 'asking');
+  assert.equal(more.length, 0, 'asking is the last scene');
+  const claude = (scene) => scene.steps.map((x) => x.event).filter((e) => !e.hook_event_name.startsWith('Revview'));
+  const key = (e) => [e.hook_event_name, e.tool_name, e.notification_type].join('/');
+  assert.deepEqual(claude(asking).map(key), rec.slice(1, 5).map(key));
+  for (const e of claude(asking)) assert.equal(e.session_id, 'demo1-compaction');
+  assert.deepEqual(asking.expect, { view: 'asking', sessions: 1 });
+  const { live, url } = await demoServer();
+  const { player } = newPlayer(url);
+  try {
+    player.start();
+    await player.idle();
+    await player.jump(10);
+    const { state } = await get(url, '/state');
+    assert.equal(state.view, 'asking');
+    assert.equal(state.tool, 'AskUserQuestion');
+    assert.equal(state.ask.kind, 'question');
+    assert.ok(state.ask.options.length > 0);
+    assert.equal(state.compacting, false);
+    // the demo key 0 is scene 10
+    await player.jump(1);
+    await player.handleKey('Digit0');
+    assert.equal((await shown(url)).view, 'asking');
   } finally {
     player.stop();
     await live.close();

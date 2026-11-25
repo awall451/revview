@@ -107,6 +107,12 @@ test.describe('demo keys through the dev bridge', () => {
       await expect(page.locator('#tool')).toHaveText('Compacting context');
       await expect(page.locator('#tool')).toHaveAttribute('data-compacting', '1');
 
+      // key 0 is scene 10: Claude asks
+      await tap(page, '0');
+      await expect(body(page)).toHaveAttribute('data-view', 'asking');
+      await expect(page.locator('#state-word')).toHaveText('CLAUDE ASKS');
+      await expect.poll(() => player.status().scene).toBe(10);
+
       // another scene: the line is gone
       await tap(page, '3');
       await expect(body(page)).toHaveAttribute('data-view', 'done');

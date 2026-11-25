@@ -180,7 +180,7 @@ for each (a throwing callback is caught and logged).
 - With `--input` and `--dev-bridge` together the bridge shares the device's detector (dev only; sources are told apart per key event).
 - `--dev-keys <file>` (needs `--dev-bridge`, else exit 2): the bridge gets its own key map from that file (e.g. `config/buttons.laptop.json`, ordinary laptop keys) instead of sharing the device's. `GET /dev/keys` (dev only, same gating) returns `{codes: [...]}`, the browser codes of the bridge's bound keys; the page prevents their default action (not with Ctrl/Alt/Meta held).
 - `--dev-demo` (needs `--dev-bridge`, else exit 2; option `devDemo`): for the laptop demo player (`emulator/demo/player.js`). `GET /dev/demo` (dev only) is an SSE stream
-  (at most 2, else 503) of `{"code": "Digit3"}` for each key-down (not a repeat) of `DEMO_CODES` (Digit1-Digit9, KeyP, BracketLeft, BracketRight) that `POST /dev/key` receives;
+  (at most 2, else 503) of `{"code": "Digit3"}` for each key-down (not a repeat) of `DEMO_CODES` (Digit1-Digit9, Digit0, KeyP, BracketLeft, BracketRight) that `POST /dev/key` receives;
   those codes are then NOT fed to the bridge (204). Without the flag the route does not exist and those codes behave as before.
 - `POST /dev/key` (**dev only**): body `{code, type: 'down'|'up'|'lost', repeat?}` (`code` is a `KeyboardEvent.code`; `lost` = the
   page lost focus, like a vanished device). It feeds the same detector as the device (the one from `--input` when given,

@@ -23,6 +23,7 @@ body {
 body[data-view="working"] { --band: #5eb1ff; }
 body[data-view="waiting"] { --band: #c8a2ff; }
 body[data-view="permission"] { --band: #ffb020; }
+body[data-view="asking"] { --band: #e6f25a; }
 body[data-view="done"] { --band: #4fdc7a; }
 body[data-view="starting"] { --band: #e0e0e0; }
 body[data-view="offline"] { --band: #ff6b6b; }
@@ -180,6 +181,24 @@ span:empty { display: none; }
   white-space: normal;
   overflow-wrap: anywhere;
 }
+
+/* CLAUDE ASKS: the question (or plan title) in big type, at most 2 lines (view.js sets the size: the state word's, or the
+   largest that leaves room for the rows below), the options in a 2x2 grid of 40 px rows, the counts at the right end of row A. */
+#ask { flex: none; display: flex; flex-direction: column; }
+#ask-question {
+  flex: none;
+  font-size: var(--state-font);
+  font-weight: 700;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+#ask-options { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 24px; }
+.ask-opt { height: 40px; display: flex; gap: 0.4em; min-width: 0; }
+.ask-n { flex: none; font-weight: 700; }
+.ask-t { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ask-steps, #ask-hint { flex: none; height: 40px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ask-hint { color: var(--grey); }
+#ask-meta { flex: none; margin-left: auto; display: flex; gap: 24px; color: var(--grey); white-space: nowrap; }
 
 /* output lines, oldest first, newest last; each one row, cut with an ellipsis. #offline-note is the secondary row
    of NEEDS PERMISSION while offline, the last row of all (grey, like the tool) */

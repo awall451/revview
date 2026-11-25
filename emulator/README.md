@@ -29,7 +29,7 @@ Screenshots: one `<state>.png` per state, exactly 1280x400 px, written to `out/s
 | `fixtures/<state>.json` | One state per view: the board's view state (`boardView`) for each reducer state; `no-link.json` is just `{"view":"no-link"}` (drawn by the page when its link is down). |
 | `fixtures/recipes.js` | The events each fixture is produced from (recorded sessions + synthetic `Revview*` events). |
 | `serve.js` | Dependency-free static server for the repository root (`node:http`). |
-| `playwright.config.js`, `tests/` | Config and specs (`mm`, `layout`, `screenshots`, `buttons-tag`, `thermal-tag`, `devpage`, `live`); `live` is the end-to-end test: it starts the live server (`src/server`), POSTs the recorded sessions in `fixtures/sessions/` to it and checks what the page shows, plus the starting, late-join, reconnect and malformed-POST cases; `tests/harness.js` starts a server per worker on a free port. |
+| `playwright.config.js`, `tests/` | Config and specs (`mm`, `layout`, `screenshots`, `asking`, `buttons-tag`, `thermal-tag`, `devpage`, `live`); `live` is the end-to-end test: it starts the live server (`src/server`), POSTs the recorded sessions in `fixtures/sessions/` to it and checks what the page shows, plus the starting, late-join, reconnect and malformed-POST cases; `tests/harness.js` starts a server per worker on a free port. |
 | `worst-case/` | Stress content for the renderer (see Worst cases). |
 | `dev/` | The developer page. |
 
@@ -79,7 +79,7 @@ the outline until it matches. Check the 100 mm ruler with a real ruler.
 
 `fixtures/thermal.json` is the second extra fixture: the working turn plus a `RevviewThermal {hot: true, lowPower: true}` event (state WORKING, `hot` and `lowPower` true), shown as the HOT and LOW POWER tags in the band; screenshot `out/shots/thermal.png` (tests: `tests/thermal-tag.spec.js`, `tests/screenshots.spec.js`).
 
-`worst-case/<id>.json` are hand-written CONTENT objects (repo, branch, tool, file, command, output, diff) that stress the renderer: far over the state core's limits, unbroken tokens, CJK and emoji, exactly at the limits in the widest letter, and a 999999999 diff. `band-marks.json` holds every band mark at once (very long repo and branch, `others: 12`, `buttons: 'missing'`, `hot`, `lowPower`, a long tool and file); at the longest state word the view drops LOW POWER, then HOT, to keep the state word whole. They are NOT reducer output and live outside `fixtures/` (every file there needs a screenshot). `worst-case.js` exports `WORST_CASE_IDS` and `loadWorstCase(id)`; the layout and screenshot specs merge each over every fixture state (`out/shots/worst-<id>.png`, `worst-<id>-permission.png`).
+`worst-case/<id>.json` are hand-written CONTENT objects (repo, branch, tool, file, command, output, diff) that stress the renderer: far over the state core's limits, unbroken tokens, CJK and emoji, exactly at the limits in the widest letter, and a 999999999 diff. `band-marks.json` holds every band mark at once (very long repo and branch, `others: 12`, `buttons: 'missing'`, `hot`, `lowPower`, a long tool and file); at the longest state word the view drops LOW POWER, then HOT, to keep the state word whole. They are NOT reducer output and live outside `fixtures/` (every file there needs a screenshot). `asking-long.json` is the worst case of the CLAUDE ASKS view (a question and four options at their limits, every count): it holds an `ask` object, so it is not in `WORST_CASE_IDS` (`loadAskingLong()`; screenshot `out/shots/asking-long.png`; `asking-plan.png` shows the plan). `tests/asking.spec.js` covers the view. `worst-case.js` exports `WORST_CASE_IDS` and `loadWorstCase(id)`; the layout and screenshot specs merge each over every fixture state (`out/shots/worst-<id>.png`, `worst-<id>-permission.png`).
 
 ## WB4 looks (`emulator/wb4/`, `tests/wb4.spec.js`)
 
@@ -117,8 +117,8 @@ Without `--live`, `run.sh` also starts the demo player (`emulator/demo/player.js
 posts the recorded sessions in `fixtures/sessions/*.jsonl` (re-addressed as three sessions, revview, garden and notes) to
 the server at a watchable pace and loops until the window closes. Scenes: 1 working, 2 permission, 3 done, 4 waiting,
 5 offline, 6 insert-key, 7 ended, 8 compaction (auto, mid-turn: WORKING and "Compacting context"), 9 compact-cmd (`/compact` at
-the prompt: DONE and "Compacting context"; both from `fixtures/sessions/compaction.jsonl`, one session). Demo keys, handled by the player and not by the bar (the server sends them to the
-player over `GET /dev/demo`, present only with `--dev-bridge --dev-demo`): 1-9 jump to a scene, P pause/continue, `[`
+the prompt: DONE and "Compacting context"; both from `fixtures/sessions/compaction.jsonl`, one session), 10 asking (CLAUDE ASKS with the question and its options; from `fixtures/sessions/ask-question.jsonl`, in the compaction session). Demo keys, handled by the player and not by the bar (the server sends them to the
+player over `GET /dev/demo`, present only with `--dev-bridge --dev-demo`): 1-9 and 0 (= scene 10) jump to a scene, P pause/continue, `[`
 slower, `]` faster; `--keys` lists them under their own heading. `--live [DIR]` starts a real Claude Code session in DIR
 instead (no player): see `docs/EMULATOR-LAPTOP.md`, "Live: a real Claude Code session". It needs `tmux` and `claude`, runs
 Claude in a private tmux server of the run with a per-run `--settings` file, and prints the `attach:` line. Menu -> New

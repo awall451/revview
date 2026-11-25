@@ -9,7 +9,7 @@ const sessionsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 
 // The spec: the state word shown for each view.
 const LABELS = {
-  working: 'WORKING', waiting: 'WAITING FOR ME', permission: 'NEEDS PERMISSION', done: 'DONE',
+  working: 'WORKING', waiting: 'WAITING FOR ME', permission: 'NEEDS PERMISSION', asking: 'CLAUDE ASKS', done: 'DONE',
   starting: 'STARTING', offline: 'OFFLINE', 'insert-key': 'INSERT KEY',
   unknown: 'UNKNOWN', ended: 'CLAUDE EXITED', 'no-link': 'NO LINK',
 };
@@ -57,6 +57,18 @@ async function expectShows(page, state) {
   await expect(page.locator('body')).toHaveAttribute('data-view', state.view);
   await expect(html(page)).toHaveAttribute('data-rendered', state.view);
   await expect(page.locator('#state-word')).toHaveText(LABELS[state.view]);
+  if (state.view === 'asking') {
+    // CLAUDE ASKS: the tool in row A, the question (or the plan title) in the big slot, the options numbered below it
+    await expect(page.locator('#tool')).toHaveText(state.tool);
+    const a = state.ask || {};
+    const big = a.kind === 'plan' ? (a.title ? `Plan: ${a.title}` : 'Claude has a plan') : a.question || 'Claude asks: look at the terminal when parked';
+    await expect(page.locator('#ask-question')).toHaveAttribute('data-full', big);
+    const options = a.kind === 'question' ? a.options : [];
+    for (const [i, label] of options.entries()) await expect(page.locator(`#ask-t${i + 1}`)).toHaveAttribute('data-full', label);
+    await expect(page.locator(`#ask-o${options.length + 1}`)).toHaveCount(0);
+    await expect(page.locator('#diff')).toBeHidden();
+    return;
+  }
   if (!['working', 'waiting', 'permission', 'done'].includes(state.view)) return;
 
   // the tool is shown for every tool (Bash too); the command wraps over 3 rows and is cut with an ellipsis
@@ -64,7 +76,10 @@ async function expectShows(page, state) {
   // while Claude compacts (cycle 38) the tool slot says so and the file slot is empty; the rest is shown as always
   const compacting = state.compacting === true;
   await expect(page.locator('#tool')).toHaveText(compacting ? 'Compacting context' : state.tool || '');
-  await expect(page.locator('#file')).toHaveText(compacting ? '' : state.file || '');
+  // a long path is cut in its middle (data-full holds all of it)
+  const file = compacting ? '' : state.file || '';
+  await expect(page.locator('#file')).toHaveAttribute('data-full', file);
+  if (!(await page.locator('#file').textContent()).includes('…')) await expect(page.locator('#file')).toHaveText(file);
   const command = state.command || '';
   await expect(page.locator('#command')).toHaveAttribute('data-full', command);
   // the displayed command has a U+2060 after each '-' (no line break after "--"); data-full does not

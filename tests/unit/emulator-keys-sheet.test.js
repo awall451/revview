@@ -67,9 +67,10 @@ test('the demo keys come from scenes.js: every scene name and the range', async 
   const { buildLoop } = await import('../../emulator/demo/scenes.js');
   const names = buildLoop(1).map((s) => s.name);
   for (const n of names) assert.ok(out.includes(n), n);
-  assert.match(out, new RegExp(`1-${names.length}`));
-  assert.equal(names.length, 9);
-  assert.ok(names.includes('compaction') && names.includes('compact-cmd'), 'keys 8 and 9 are on the sheet');
+  // keys 1-9 and 0 (= 10) reach every scene
+  assert.match(out, /1-9 and 0/);
+  assert.equal(names.length, 10);
+  assert.ok(names.includes('compaction') && names.includes('compact-cmd') && names.includes('asking'), 'keys 8, 9 and 0 are on the sheet');
   assert.match(out, /nothing is sent to a Claude/i);
   assert.match(out, /--live/);
 });

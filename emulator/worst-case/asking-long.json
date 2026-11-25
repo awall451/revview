@@ -1,0 +1,19 @@
+{
+  "repo": "a-very-long-repository-name-for-the-asking-view",
+  "branch": "feature/an-equally-long-branch-name",
+  "tool": "AskUserQuestion",
+  "ask": {
+    "kind": "question",
+    "question": "Should the configuration loader read every setting from the environment first and fall back to the file, or the other way round, and which of the extraordinarily many legacy options may we drop now?",
+    "options": [
+      "Environment first, then the file, keep every legacy option",
+      "File first, then the environment, drop options nobody uses",
+      "Environment only: remove the configuration file loader",
+      "Ask me again for each option, one by one, in the terminal"
+    ],
+    "more": 3,
+    "multiSelect": true,
+    "questions": 3
+  },
+  "others": 2
+}

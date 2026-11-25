@@ -5,7 +5,7 @@ import { test, expect, shotsDir } from './harness.js';
 import { expectFits } from './checks.js';
 import { startLiveServer } from '../../src/server/index.js';
 import { FIXTURE_IDS, loadFixture } from '../fixtures.js';
-import { WORST_CASE_IDS, loadWorstCase, asPermission } from '../worst-case.js';
+import { WORST_CASE_IDS, loadWorstCase, loadAskingLong, asPermission } from '../worst-case.js';
 
 test.beforeAll(() => {
   fs.mkdirSync(shotsDir(), { recursive: true });
@@ -95,6 +95,28 @@ for (const wc of WORST_CASE_IDS) {
     });
   }
 }
+
+test('screenshot asking-plan (CLAUDE ASKS, a plan to approve) is 1280x400', async ({ openView, page }) => {
+  const file = path.join(shotsDir(), 'asking-plan.png');
+  await openView(loadFixture('asking-plan'));
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'asking');
+  await expect(page.locator('#ask-steps')).toBeVisible();
+  await expectFits(page);
+  await page.screenshot({ path: file });
+  expectPng1280x400(file);
+});
+
+test('screenshot asking-long (CLAUDE ASKS, worst case) is 1280x400', async ({ openView, page }) => {
+  const file = path.join(shotsDir(), 'asking-long.png');
+  const content = loadAskingLong();
+  await openView({ ...loadFixture('asking'), ...content });
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'asking');
+  await expect(page.locator('#ask-t4')).toBeVisible();
+  await expect(page.locator('#ask-question')).toHaveAttribute('data-full', content.ask.question);
+  await expectFits(page);
+  await page.screenshot({ path: file });
+  expectPng1280x400(file);
+});
 
 test('screenshot permission-offline (needs the driver, no network) is 1280x400', async ({ openView, page }) => {
   const file = path.join(shotsDir(), 'permission-offline.png');

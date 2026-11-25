@@ -1,5 +1,5 @@
 // The demo player: posts the demo loop (emulator/demo/scenes.js) to a running revview server (--dev-bridge --dev-demo)
-// at a watchable pace, and follows the demo keys the page sends (GET /dev/demo): 1-9 jump to a scene, P pause/continue,
+// at a watchable pace, and follows the demo keys the page sends (GET /dev/demo): 1-9 and 0 (= 10) jump to a scene, P pause/continue,
 // [ slower, ] faster. Dev only, for the laptop emulator; never part of the product.
 //   node emulator/demo/player.js --url http://127.0.0.1:8138
 // Exits 0 when the server goes away (its demo stream closes, or a POST cannot connect) and on SIGTERM/SIGINT.
@@ -148,8 +148,8 @@ export function createPlayer({ url, clock = { setTimeout, clearTimeout }, post =
   }
 
   function handleKey(code) {
-    const m = /^Digit([1-9])$/.exec(code);
-    if (m) return jump(Number(m[1]));
+    const m = /^Digit([0-9])$/.exec(code);
+    if (m) return jump(Number(m[1]) === 0 ? 10 : Number(m[1]));
     if (code === 'KeyP') togglePause();
     else if (code === 'BracketLeft') setSpeed(speed - 1);
     else if (code === 'BracketRight') setSpeed(speed + 1);

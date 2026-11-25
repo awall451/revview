@@ -47,8 +47,8 @@ export async function buildSheet({ mapPath = DEFAULT_MAP, scenesPath = DEFAULT_S
   const { buildLoop } = await import(pathToFileURL(scenesPath).href);
   const names = buildLoop(1).map((s) => s.name);
   out.push('Demo keys (demo mode only; the demo player takes them, not the bar):');
-  out.push(`  1-${names.length}  jump: ${names.slice(0, 7).join(', ')},`);
-  out.push(`       ${names[7]} (mid-turn auto), ${names[8]} (/compact at the prompt)`);
+  out.push(`  1-9 and 0  jump: ${names.slice(0, 6).join(', ')},`);
+  out.push(`       ${names[6]}, ${names[7]} (mid-turn), ${names[8]} (/compact), ${names[9]} (a question)`);
   out.push('  P  pause / continue          [  slower          ]  faster');
   out.push('In the demo these change the screen: Left, Right, Up, Down, M, Backspace held');
   out.push('(go to the session that needs you most). Enter picks a row in a list or menu.');

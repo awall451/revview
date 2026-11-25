@@ -8,6 +8,7 @@ const LABELS = {
   working: 'WORKING',
   waiting: 'WAITING FOR ME',
   permission: 'NEEDS PERMISSION',
+  asking: 'CLAUDE ASKS',
   done: 'DONE',
   starting: 'STARTING',
   offline: 'OFFLINE',
@@ -23,6 +24,8 @@ const SHAPES = {
   working: '<circle cx="12" cy="12" r="10.5" fill="currentColor"/>',
   waiting: '<rect x="3" y="2" width="6.5" height="20" fill="currentColor"/><rect x="14.5" y="2" width="6.5" height="20" fill="currentColor"/>',
   permission: '<path d="M12 1.5 23.5 22.5H.5Z" fill="currentColor"/>',
+  // speech bubble with a tail at the lower left: Claude asks something
+  asking: '<path d="M4 2.5h16A2.5 2.5 0 0 1 22.5 5v10a2.5 2.5 0 0 1-2.5 2.5H11l-5.5 4.5v-4.5H4A2.5 2.5 0 0 1 1.5 15V5A2.5 2.5 0 0 1 4 2.5Z" fill="currentColor"/>',
   done: '<path d="M2.5 13 9 19.5 21.5 4.5" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linejoin="miter"/>',
   starting: '<circle cx="12" cy="12" r="8.75" fill="none" stroke="currentColor" stroke-width="3.5"/>',
   offline: '<path d="M3.5 3.5 20.5 20.5M20.5 3.5 3.5 20.5" fill="none" stroke="currentColor" stroke-width="4.5"/>',
@@ -45,7 +48,7 @@ const NOTES = {
   'no-link': ['Display lost the revview server', 'Claude may still be running'],
 };
 // permission: the turn total would read as the size of the requested edit (QA r3-03)
-const NO_DIFF = new Set(['permission', 'starting', 'insert-key', 'unknown', 'ended', 'no-link']);
+const NO_DIFF = new Set(['permission', 'asking', 'starting', 'insert-key', 'unknown', 'ended', 'no-link']);
 const NO_OTHERS = new Set(['starting', 'insert-key', 'unknown', 'no-link']);
 
 // First note of OFFLINE: what Claude is doing, worded for each activity (QA 14: "Claude: claude exited").
@@ -78,13 +81,13 @@ const NAV_ROWS = 6;
 const NAV_TITLES = { list: 'SESSIONS', menu: 'MENU', new: 'NEW SESSION: CHOOSE A PROJECT', projects: 'PROJECTS', settings: 'SETTINGS (READ ONLY)' };
 const NAV_EMPTY = { list: 'No sessions', new: 'No projects: add paths to the projects file', projects: 'No projects: add paths to the projects file' };
 // chip colours: the band colour of the state (view.css has the same values per body[data-view])
-const CHIP = { working: '#5eb1ff', waiting: '#c8a2ff', permission: '#ffb020', done: '#4fdc7a', unknown: '#5ce1e6' };
+const CHIP = { working: '#5eb1ff', waiting: '#c8a2ff', permission: '#ffb020', asking: '#e6f25a', done: '#4fdc7a', unknown: '#5ce1e6' };
 
 const $ = (id) => document.getElementById(id);
 const str = (v) => (typeof v === 'string' ? v : '');
 const ids = ['band', 'shape', 'state-word', 'others', 'where', 'tags', 'hot-tag', 'power-tag', 'buttons-tag', 'tool', 'file', 'note1', 'note2', 'diff', 'diff-approx', 'diff-added',
   'diff-removed', 'session', 'cmdbox', 'command', 'out1', 'out2', 'out3', 'offline-note', 'voice', 'voice-mark', 'position', 'voice-note',
-  'lower', 'nav'];
+  'lower', 'nav', 'ask', 'ask-question', 'ask-options', 'ask-steps', 'ask-hint', 'ask-meta', 'ask-multi', 'ask-count', 'ask-more'];
 const el = Object.fromEntries(ids.map((id) => [id, $(id)]));
 
 // ---- type sizes: cap height in mm -> font-size px, using the real font's cap-height ratio ----
@@ -193,6 +196,9 @@ export function render(input) {
   for (const k of ['tool', 'file', 'note1', 'note2', 'command', 'out1', 'out2', 'out3', 'offline-note', 'voice-note']) set(el[k], '');
   el.cmdbox.hidden = true;
   el.diff.hidden = true;
+  el.ask.hidden = true;
+  el['ask-meta'].hidden = true;
+  let askRows = 0; // rows taken below the ask block (offline note, voice note)
   delete el.out3.dataset.wrap;
 
   const where = view === 'no-link' ? '' : [str(s.repo), str(s.branch)].filter(Boolean).join(' · ');
@@ -256,6 +262,11 @@ export function render(input) {
       set(el.note2, 'No network: voice input will not work');
       if (voiceNote) set(el['voice-note'], voiceNote);
     }
+  } else if (view === 'asking') {
+    // Claude asks the driver (AskUserQuestion / ExitPlanMode): the tool in row A, the ask block below it (renderAsk)
+    set(el.tool, str(s.tool));
+    if (s.offline === true) { set(el['offline-note'], 'No network: voice input will not work'); askRows += 1; }
+    if (voiceNote) { set(el['voice-note'], voiceNote); askRows += 1; }
   } else {
     set(el.tool, str(s.tool));
     if (answerWord(str(s.tool)) !== '') {
@@ -356,6 +367,7 @@ export function render(input) {
   }
 
   // fitting needs layout, so it comes after the fields are in place
+  if (view === 'asking') renderAsk(s.ask, askRows);
   if (!el.cmdbox.hidden) fitCommand(str(s.command), outRows);
   // the failed turn's message wraps over the free rows (QA r5b-02), cut with an ellipsis only beyond them
   if (!note && failedWord !== '' && str(s.failed.message) !== '' && el.out3.dataset.full === str(s.failed.message)) fitFailedMessage(str(s.failed.message), outRows - 1);
@@ -394,6 +406,77 @@ export function render(input) {
   }
   renderNav(s.nav);
   document.documentElement.dataset.rendered = view;
+}
+
+// ---- CLAUDE ASKS: the question (or the plan title) in big type, the options below, the counts in row A ----
+const ASK_NOTE = 'Claude asks: look at the terminal when parked';
+const ASK_LINES = 2; // the big text takes at most 2 lines
+const ASK_LINE_HEIGHT = 1.1;
+const isCount = (n) => Number.isInteger(n) && n > 0;
+const askRow = (id, cls, text, extra) => {
+  const n = document.createElement('span');
+  n.id = id;
+  n.className = cls;
+  n.textContent = text;
+  n.dataset.full = text;
+  return Object.assign(n, extra);
+};
+
+function renderAsk(input, noteRows) {
+  const a = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
+  let big = ASK_NOTE;
+  let options = [];
+  let steps = '';
+  let hint = false;
+  const meta = { 'ask-multi': '', 'ask-count': '', 'ask-more': '' };
+  const full = { 'ask-multi': 'More than one option can be picked', 'ask-count': '', 'ask-more': '' };
+  if (a.kind === 'plan') {
+    big = str(a.title) !== '' ? `Plan: ${a.title}` : 'Claude has a plan';
+    if (isCount(a.steps)) steps = `${a.steps} step${a.steps === 1 ? '' : 's'}`;
+    hint = true;
+  } else if (a.kind === 'question') {
+    if (str(a.question) !== '') big = a.question;
+    options = Array.isArray(a.options) ? a.options.filter((o) => typeof o === 'string' && o !== '').slice(0, 4) : [];
+    if (a.multiSelect === true) meta['ask-multi'] = 'pick any';
+    if (isCount(a.questions) && a.questions > 1) {
+      meta['ask-count'] = `1 of ${a.questions}`;
+      full['ask-count'] = `The call has ${a.questions} questions; this is the first`;
+    }
+    if (isCount(a.more)) {
+      meta['ask-more'] = `+${a.more} more`;
+      full['ask-more'] = `${a.more} more option${a.more === 1 ? '' : 's'} not shown`;
+    }
+  }
+  for (const id of Object.keys(meta)) {
+    set(el[id], meta[id]);
+    if (meta[id] === '') el[id].dataset.full = '';
+    else el[id].dataset.full = full[id];
+  }
+  el['ask-meta'].hidden = Object.values(meta).every((t) => t === '');
+  el.ask.hidden = false;
+  set(el['ask-steps'], steps);
+  set(el['ask-hint'], hint ? 'Approve in the terminal when parked' : '');
+  el['ask-options'].replaceChildren(...options.map((label, i) => {
+    const cell = askRow(`ask-o${i + 1}`, 'ask-opt', '');
+    cell.dataset.full = '';
+    cell.append(askRow(`ask-n${i + 1}`, 'ask-n', `${i + 1}`), askRow(`ask-t${i + 1}`, 'ask-t', label));
+    return cell;
+  }));
+  // The big text: the state word's size when it fits, else the largest that does (rows below it are fixed 40 px rows).
+  const lcs = getComputedStyle(el.lower);
+  const inner = el.lower.clientHeight - parseFloat(lcs.paddingTop) - parseFloat(lcs.paddingBottom);
+  const rowPx = parseFloat(getComputedStyle(el['ask-hint']).lineHeight) || 40;
+  const below = (Math.ceil(options.length / 2) + (steps !== '' ? 1 : 0) + (hint ? 1 : 0) + noteRows) * rowPx;
+  const stateFont = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--state-font')) || 55;
+  const font = Math.min(stateFont, Math.floor(((inner - rowPx - below) / ASK_LINES / ASK_LINE_HEIGHT) * 10) / 10);
+  const q = el['ask-question'];
+  q.style.fontSize = `${font}px`;
+  q.dataset.full = big;
+  const limit = ASK_LINES * font * ASK_LINE_HEIGHT + 1;
+  q.textContent = fitPrefix(big, (t) => {
+    q.textContent = t;
+    return q.getBoundingClientRect().height <= limit;
+  });
 }
 
 // ---- list and menu: the lower area is replaced by a title row and up to 6 rows ----

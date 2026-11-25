@@ -9,6 +9,10 @@
 // 8 ends on the PreCompact of a turn's auto compaction (and its SubagentStop): WORKING + the line. 9 goes on from there: the compaction
 // ends (the line goes away), the turn finishes, then a /compact typed at the prompt (PreCompact manual): DONE + the line. A scene ends
 // on the compacting state (the player's hold shows it); the next scene (or the loop's restart) shows its end.
+//
+// Scene 10: Claude asks (AskUserQuestion), from fixtures/sessions/ask-question.jsonl, in the compaction session (it is the only one
+// left, and the compaction ended with scene 9): CLAUDE ASKS with the question and its options. It ends on the asking state; the loop's
+// restart moves on. The demo keys are 1-9 and 0 (= 10).
 import fs from 'node:fs';
 
 function recording(name) {
@@ -27,6 +31,7 @@ const workingTurn = recording('working-turn');
 const permissionPrompt = recording('permission-prompt');
 const idlePrompt = recording('idle-prompt');
 const compaction = recording('compaction');
+const askQuestion = recording('ask-question');
 const start = is('SessionStart');
 const lastBash = workingTurn.findLastIndex(is('PostToolUse', { tool_name: 'Bash' }));
 
@@ -44,6 +49,8 @@ const PARTS = {
   compactAuto: compaction.slice(0, 9),
   // events 9-20: SessionStart compact + PostCompact, a read, the turn's Stop, then `/compact` at the prompt: PreCompact manual + SubagentStop
   compactManual: compaction.slice(9, 21),
+  // the user prompt up to the first permission_prompt notification: AskUserQuestion waits for the driver
+  ask: between(askQuestion, is('UserPromptSubmit'), is('Notification', { notification_type: 'permission_prompt' })),
   waiting: between(idlePrompt, is('UserPromptSubmit'), is('Notification', { notification_type: 'idle_prompt' })),
 };
 if (!start(PARTS.starts.revview[0]) || !start(PARTS.starts.garden[0]) || !start(PARTS.starts.notes[0])) throw new Error('demo: recording does not start with SessionStart');
@@ -96,5 +103,7 @@ export function buildLoop(loop) {
     { name: 'compaction', steps: [...steps([...as(d, PARTS.compactAuto.slice(0, 1)), ctx(d)], 0), ...steps(as(d, PARTS.compactAuto.slice(1)))], expect: { view: 'working', sessions: 1, compacting: true } },
     // the compaction ends, the turn finishes, then /compact at the prompt
     { name: 'compact-cmd', steps: steps(as(d, PARTS.compactManual)), expect: { view: 'done', sessions: 1, compacting: true } },
+    // Claude asks a question in the same session
+    { name: 'asking', steps: steps(as(d, PARTS.ask)), expect: { view: 'asking', sessions: 1 } },
   ];
 }

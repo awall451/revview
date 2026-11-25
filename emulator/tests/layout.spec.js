@@ -8,7 +8,7 @@ import { expectFits, checkContrastAndFloor } from './checks.js';
 import { PANEL } from '../panel.js';
 
 const LABELS = {
-  working: 'WORKING', waiting: 'WAITING FOR ME', permission: 'NEEDS PERMISSION', done: 'DONE',
+  working: 'WORKING', waiting: 'WAITING FOR ME', permission: 'NEEDS PERMISSION', asking: 'CLAUDE ASKS', done: 'DONE',
   starting: 'STARTING', offline: 'OFFLINE', 'insert-key': 'INSERT KEY',
   unknown: 'UNKNOWN', ended: 'CLAUDE EXITED', 'no-link': 'NO LINK',
 };

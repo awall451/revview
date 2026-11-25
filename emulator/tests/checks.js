@@ -107,7 +107,7 @@ export async function checkContrastAndFloor(page, label, testInfo) {
   let smallest = Infinity;
   for (const e of els) {
     const mm = (await textSizeMm(page.locator(`#${e.id}`))).capHeightMm;
-    const [lo, hi] = e.id === 'state-word' ? RANGE_MM.state : RANGE_MM.text;
+    const [lo, hi] = e.id === 'state-word' ? RANGE_MM.state : e.id === 'ask-question' ? RANGE_MM.ask : RANGE_MM.text;
     if (e.id !== 'state-word') smallest = Math.min(smallest, mm);
     expect(mm, `${label} #${e.id} cap height mm`).toBeGreaterThanOrEqual(lo);
     expect(mm, `${label} #${e.id} cap height mm`).toBeLessThanOrEqual(hi);

@@ -4,8 +4,8 @@ import { text } from './http.js';
 
 export const MAX_DEV_BODY_BYTES = 1024;
 export const MAX_DEMO_CLIENTS = 2;
-// Browser codes the demo player owns under --dev-demo (the demo's keys: scene 1-9, pause, slower, faster).
-export const DEMO_CODES = Object.freeze([...Array.from({ length: 9 }, (_, i) => `Digit${i + 1}`), 'KeyP', 'BracketLeft', 'BracketRight']);
+// Browser codes the demo player owns under --dev-demo (the demo's keys: scene 1-9 and 0 (= 10), pause, slower, faster).
+export const DEMO_CODES = Object.freeze([...Array.from({ length: 9 }, (_, i) => `Digit${i + 1}`), 'Digit0', 'KeyP', 'BracketLeft', 'BracketRight']);
 
 // browser codes of the bridge's bound non-modifier keys (the page prevents their default action)
 export const bridgeCodes = (ctx) => {
