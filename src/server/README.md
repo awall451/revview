@@ -25,7 +25,7 @@ no module keeps state of its own.
 | `cli.js` | `parseArgs`, `main` (flags, runner, speech/netmon/thermal setup, startup lines) |
 | `boot.js` | `bootSessions`, `bootAfterUnlock`, `netmonTarget`, `installShutdown` |
 | `live.js` | `startLiveServer`: builds `ctx`, the route table, listen, the returned handle and `close()` |
-| `feed.js` | `apply` (reduce + broadcast), `GET /events` (SSE), `GET /state`, the SSE ping |
+| `feed.js` | `apply` (reduce, tell `ctx.sounds.observe(prev, next)` when the board changed, broadcast), `GET /events` (SSE), `GET /state`, the SSE ping |
 | `http.js` | `text`, static files, the Host/Origin check |
 | `routes-event.js` | `POST /event`, body reading and the oversize-body drop mark |
 | `routes-permission.js` | `POST /permission` (long poll) |
@@ -227,3 +227,10 @@ Programmatic use (tests): `startLiveServer({ port: 0, viewDir, reduce, input, de
 validated path list, `timers`/`navTimeoutMs` go to the actions; `permissionsWaiting()` is a test seam)
 (`input` is a parsed config, `inputDeps`/`inputRetryMs` go to the device reader; `gestures()` returns a copy of the log) (`reduce` is a test seam for a failing state core; there is no host option) resolves to
 `{ url, port, close(), state(), select(id) }` (`select(id)` is the internal `RevviewSelect` for the boot path) (`reduce` is `(board, event) => board`, default `reduceBoard`; `state()` returns `boardView(board)`).
+
+## Sounds
+
+With the `speech` option, `startLiveServer` also takes `speech.sounds` (the mode, put on the board at creation without a seq bump or a broadcast) and
+`speech.cuePlayer` (`{ argv, dir?, spawn? }` or null). `feed.js` `apply` is the one place every event source passes through: after a board change it calls
+`ctx.sounds.observe(prev, next)` (errors are logged, never thrown). Speech on Stop follows `board.sounds === 'speech'`, so the Settings row changes it live.
+`close()` kills a playing cue. Details: `src/sounds/README.md`.

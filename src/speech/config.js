@@ -16,6 +16,9 @@ export class SpeechConfigError extends Error {
 
 const MAX_ENGINES = 8;
 const MAX_STAGES = 3;
+const MAX_CUE_PLAYERS = 4;
+const SOUNDS_MODES = ['off', 'cues', 'speech'];
+export const DEFAULT_CUE_PLAYERS = Object.freeze([['aplay', '-q'], ['pw-play'], ['paplay']]);
 const MAX_ARGS = 32;
 const MAX_ARG_CHARS = 512;
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -65,7 +68,7 @@ export function loadSpeechConfig(file) {
   try {
     raw = readFileSync(file, 'utf8');
   } catch (e) {
-    if (e?.code === 'ENOENT') return { engines: [], speakOnStop: false };
+    if (e?.code === 'ENOENT') return { engines: [], speakOnStop: false, sounds: 'cues', cuePlayers: DEFAULT_CUE_PLAYERS.map((a) => [...a]) };
     throw new SpeechConfigError(`cannot read ${file}: ${e?.message ?? e}`);
   }
   let data;
@@ -75,13 +78,25 @@ export function loadSpeechConfig(file) {
     throw new SpeechConfigError(`${file} is not valid JSON: ${e.message}`);
   }
   if (!isObj(data)) throw new SpeechConfigError('the file must hold one object');
-  checkKeys(data, ['engines', 'speakOnStop'], 'top level');
+  checkKeys(data, ['engines', 'speakOnStop', 'sounds', 'cuePlayers'], 'top level');
   if (!Array.isArray(data.engines) || data.engines.length > MAX_ENGINES) {
     throw new SpeechConfigError(`engines must be a list of at most ${MAX_ENGINES} engines`);
   }
   const speakOnStop = data.speakOnStop ?? false;
   if (typeof speakOnStop !== 'boolean') throw new SpeechConfigError('speakOnStop must be true or false');
-  return { engines: data.engines.map(checkEngine), speakOnStop };
+  if (data.sounds !== undefined && !SOUNDS_MODES.includes(data.sounds)) {
+    throw new SpeechConfigError(`sounds must be one of ${SOUNDS_MODES.map((m) => `"${m}"`).join(', ')}`);
+  }
+  // `sounds` wins over the older speakOnStop; without either, cues are on
+  const sounds = data.sounds ?? (speakOnStop ? 'speech' : 'cues');
+  let cuePlayers = DEFAULT_CUE_PLAYERS.map((a) => [...a]);
+  if (data.cuePlayers !== undefined) {
+    if (!Array.isArray(data.cuePlayers) || data.cuePlayers.length === 0 || data.cuePlayers.length > MAX_CUE_PLAYERS) {
+      throw new SpeechConfigError(`cuePlayers must be a list of 1 to ${MAX_CUE_PLAYERS} commands`);
+    }
+    cuePlayers = data.cuePlayers.map((c, i) => checkStage(c, `cuePlayers[${i}]`));
+  }
+  return { engines: data.engines.map(checkEngine), speakOnStop: sounds === 'speech', sounds, cuePlayers };
 }
 
 // mode 'exec': a program we can run; mode 'file': any file that is there
@@ -95,7 +110,8 @@ function defaultExists(p, mode) {
   }
 }
 
-function hasProgram(name, exists) {
+// is `name` (absolute path or bare command) a program we can run? `exists` as in pickEngine
+export function hasProgram(name, exists = defaultExists) {
   if (isAbsolute(name)) return exists(name, 'exec');
   return (process.env.PATH ?? '').split(delimiter).filter((d) => d !== '').some((d) => exists(join(d, name), 'exec'));
 }

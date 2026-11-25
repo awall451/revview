@@ -17,6 +17,7 @@ import { loadConfig, ConfigError, DEFAULT_CONFIG_PATH } from '../input/keymap.js
 import { loadSpeechConfig, pickEngine, describeChoice, SpeechConfigError, DEFAULT_SPEECH_CONFIG_PATH } from '../speech/index.js';
 import { DEFAULT_PORT, startLiveServer } from './live.js';
 import { bootSessions, bootAfterUnlock, netmonTarget, installShutdown } from './boot.js';
+import { pickPlayer } from '../sounds/index.js';
 
 export function parseArgs(argv) {
   const out = { port: null, inputPath: null, devBridge: false, sessions: false, start: [], projects: null };
@@ -139,12 +140,15 @@ export async function main(argv = process.argv.slice(2)) {
   // a bad speech config means no voice, never no bar
   let speech = null;
   let speechLine;
+  let soundsLine = null;
   try {
     const config = loadSpeechConfig(args.speech ?? DEFAULT_SPEECH_CONFIG_PATH);
     const engine = pickEngine(config);
     console.error(describeChoice(config, engine));
-    speech = { engine, speakOnStop: config.speakOnStop };
-    speechLine = `speech: ${engine ? engine.name : 'none found (read aloud does nothing)'}${config.speakOnStop ? ' (spoken summary on Stop: on)' : ''}`;
+    const cueArgv = pickPlayer(config.cuePlayers);
+    speech = { engine, speakOnStop: config.sounds === 'speech', sounds: config.sounds, cuePlayer: { argv: cueArgv } };
+    speechLine = `speech: ${engine ? engine.name : 'none found (read aloud does nothing)'}${config.sounds === 'speech' ? ' (spoken summary on Stop: on)' : ''}`;
+    soundsLine = cueArgv ? `sounds: ${config.sounds}, player ${cueArgv[0]}` : `sounds: ${config.sounds}, no cue player found (silent)`;
   } catch (e) {
     if (!(e instanceof SpeechConfigError)) throw e;
     console.error(e.message);
@@ -169,6 +173,7 @@ export async function main(argv = process.argv.slice(2)) {
   if (input) console.log('input: reading wheel buttons (GET /buttons)');
   if (runner) console.log(`sessions: private tmux server (${args.tmuxSocket ? `-S ${args.tmuxSocket}` : '-L revview'}), ${selectId === null ? 'selected: none' : `${selectedNow ? 'selected' : 'wanted'}: ${selectId}`}`);
   console.log(speechLine);
+  if (soundsLine) console.log(soundsLine);
   if (netmonLine) console.log(netmonLine);
   if (thermalLine) console.log(thermalLine);
   if (args.boot) console.log('boot: STARTING until the first session is on the board');

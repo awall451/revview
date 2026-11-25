@@ -104,6 +104,8 @@ export function createSpeaker({ engine, spawn = nodeSpawn, log = () => {}, killW
     speak: (text) => serial(() => doSpeak(text)),
     stop: () => serial(stopNow),
     speaking: () => current !== null,
+    // resolves when no utterance is alive
+    idle: async () => { while (current !== null) await (current.done ?? Promise.resolve()); },
     close: () => { closed = true; return serial(stopNow); },
   };
 }

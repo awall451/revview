@@ -22,7 +22,7 @@ the read-aloud wheel button (`docs/BUTTONS.md` section 5, DECISIONS "wheel butto
   files exist; `describeChoice` makes the log line.
 - `speaker.js`: one utterance at a time. A new speak stops the old one first. Calls are serialized. Failures are
   logged, never thrown.
-- `index.js`: `createReadAloud({ speaker, memo, speakOnStop, log })` with `textFor`, `speakFor`, `onEvent`, `stop`, `close`.
+- `index.js`: `createReadAloud({ speaker, memo, speakOnStop, beforeSpeak, log })` (`speakOnStop` is a boolean or a function read at each event; `beforeSpeak` is awaited, at most 2 s, before an automatic speech but not before a button press) with `textFor`, `speakFor`, `onEvent`, `stop`, `close`.
 
 ## Config (`config/speech.json`)
 
@@ -58,3 +58,10 @@ machine). It uses `-w` files and an unread pipe, never the sound card. Measured 
 (ALSA errors on stderr without a card, ignored); stop ends a blocked espeak-ng and its pipe partner; `[[ ]]` is
 phoneme input (confirmed, so text.js removes it); `< >` are not markup without `-m` (spoken as words), scrubbed anyway.
 Not covered, bench R1-R14: the sound, Piper, the volume, the start delay, the `audio` group, anything on the Pi.
+
+## Sounds keys in the same file
+
+`sounds` (`"off"`, `"cues"` or `"speech"`) and `cuePlayers` (1 to 4 argument lists, checked like an engine stage) are read by
+`loadSpeechConfig` too, and returned as `sounds` and `cuePlayers`. `sounds` wins over the older `speakOnStop`; without either it is `"cues"`;
+`speakOnStop: true` alone means `"speech"`. The returned `speakOnStop` is `sounds === 'speech'`. `speaker.idle()` resolves when no utterance is alive
+(the cue player waits for it; see `src/sounds/README.md`).

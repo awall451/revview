@@ -18,5 +18,8 @@
       ]
     }
   ],
-  "speakOnStop": false
+  "sounds": "cues",
+  "_comment_sounds": "off, cues (short sounds for needs-you, done, failed, other session) or speech (the cues and the spoken summary on Stop). The Settings row on the bar changes it until the server restarts.",
+  "cuePlayers": [["aplay", "-q"], ["pw-play"], ["paplay"]],
+  "_comment_cuePlayers": "The first program that is installed plays the cues. aplay is from alsa-utils (checked against the Trixie package names, see docs/PI-FACTS.md); pw-play and paplay are from memory. The cue file path is added as the last argument; no shell."
 }

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { initialBoard, reduceBoard, boardView, selectedKey } from '../state/index.js';
 import { createActions, createPermissionRegistry } from '../sessions/index.js';
 import { createSpeaker, createClosingMemo, createReadAloud } from '../speech/index.js';
+import { createSounds, createCuePlayer, CUE_DIR } from '../sounds/index.js';
 import { text, serveStatic, originOk } from './http.js';
 import { apply as applyEvent, events, stateHandler, startPing } from './feed.js';
 import { postEvent } from './routes-event.js';
@@ -26,7 +27,7 @@ export async function startLiveServer({
 } = {}) {
   const root = path.resolve(viewDir);
   // Everything the modules share, per server (no module-level state: tests start many servers in one process).
-  // Set later in this function: readAloud, actions, inputHandle, bridge, lastSource (setupInput), monitor, thermalMonitor,
+  // Set later in this function: readAloud, sounds (with speech), actions, inputHandle, bridge, lastSource (setupInput), monitor, thermalMonitor,
   // dataMonitor (startMonitors), compactSync, launchTimers, compactTimers, clearT (createLifecycle), ownedTimer (the owned poll below).
   const ctx = {
     root, reduceEvent, input, devBridge, devKeys, devDemo, onGesture, sessions, dataLock,
@@ -40,6 +41,7 @@ export async function startLiveServer({
     gestureLog: [],
     lastSource: 'device',
     readAloud: null,
+    sounds: null,
     actions: null,
     inputHandle: null,
     bridge: null,
@@ -51,11 +53,19 @@ export async function startLiveServer({
     compactSync: null,
     acceptGesture: (g) => acceptGesture(ctx, g),
   };
-  // speech = { engine, speakOnStop, spawn?, killWaitMs? } or null: with null nothing about speech exists
+  // speech = { engine, speakOnStop, sounds?, cuePlayer?, spawn?, killWaitMs? } or null: with null nothing about speech or sounds exists.
+  // sounds is the mode ('off' | 'cues' | 'speech'); cuePlayer is { argv, dir?, spawn? } or null (no player found: silent).
+  // The mode lives on the board (the Settings row changes it): speech on Stop follows board.sounds === 'speech'.
   if (speech) {
     const log = (m) => console.error(m);
     const speaker = createSpeaker({ engine: speech.engine, spawn: speech.spawn, killWaitMs: speech.killWaitMs, log });
-    ctx.readAloud = createReadAloud({ speaker, memo: createClosingMemo(), speakOnStop: speech.speakOnStop === true, log });
+    const mode = speech.sounds ?? (speech.speakOnStop === true ? 'speech' : 'off');
+    ctx.board = reduceBoard(ctx.board, { hook_event_name: 'RevviewSounds', mode }); // set at creation: no seq, no broadcast
+    ctx.sounds = createSounds({
+      player: createCuePlayer({ argv: speech.cuePlayer?.argv ?? null, dir: speech.cuePlayer?.dir ?? CUE_DIR, spawn: speech.cuePlayer?.spawn, timers, log, waitBefore: () => speaker.idle() }),
+      log,
+    });
+    ctx.readAloud = createReadAloud({ speaker, memo: createClosingMemo(), speakOnStop: () => ctx.board.sounds === 'speech', beforeSpeak: () => ctx.sounds.idle(), log });
   }
   const { applyProjects, refreshOwned, launched, runner: marked } = createLifecycle(ctx, { projects, timers, launchLimitMs, compactLimitMs });
   ctx.actions = createActions({
@@ -138,6 +148,11 @@ export async function startLiveServer({
     gestures: () => ctx.gestureLog.map((g) => ({ ...g })),
     permissionsWaiting: () => ctx.registry.size(), // test seam: waiting PermissionRequest hook calls
     close: async () => {
+      try {
+        await ctx.sounds?.close(); // kills any cue player child
+      } catch (e) {
+        console.error('sounds close failed:', e instanceof Error ? e.message : e);
+      }
       try {
         await ctx.readAloud?.close(); // kills any speech child
       } catch (e) {

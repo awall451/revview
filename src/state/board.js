@@ -810,6 +810,7 @@ const buttonsView = (b) => (b.buttons === null ? 'unknown' : b.buttons ? 'presen
 
 // The session the bar shows: the focus when it is live, else what pickFocus would choose.
 const shownKeyOf = (b) => selectedOf(b) ?? (b.focus !== null && has(b.sessions, b.focus) ? b.focus : pickFocus(b, null));
+export const shownKey = (board) => shownKeyOf(isValidBoard(board) ? board : initialBoard());
 
 // `ask`: null for a permission prompt, else what AskUserQuestion / ExitPlanMode asks (src/state/ask.js)
 const askIn = (p) => (isAsk(p.ask) ? p.ask : null);

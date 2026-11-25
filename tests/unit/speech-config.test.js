@@ -31,7 +31,9 @@ test('the shipped config loads: piper first, espeak-ng second, no speaking on st
 });
 
 test('a missing file gives no engines and does not throw', () => {
-  assert.deepEqual(loadSpeechConfig('/nonexistent/dir/speech.json'), { engines: [], speakOnStop: false });
+  assert.deepEqual(loadSpeechConfig('/nonexistent/dir/speech.json'), {
+    engines: [], speakOnStop: false, sounds: 'cues', cuePlayers: [['aplay', '-q'], ['pw-play'], ['paplay']],
+  });
 });
 
 test('a good file: argv is kept exactly as written', () => {
@@ -117,4 +119,40 @@ test('describeChoice: plain log lines', () => {
   assert.equal(describeChoice(c, c.engines[1]), 'read aloud: espeak-ng (espeak-ng)');
   assert.equal(describeChoice(c, null), 'read aloud: no speech engine found (tried piper, espeak-ng): the read-aloud button does nothing');
   assert.equal(describeChoice({ engines: [], speakOnStop: false }, null), 'read aloud: no engines configured');
+});
+
+test('sounds: the shipped config says cues, with the default players', () => {
+  const c = loadSpeechConfig(DEFAULT_SPEECH_CONFIG_PATH);
+  assert.equal(c.sounds, 'cues');
+  assert.deepEqual(c.cuePlayers, [['aplay', '-q'], ['pw-play'], ['paplay']]);
+});
+
+test('sounds: default is cues; speakOnStop true gives speech; sounds wins over speakOnStop', () => {
+  assert.equal(load({ engines: [] }).sounds, 'cues');
+  assert.equal(load({ engines: [], speakOnStop: false }).sounds, 'cues');
+  const old = load({ engines: [], speakOnStop: true });
+  assert.equal(old.sounds, 'speech');
+  assert.equal(old.speakOnStop, true);
+  for (const mode of ['off', 'cues', 'speech']) {
+    assert.equal(load({ engines: [], sounds: mode }).sounds, mode);
+    assert.equal(load({ engines: [], sounds: mode }).speakOnStop, mode === 'speech');
+  }
+  assert.equal(load({ engines: [], sounds: 'off', speakOnStop: true }).sounds, 'off');
+  assert.equal(load({ engines: [], sounds: 'speech', speakOnStop: false }).sounds, 'speech');
+});
+
+test('cuePlayers: own list is checked like an engine stage; default when absent', () => {
+  assert.deepEqual(load({ engines: [], cuePlayers: [['/usr/bin/play', '-q']] }).cuePlayers, [['/usr/bin/play', '-q']]);
+  assert.deepEqual(load({ engines: [] }).cuePlayers[0], ['aplay', '-q']);
+});
+
+test('sounds and cuePlayers: bad values throw SpeechConfigError', () => {
+  const bad = [
+    { engines: [], sounds: 'loud' }, { engines: [], sounds: true }, { engines: [], sounds: null },
+    { engines: [], cuePlayers: [] }, { engines: [], cuePlayers: 'aplay' }, { engines: [], cuePlayers: ['aplay'] },
+    { engines: [], cuePlayers: [[]] }, { engines: [], cuePlayers: [['a'], ['b'], ['c'], ['d'], ['e']] },
+    { engines: [], cuePlayers: [['rel/aplay']] }, { engines: [], cuePlayers: [['aplay', '']] },
+    { engines: [], cuePlayers: [['aplay', 5]] }, { engines: [], cuePlayers: [['sh -c x']] },
+  ];
+  for (const b of bad) assert.throws(() => load(b), SpeechConfigError, JSON.stringify(b));
 });
