@@ -2091,3 +2091,54 @@ tmux or Chromium was left (`pgrep`), `~/.claude/settings.json` unchanged (md5 be
 **Not solved:** a question dismissed with Esc stays on the bar until the next event (the server could clear it
 when the held request's connection closes without an answer; not done: a hook timeout looks the same); several
 questions and multi-select; "Type something" answers; nothing on the Pi or with the pods (bench QA2-1 to QA2-5).
+
+## Sounds for state changes (cycle 60, owner issue #31, branch work/sounds; never heard: no audio device here)
+
+Code: `src/sounds/` (README there), `config/speech.json`, `src/server/feed.js` (`apply` calls `ctx.sounds.observe`),
+`src/state/board.js` (`sounds`, `RevviewSounds`, the Settings row).
+- **Which state gives which cue** (`src/sounds/classify.js`, per session, from the board after each change):
+  **needs** = a pending prompt (permission prompt, or CLAUDE ASKS: AskUserQuestion / ExitPlanMode) or activity
+  `permission`; **failed** = a failed turn (StopFailure, `state.failed`); **done** = activity `done` (Stop, no
+  subagents running). WAITING FOR ME gives **no cue**: it follows a Stop (already cued as done) or comes from
+  `idle_prompt` about 60 s later, a repeat. Working, starting, unknown, ended, quiet placeholders: no cue.
+- **One cue per change, never repeated while it stays.** A cue plays only when a session's class changes into
+  needs / failed / done. The same event again, a selection change, the list or menu, notes, compaction marks
+  (`PreCompact`, `SessionStart` source compact, `RevviewCompactExpired`), boot marks and owned polls do not change the
+  class. Needs -> needs (permission then a question in the same session) is no new cue.
+- **Selected session or others.** The selected session (when none is selected: the one the bar shows) gets its own
+  cue; a change in any other session gets the one softer `other` cue (quiet single short tone, same for all three
+  classes). One board change gives at most one cue: the selected session's wins.
+- **Cues (`src/sounds/wav.js`, committed `src/sounds/cues/*.wav`, `npm run cues` rewrites them):** 16-bit mono
+  22050 Hz PCM. needs = two rising pairs 660 -> 880 Hz (0.6 s); done = one 880 Hz bell-like tone (0.2 s); failed =
+  a falling pair 523 -> 330 Hz (0.39 s); other = one 600 Hz tone at a fifth of full scale (0.08 s). Distinct by
+  pattern (4, 1, 2, 1 bursts; rising vs falling). **Committed, not generated at start**: the Pi's root is read-only
+  and nothing must be written at start; a test holds the committed bytes equal to the generator's output.
+- **Burst: queue of one.** One cue plays, at most one waits; a newer cue replaces the waiting one, except that a
+  waiting cue of the selected session is never replaced by `other`. So a burst gives at most two sounds, never
+  overlapping. A player that runs longer than 3 s is killed.
+- **Setting: off / cues / cues and speech (`sounds`: `off`, `cues`, `speech`), default cues.** One setting replaces
+  `speakOnStop` for the driver: `speech` = the cues and the spoken summary on Stop (and the read-out new question or
+  plan); `cues` = cues only; `off` = nothing automatic. The read-aloud button speaks in every mode (a driver's request).
+  Old configs: `"speakOnStop": true` without `sounds` means `speech`; `false` or absent means `cues` (cues are new and
+  on by default); `sounds` wins when both are given. Start value from `config/speech.json`; the Settings menu row
+  "Sounds: ..." (the 5th row; the title is SETTINGS, no longer READ ONLY) cycles cues -> cues and speech -> off with a
+  press and keeps the screen open. **Not persisted**: a change from the menu lasts until the server restarts (no
+  setting is written at run time anywhere today; the Pi's root is read-only, the data partition is locked at
+  boot). To keep a choice, edit `sounds` in the config. A bad speech config means neither speech nor sounds.
+- **Cue and speech never talk over each other.** A cue waits while speech is speaking (at most 30 s, then it is
+  dropped); automatic speech waits for the cue to finish (at most 2 s). So on a Stop in mode speech: done cue, then
+  the summary. A read-aloud press speaks at once.
+- **Player:** `cuePlayers` in `config/speech.json`, first one found on PATH: `aplay -q`, `pw-play`, `paplay`; the
+  file path is the last argument, no shell, own process group. None found: silent, one start line `sounds: cues, no
+  cue player found (silent)`. A player that cannot start is logged once and the cues turn off; a non-zero exit is
+  logged once per exit code. `aplay` is in alsa-utils (checked against the package; PI-FACTS P16); that the image
+  has it is from memory.
+- **Replays (what is tested):** cues are made in the server from board changes, never by the page, so a page reload
+  or SSE reconnect cannot cue (tested: GET /state and a new SSE stream give no cue). The same event posted again gives
+  no cue (tested). A restarted server has an empty board and cues only on new hooks (tested: a fresh server with no
+  events is silent); there is no restored state to replay. Compaction events (tested in the classifier). The
+  emulator demo posts its events as live hooks: its state changes cue like real ones (not tested separately). Boot
+  marks: no class change (by construction, not tested separately).
+- **Not verified:** any sound at all, the volume against cabin noise, the audio device on the Pi (bench SC1-SC6).
+  Verified on the VM: the WAV format and bytes, and the player argv run with a stand-in player script
+  (`tests/unit/fixtures/sounds/fake-player.sh`); the timer tests looped 10 times under full CPU load.

@@ -448,3 +448,16 @@ on the panel or in a car. DECISIONS "Questions and plans 2", BUTTONS section 10.
 | QA2-3 | Plan mode, a short plan; tap deny; then a second plan, tap press | Deny: Claude stays in plan mode, the bar shows "Kept planning". Press: the pane's dialog closes with "Yes, manually approve edits", the next edit asks for permission on the bar | untested |
 | QA2-4 | A question; tap press at once (under 1.5 s), then dismiss a question with Esc in the terminal and tap press; a call with two questions, tap press | "Too early: press again"; "Not sent: the question is not waiting any more"; "Answer in the terminal when parked". Nothing changes on the pane in any of them | untested |
 | QA2-5 | With the Pi's real pane size (attach once from a laptop with a different size, then detach) get a plan and tap press | The key is sent only when the dialog's three choices are on screen; if the bar says "Not sent: the terminal does not show the plan", capture the pane (`tmux -L revview capture-pane -p`) and keep it | untested |
+
+## Sounds for state changes (cycle 60)
+
+Nothing here has ever made a sound: the cue files and the player command are proven only with a stand-in player.
+
+| # | Do | Expect | Result |
+|---|---|---|---|
+| SC1 | As the kiosk user: `aplay -q /opt/revview/src/sounds/cues/needs.wav` (then done, failed, other); `command -v aplay pw-play paplay`; the server's start line `sounds: ...` | The cue is heard from the speaker the car uses; `aplay` exists (alsa-utils); the start line names the player | untested |
+| SC2 | Engine running, windows closed, radio off; then at motorway speed. Let the selected session reach a permission prompt, finish, and fail | Each cue is heard over cabin noise at the usual volume; note the volume setting needed and whether the other cue (another session) is noticed but not startling | untested |
+| SC3 | Hear the four cues without looking | needs, done and failed can be told apart by pattern alone (rising pairs, single, falling); other is clearly softer | untested |
+| SC4 | A 30-minute drive with two sessions working | One cue per change; nothing repeats while a state stays; no pile-up of sounds; not annoying. Note anything that was | untested |
+| SC5 | Settings, Sounds row: press until cues and speech; let the selected session finish | The done cue, then the spoken summary, never over each other; off: silent; restart: back to the config value | untested |
+| SC6 | Which audio output does the Pi use (HDMI, jack, USB, Bluetooth)? `aplay -l`; `wpctl status` | Record the device and whether ALSA default reaches it through PipeWire | untested |

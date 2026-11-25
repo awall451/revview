@@ -119,6 +119,12 @@ anything you can see:
   says "no session selected" and nothing is spoken. And a speech engine must be installed by you, with no setting:
   the server reads `config/speech.json` by default, which uses Piper only when it is at `/opt/piper/piper` with the
   lessac voice and `aplay` exists, else espeak-ng. Without an engine it does nothing. `run.sh` installs nothing.
+- **Sounds.** The server plays a short cue when the selected session needs you, finishes or fails (a softer one
+  for other sessions), through the first of `aplay`, `pw-play`, `paplay` that your laptop has (`cuePlayers` in
+  `config/speech.json`). With none of them it stays silent and its log says `sounds: cues, no cue player found
+  (silent)`. The demo's state changes cue too. Turn them off in the menu: Settings, the Sounds row, press (off /
+  cues / cues and speech; back to the config value when the server restarts), or set `"sounds": "off"` in a copy
+  of the config.
 
 ## The keys
 
@@ -289,6 +295,7 @@ and your Claude are still alive. Run `--stop` with the same `TMPDIR` as the run.
 - **Demo data is recorded data.** In `--live` mode the bar shows a real Claude Code session that `run.sh` started
   (below); the Pi's own services and its tmux server are not involved.
 - **Speech** needs espeak-ng, or Piper installed as `config/speech.json` says, installed by you (no setting).
+- **Sounds** use your laptop's player and speakers; on the Pi it is `aplay` and the car's speaker (never heard there).
 
 ## Troubleshooting
 
