@@ -66,7 +66,7 @@ a default route nothing is sent at all. Nothing depends on Ethernet. Code: `src/
 
 ## Time and the quiet mark: `--quiet-minutes N`
 
-One clock (`startLiveServer`'s `clock` option, default `Date.now`) is used everywhere: the reducer gets it as `reduceBoard(board, event, at)` (so `state.since`
+One clock (`startLiveServer`'s `clock` option, default `steadyNow`: epoch ms at start, then monotonic, so a time sync on the Pi does not make the bar's clocks jump) is used everywhere: the reducer gets it as `reduceBoard(board, event, at)` (so `state.since`
 is the time of the event), and every SSE message and `GET /state` carries `now`. Every POSTed `/event` (and `/permission`) with a string `session_id`
 (not a `Revview*` event) records the time and (re)arms that session's timer of `quietMs` (option of `startLiveServer`, with the injected `timers`;
 default 300000; 0 or null = off). When it fires the server applies the internal `RevviewQuiet {session_id, since}` (403 over HTTP); the core marks
@@ -153,7 +153,7 @@ Headers: `content-type: text/event-stream`, `cache-control: no-store`. The strea
     data: {"seq":3,"now":1767000000000,"state":{...}}
 
 A comment `: ping` is sent every 15 s to detect dead sockets. `seq` counts accepted events since the
-server started; `now` is the server's clock (ms, the injected `clock`, default `Date.now`) when the message was built: the page corrects its own clock by it.
+server started; `now` is the server's clock (ms, the injected `clock`, default `steadyNow`) when the message was built: the page corrects its own clock by it.
 
 ## Other paths
 

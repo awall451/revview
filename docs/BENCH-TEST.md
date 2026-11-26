@@ -473,5 +473,5 @@ Emulator only (fixed times in the screenshots); never seen on the panel or heard
 | T3 | Hear the quiet cue next to the others | Three even taps, told apart from needs, done, failed and other without looking; noticed over cabin noise but not alarming | untested |
 | T4 | Ask Claude for a task list of 4+ steps (check whether the task tools are on in your Claude Code; they were only on with `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` in our recording) | `tasks 0/4` appears in the tool row and counts up as Claude finishes each; not confused with the session position `2/3` | untested |
 | T5 | Restart the revview service while a session works, then reload the kiosk page | The clock continues from when the state began (server clock), it does not restart at 0:00 after a page reload; after a server restart it starts at the next event (the server keeps no history) | untested |
-| T6 | The Pi's clock without network (no RTC): boot offline, then let the clock sync over the hotspot mid-drive | The bar's clock may jump once when the time syncs; note what it shows | untested |
+| T6 | The Pi's clock without network (no RTC): boot offline, then let the clock sync over the hotspot mid-drive | The bar's clock does not jump when the time syncs (the server uses a monotonic clock); note what it shows | untested |
 

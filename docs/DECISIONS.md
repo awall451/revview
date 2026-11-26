@@ -2159,7 +2159,7 @@ Code: `src/sounds/` (README there), `config/speech.json`, `src/server/feed.js` (
 ## How long and how far: clock, quiet mark, task progress (cycle 61, owner issue #29, branch work/time-progress)
 
 - **Where time comes from.** The state core stays pure: `reduceBoard(board, event, at)` takes the server's clock as data
-  (`at`, ms since the epoch); the server passes `ctx.clock()` for every event it applies. Each session keeps `since` (when its
+  (`at`, ms since the epoch); the server passes `ctx.clock()` for every event it applies. The default clock is `steadyNow` (`performance.timeOrigin + performance.now()`): epoch ms at process start, then monotonic, because the Pi has no RTC and sets its time over the network mid-drive; `Date.now()` would make every clock jump then. Each session keeps `since` (when its
   effective class began: working, waiting, done, permission, asking, or a failed turn; offline / locked overlays, notes, the
   list and compaction marks never reset it). Working -> permission -> working starts the clock again: "time in the current
   state" literally (after an approved Bash the clock is the run time of that command). The SSE message and `GET /state` are

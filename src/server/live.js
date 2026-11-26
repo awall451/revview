@@ -15,6 +15,9 @@ import { createLifecycle, LAUNCH_LIMIT_MS, COMPACT_LIMIT_MS, QUIET_MS } from './
 import { startMonitors } from './monitors.js';
 
 export const DEFAULT_PORT = 8138;
+// The server's clock for the bar's times: ms since the epoch at process start, then monotonic. A Pi has no RTC and sets
+// its time over the network mid-drive; Date.now() would jump with it, this does not (only differences are ever shown).
+export const steadyNow = () => performance.timeOrigin + performance.now();
 export const DEFAULT_HOST = '127.0.0.1'; // the only address it binds; there is no option for another
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_VIEW_DIR = path.resolve(HERE, '..', 'view');
@@ -22,7 +25,7 @@ const DEFAULT_VIEW_DIR = path.resolve(HERE, '..', 'view');
 export async function startLiveServer({
   port = 0, viewDir = DEFAULT_VIEW_DIR, reduce: reduceEvent = reduceBoard,
   input = null, devBridge = false, devKeys = null, devDemo = false, inputDeps, inputRetryMs, onGesture,
-  sessions = null, clock = Date.now, quietMs = QUIET_MS, permissionWaitMs, minShownMs, projects = [], timers, navTimeoutMs, ownedPollMs = 5000, speech = null, launchLimitMs = LAUNCH_LIMIT_MS, compactLimitMs = COMPACT_LIMIT_MS,
+  sessions = null, clock = steadyNow, quietMs = QUIET_MS, permissionWaitMs, minShownMs, projects = [], timers, navTimeoutMs, ownedPollMs = 5000, speech = null, launchLimitMs = LAUNCH_LIMIT_MS, compactLimitMs = COMPACT_LIMIT_MS,
   boot = false, netmon = null, thermal = null, dataLock = null,
 } = {}) {
   const root = path.resolve(viewDir);
