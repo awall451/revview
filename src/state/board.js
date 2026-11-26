@@ -34,6 +34,7 @@ export function initialBoard() {
     note: null, // the bottom note row: null or { kind, text } (see NOTE_RULES); cleared by the driver's next gesture
     projects: [], // project paths from the config file (display only)
     sounds: null, // null = the server has no sound feature; else 'off' | 'cues' | 'speech' (cues and speech), RevviewSounds
+    lights: null, // null = the server has no lights feature; else 'off' | 'on' (RevviewLights, the Settings row)
     look: 'day', // 'day' | 'night' | 'auto' (absent/null = day), RevviewLook (the Settings row, the menu hold)
     lookNight: false, // the clock says night now (absent = false): set only by the server's clock monitor, RevviewLookClock
   };
@@ -51,13 +52,14 @@ const SOUNDS_MODES = ['off', 'cues', 'speech'];
 const SOUNDS_NEXT = { cues: 'speech', speech: 'off', off: 'cues' };
 const SOUNDS_LABELS = { off: 'Sounds: off', cues: 'Sounds: cues', speech: 'Sounds: cues and speech' };
 const soundsOn = (b) => SOUNDS_MODES.includes(b.sounds);
+const hasLights = (b) => b.lights === 'off' || b.lights === 'on';
 const LOOK_MODES = ['day', 'night', 'auto'];
 const LOOK_NEXT = { day: 'night', night: 'auto', auto: 'day' };
 const lookOf = (b) => (LOOK_MODES.includes(b.look) ? b.look : 'day');
 // the effective look: always exactly 'day' or 'night'
 const effectiveLook = (b) => { const m = lookOf(b); return m === 'night' || (m === 'auto' && b.lookNight === true) ? 'night' : 'day'; };
 const lookLabel = (b) => { const m = lookOf(b); return m === 'auto' ? `Look: auto, ${b.lookNight === true ? 'night' : 'day'} now` : `Look: ${m}`; };
-const lookRow = (b) => SETTINGS_ROWS + (soundsOn(b) ? 1 : 0); // the Look row is the last settings row
+const lookRow = (b) => SETTINGS_ROWS + (soundsOn(b) ? 1 : 0) + (hasLights(b) ? 1 : 0); // the Look row is the last settings row
 
 function isValidSession(s) {
   return isObj(s) && isObj(s.state) && typeof s.state.activity === 'string' && isObj(s.state.diff)
@@ -72,6 +74,7 @@ function isValidBoard(b) {
     && Array.isArray(b.ended) && Number.isInteger(b.tick) && (b.focus === null || typeof b.focus === 'string')
     && (b.spokenTo === null || typeof b.spokenTo === 'string')
     && (b.buttons === null || typeof b.buttons === 'boolean')
+    && (b.lights === undefined || b.lights === null || b.lights === 'off' || b.lights === 'on')
     && (b.sounds === undefined || b.sounds === null || SOUNDS_MODES.includes(b.sounds))
     && (b.look === undefined || b.look === null || LOOK_MODES.includes(b.look))
     && (b.lookNight === undefined || typeof b.lookNight === 'boolean')
@@ -553,6 +556,7 @@ function reduceNav(b, event) {
     if (kind === 'menu') return go({ kind: ['new', 'projects', 'settings'][row], row: 0 });
     if (kind === 'new') return go(null);
     if (kind === 'settings' && row === SETTINGS_ROWS && soundsOn(b)) return { ...b, sounds: SOUNDS_NEXT[b.sounds], nav: { kind, row } };
+    if (kind === 'settings' && hasLights(b) && row === SETTINGS_ROWS + (soundsOn(b) ? 1 : 0)) return { ...b, lights: b.lights === 'on' ? 'off' : 'on', nav: { kind, row } };
     if (kind === 'settings' && row === lookRow(b)) return { ...b, look: LOOK_NEXT[lookOf(b)], nav: { kind, row } };
   }
   return b;
@@ -572,6 +576,8 @@ function reduceInner(b, event) {
       return typeof event.locked === 'boolean' && b.locked !== event.locked ? { ...b, locked: event.locked } : b;
     case 'RevviewInput':
       return typeof event.present === 'boolean' && b.buttons !== event.present ? { ...b, buttons: event.present } : b;
+    case 'RevviewLights':
+      return (event.mode === 'off' || event.mode === 'on') && b.lights !== event.mode ? { ...b, lights: event.mode } : b;
     case 'RevviewSounds':
       return SOUNDS_MODES.includes(event.mode) && b.sounds !== event.mode ? { ...b, sounds: event.mode } : b;
     case 'RevviewLook':
@@ -1046,6 +1052,7 @@ function navView(b) {
       `Projects: ${b.projects.length} in the config file`,
     ].map((label) => ({ label }));
     if (soundsOn(b)) rows.push({ label: SOUNDS_LABELS[b.sounds], change: true });
+    if (hasLights(b)) rows.push({ label: `Lights: ${b.lights}`, change: true });
     rows.push({ label: lookLabel(b), change: true });
   } else {
     const gone = kind === 'new' ? b.projectsMissing ?? [] : [];
