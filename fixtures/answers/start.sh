@@ -1,5 +1,6 @@
 #!/bin/bash
 # start.sh MODE : a claude in tmux -L q2, session q2, 150x45
+# shellcheck source=/dev/null
 set -a; . /etc/agent-kit/auth.env; set +a
 tmux -L q2 kill-server 2>/dev/null
 cd /tmp/q2/repo || exit 1

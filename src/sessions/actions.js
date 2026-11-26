@@ -176,6 +176,9 @@ export function createActions({
     }
     s = stillAsked('allow', g.before, g.id);
     if (s.res) return s.res;
+    // Esc on the dialog fires no event, but Claude ends the held hook request: check it is still held right before the key
+    const again = registry.check(s.now, g.t.id);
+    if (again?.ok !== true) return refuseAsk('allow', again?.reason, PLAN_TERMINAL_NOTE);
     const r = await runner.send('2', g.id);
     if (!r?.sent) {
       if (r?.reason === 'selected session gone') await refreshOwned();

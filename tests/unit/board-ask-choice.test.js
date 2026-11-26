@@ -191,3 +191,16 @@ test('RevviewAnswered clears one ask entry: the view is no longer asking and the
     assert.equal(done.note, null);
   }
 });
+
+test('a "Too early" note set under CLAUDE ASKS goes when the next question replaces the shown one (review finding)', () => {
+  const first = single();
+  const early = reduceBoard(first, { hook_event_name: 'RevviewNote', kind: 'too-early', note: 'Too early: press again' });
+  assert.equal(boardView(early).note, 'Too early: press again');
+  // the first question is answered in the terminal, then the second call (two questions) is asked
+  const at = idx(ASKQ, 'Notification', NOTIF, 0) + 1;
+  const to = idx(ASKQ, 'Notification', NOTIF, 1) + 1;
+  const next = run(ASKQ.slice(at, to), early);
+  assert.equal(boardView(next).view, 'asking');
+  assert.notEqual(shownAsk(next).since, shownAsk(first).since);
+  assert.equal(boardView(next).note, null);
+});

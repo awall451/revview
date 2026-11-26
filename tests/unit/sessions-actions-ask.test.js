@@ -33,7 +33,7 @@ function setup({ board = askBoard(), target = { id: SID, window: '@1' }, answerR
   };
   const registry = {
     answer: (kind, shown, chosen, opts) => { st.answers.push({ kind, shown, chosen, opts }); return answerResult; },
-    check: (shown, chosen) => { st.checks.push({ shown, chosen }); return checkResult; },
+    check: (shown, chosen) => { st.checks.push({ shown, chosen }); return typeof checkResult === 'function' ? checkResult(st) : checkResult; },
   };
   st.a = createActions({
     runner, registry, getBoard: () => st.board, apply: (e) => { st.applied.push(e); st.board = reduceBoard(st.board, e); }, log: (m) => st.logs.push(m),
@@ -177,7 +177,7 @@ test('plan: allow sends exactly "2" once after the capture shows the dialog; app
   assert.deepEqual([r.action, r.done], ['allow', true]);
   assert.deepEqual(s.sent, ['2']);
   assert.equal(s.captures, 1);
-  assert.equal(s.checks.length, 1);
+  assert.equal(s.checks.length, 2); // before the capture and again right before the key
   assert.deepEqual(s.answers, []);
   const sh = shownAsk(planBoard());
   assert.ok(s.applied.some((e) => e.hook_event_name === 'RevviewAnswered' && e.decision === 'allow' && e.since === sh.since));
@@ -246,6 +246,15 @@ test('plan: a registry check refusal means no capture and no key, with the plan 
   const u = setup({ board: planBoard(), checkResult: { ok: false, reason: 'no-request' } });
   await u.a.handle(dev('press'));
   assert.equal(u.noteOf().text, 'Not sent: the question is not waiting any more');
+});
+
+test('plan: the held request ended during the capture (Esc in the terminal fires no event) sends no key (review finding)', async () => {
+  const s = setup({ board: planBoard(), checkResult: (st) => (st.checks.length === 1 ? { ok: true } : { ok: false, reason: 'no-request' }) });
+  const r = await s.a.handle(dev('press'));
+  assert.deepEqual([r.done, r.reason], [false, 'no-request']);
+  assert.equal(s.captures, 1);
+  assert.deepEqual(s.sent, []);
+  assert.equal(s.noteOf().text, 'Not sent: the question is not waiting any more');
 });
 
 test('plan: a key that was not sent is refused with its reason, nothing applied', async () => {

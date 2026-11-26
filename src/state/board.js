@@ -243,7 +243,7 @@ export function reduceBoard(board, event) {
     if (sel === null || !has(next.sessions, sel) || next.sessions[sel].pending.length === 0) next = { ...next, note: null };
   }
   if (noteKind(b.note) === 'too-early' && noteKind(next.note) === 'too-early') {
-    const id = (x) => { const p = shownPrompt(x); return p === null ? null : `${p.session}\u0000${p.agent}\u0000${p.since}`; };
+    const id = (x) => { const p = shownPrompt(x) ?? shownAsk(x); return p === null ? null : `${p.session}\u0000${p.agent}\u0000${p.since}`; };
     if (id(b) !== id(next)) next = { ...next, note: null };
   }
   // the server's refusal under CLAUDE ASKS belongs to the question it was set for

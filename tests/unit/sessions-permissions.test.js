@@ -287,6 +287,22 @@ test('question allow: the label is cut by optionLabel, the answer is the full la
   assert.equal(log[0].updatedInput.answers['How?'], long);
 });
 
+test('question allow: an option the bar could not show (blank label) refuses, so positions cannot shift (review finding)', () => {
+  const P = 'Use the long migration path for the whole database and keep the old tables in the database ';
+  const input = { questions: [{ question: 'Which?', multiSelect: false, options: [{ label: `${P}now` }, { label: ' ' }, { label: `${P}never` }, { label: `${P}later` }] }] };
+  const { reg, log, prompt } = ready(input);
+  // the bar shows 3 options (the blank one dropped), all cut to the same text; the driver highlights the third ("later")
+  const bar = optionLabel(`${P}later`);
+  assert.equal(bar, optionLabel(`${P}never`));
+  assert.deepEqual(reg.answer('allow', prompt, 'sess-a', { choice: 2, label: bar }), { ok: false, reason: 'label-changed' });
+  assert.deepEqual(log, []);
+  assert.equal(reg.size(), 1);
+  for (const bad of [null, 'x', { label: 7 }, {}]) {
+    const r = ready({ questions: [{ question: 'Q?', options: [{ label: 'A' }, bad, { label: 'B' }] }] });
+    assert.equal(r.reg.answer('allow', r.prompt, 'sess-a', { choice: 0, label: 'A' }).reason, 'label-changed');
+  }
+});
+
 test('each question refusal leaves the request held, a later valid answer works', () => {
   const manyQ = { questions: [QIN.questions[0], { ...QIN.questions[0], question: 'Other?' }] };
   const multi = { questions: [{ ...QIN.questions[0], multiSelect: true }] };

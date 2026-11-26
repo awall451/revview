@@ -22,6 +22,9 @@ function questionDecision(input, { choice, label }) {
   const opt = Array.isArray(q.options) ? q.options[choice] : undefined;
   if (choice < 0 || typeof opt?.label !== 'string' || opt.label === '') return no('choice');
   if (typeof q.question !== 'string' || q.question === '') return no('choice');
+  // every option must be one the bar shows: an option the bar dropped (no label, a blank one) would shift the bar's
+  // positions against the request's, and the highlighted index would name another option
+  if (!q.options.every((o) => o !== null && typeof o === 'object' && typeof o.label === 'string' && optionLabel(o.label) !== null)) return no('label-changed');
   if (optionLabel(opt.label) !== label) return no('label-changed');
   return { ok: true, decision: { behavior: 'allow', updatedInput: { questions: qs, answers: { [q.question]: opt.label } } } };
 }
