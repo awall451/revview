@@ -2274,3 +2274,62 @@ Code: `src/sounds/` (README there), `config/speech.json`, `src/server/feed.js` (
   N1 to N8 (untested): sun, night, the switch, auto and cold boot, the backlight.
 - A pre-existing heavy test (`asking.spec.js`, worst case fit on each option: 18 page loads, about 8 s alone) hit the
   15 s timeout in one full run here; it is marked `test.slow()`, the assertions are unchanged.
+
+## Lights per project (cycle 68, owner issue #34, branch work/lights; UNTESTED ON HARDWARE: no LED has been driven)
+
+The lead's default for the open question `lights-led-type` stands: WS2812B addressable RGB LEDs chained on one data
+wire, data on SPI0 MOSI, GPIO10 (header pin 19). One LED per session, in the bar's session order (`sessionOrder`, by
+`born`), at most `leds` (1..8, `MAX_SESSIONS`). Code: `src/lights/` (README there).
+
+- **State -> colour and pattern.** Colours are the bar's day band colours (`src/view/view.css`):
+
+  | session state | colour | pattern |
+  |---|---|---|
+  | working (also with the quiet mark) | blue #5eb1ff | steady |
+  | done | green #4fdc7a | steady |
+  | starting | light grey #e0e0e0 | steady |
+  | unknown (a placeholder, no hook yet) | cyan #5ce1e6 | steady |
+  | needs permission | amber #ffb020 | slow flash, 1 s on / 1 s off (0.5 Hz) |
+  | Claude asks (question / plan) | yellow #e6f25a | slow flash |
+  | waiting for the driver | lilac #c8a2ff | slow flash |
+  | failed turn (StopFailure) | lilac #c8a2ff (the bar shows it in the waiting band) | fast flash, 250 ms on / 250 ms off (2 Hz, the fastest used) |
+  | no session / lights off | dark | - |
+
+  Precedence as in the bar and the sounds' `cueClass`: a pending prompt (asks, else permission) > failed > starting >
+  the activity. All LEDs flash in step (phase from the clock). Board-level overlays (OFFLINE, INSERT KEY, HOT) are not
+  on the LEDs: the bar says them. The quiet mark is not on the LEDs either (steady blue stays steady).
+- **Night.** The colours stay the same hue; the cap drops from `brightness.day` (48 of 255) to `brightness.night`
+  (12 of 255) whenever the board's effective look is night (day / night / auto, as the bar).
+- **Brightness cap.** Every channel is `round(c * cap / 255)`; the config refuses a cap above 64. At about 20 mA per
+  channel at full drive (datasheet value, from memory) that is at most about 15 mA per LED at 64, about 11 mA at the
+  default 48, so 8 LEDs stay near 100 mA plus about 1 mA idle each (pi/README.md, Lights).
+- **Off by default.** `config/lights.json` says `"lights": "off"`. The feature exists only when the server gets
+  `--lights-config <file>` (pi/revview.service passes the repo's file); then the Settings row "Lights: on/off" (after
+  Sounds, before Look) toggles it until the restart, like Sounds and Look. A missing or bad file: one log line and the
+  server runs without the feature (the service restarts on exit, so exiting would loop).
+- **Hooks.** The same place the sounds use: `feed.js` `apply` calls `ctx.lights.observe(prev, next)` on every board
+  change; one 250 ms timer (the server's injected timers) runs only while lights are on and a shown LED flashes; a
+  frame goes to the driver only when it changed.
+- **Driver and SPI.** Replaceable driver behind `show(frame)` / `close()`; a plain RGB driver would be a second one
+  (not built). The WS2812B driver encodes in Node (GRB, MSB first, each data bit as 3 SPI bits, 1 -> 110, 0 -> 100, at
+  2.4 MHz, so 417 ns per SPI bit; then 90 zero bytes = 300 us latch) and feeds one hex line per frame on stdin to a
+  small helper, `src/lights/spi-helper.py` (python3 + `spidev` from Debian's `python3-spidev`), which sets mode 0 and
+  the clock (the ioctl Node cannot do) and writes the bytes. No npm dependency. The helper is started on the first
+  frame (lights off = no process). No SPI device, no module, a dead helper: one log line `lights: LED driver stopped
+  (...)`, the LEDs stay off until the server restarts, the bar goes on, no respawn.
+- **Stop and crash.** Clean stop (SIGTERM, `close()`): a dark frame, stdin closed, the helper writes dark and exits
+  (SIGKILL after 1 s). Server crash or SIGKILL: the helper sees EOF on stdin and writes dark (as long as it still
+  runs). systemd stop also sends the helper SIGTERM, on which it writes dark. Not covered: the helper itself killed
+  with SIGKILL, or the Pi losing power mid-frame: WS2812B keep their last colour while they have power, so after a
+  hard helper kill the LEDs can stay lit until the next frame or power-off. Restart: the new server's first frame
+  sets them right.
+- **Pins.** Nothing else in the project uses the GPIO header (the push-to-talk button is a USB dongle, the backlight
+  is not on GPIO). The PoE HAT used on the bench covers the header (DESIGN.md), so the lights are a car / no-HAT
+  feature. `pi/install.sh` adds `dtparam=spi=on` (reboot needed), `python3-spidev`, group `spi`.
+- **Emulator.** `emulator/run.sh --lights` draws 8 LEDs in a strip below the 1280x400 panel (window 1280x440) from
+  the module's real frames (`GET /dev/lights`, dev bridge only), scaled up by 255/day cap for a laptop screen. A
+  Playwright test proves the flash and that the panel's 1280x400 pixels are equal with and without the strip. No
+  gallery shot was added.
+- **Unproven.** Everything on the wire: the SPI clock the Pi really gives for 2.4 MHz (on a Pi 4 it follows the core
+  clock: from memory), whether MOSI idles low between frames, 3.3 V data into a 5 V WS2812B without a level shifter,
+  the colours and brightness as seen, the group / udev / dtparam on the real image. Bench group LT.
