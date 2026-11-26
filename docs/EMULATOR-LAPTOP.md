@@ -67,10 +67,10 @@ server did not start) or the server stopped while running; 2 for a bad option.
 ## What you see
 
 By default you see the **demo**. A small player (`emulator/demo/player.js`) feeds the server the recorded Claude Code
-sessions from `fixtures/sessions/`, shown as three sessions called revview, garden and notes. It loops through nine
+sessions from `fixtures/sessions/`, shown as three sessions called revview, garden and notes. It loops through ten
 scenes, and the terminal prints a `demo: N scene` line for each:
 
-1. working  2. permission  3. done  4. waiting  5. offline  6. insert-key  7. ended  8. compaction  9. compact-cmd
+1. working  2. permission  3. done  4. waiting  5. offline  6. insert-key  7. ended  8. compaction  9. compact-cmd  10. asking (key 0)
 
 What each scene puts on the screen (the big state word of the bar):
 
@@ -85,6 +85,7 @@ What each scene puts on the screen (the big state word of the bar):
 | ended | CLAUDE EXITED (no Claude Code session is running) |
 | compaction | WORKING, the tool line reads "Compacting context" (Claude compacts in the middle of a turn) |
 | compact-cmd | DONE, the tool line reads "Compacting context" (a `/compact` typed at the prompt); scene 8 and 9 are one session, revview |
+| asking | CLAUDE ASKS: a question with options (key 0; see "CLAUDE ASKS" below) |
 
 The digit keys jump to a scene; P pauses; `[` and `]` slow down and speed up (the cheatsheet lists them).
 
@@ -103,11 +104,12 @@ anything you can see:
   the list or menu. Backspace **tapped** only does something inside the list or the menu (it steps back); on the
   plain bar it does nothing.
 - **CLAUDE ASKS (the last demo scene, key 0):** the bar shows Claude's question with its options and highlights one (an
-  inverted block with a thick frame). Up and Down move the highlight (no wrap), as they do on the real bar; the scene
-  taps Down, Down, Up by itself first so you see it move. On the real bar Enter (allow) would answer with the
+  inverted block with a thick frame). Up and Down move the highlight (no wrap), as they do on the real bar; in
+  the watched play the scene taps Down, Down, Up by itself so you see it move; a jump with key 0 posts no key
+  steps, so you see option 1 highlighted and move it yourself. On the real bar Enter (allow) would answer with the
   highlighted option and N (deny) would cancel the question; for a plan Enter approves and N keeps planning. Here
   nothing is sent to a Claude, so Enter and N only log the gesture. When Claude asks several questions at once, or
-  more than one option may be picked, the buttons cannot answer: the bar says "Answer in the terminal when parked".
+  more than one option may be picked, the buttons cannot answer: the bar says "Answer in the terminal when parked · Deny cancels" (N cancels the question there too).
 - **They do nothing you can see:** on the permission scene Enter (allow), N (deny) and Esc (cancel, Esc held = Ctrl+C),
   and on the done scene Space (talk) and R (read aloud). The bar logs the gesture (the server's `GET /buttons` lists
   them), but nothing on the screen changes. To see them take effect you need a real Claude Code session: run with
@@ -123,8 +125,11 @@ anything you can see:
   for other sessions), through the first of `aplay`, `pw-play`, `paplay` that your laptop has (`cuePlayers` in
   `config/speech.json`). With none of them it stays silent and its log says `sounds: cues, no cue player found
   (silent)`. The demo's state changes cue too. Turn them off in the menu: Settings, the Sounds row, press (off /
-  cues / cues and speech; back to the config value when the server restarts), or set `"sounds": "off"` in a copy
-  of the config.
+  cues / cues and speech; back to the config value when the server restarts), or copy
+  `config/speech.json`, set `"sounds": "off"` in the copy and start with `REVVIEW_SPEECH=/path/to/copy bash
+  emulator/run.sh` (run.sh passes the environment to the server). `run.sh` prints the server's `sounds:` line (for
+  example `sounds: off` or `sounds: cues, no cue player found (silent)`) once the server is up; the rest of the log is
+  in a temp directory that is removed at exit. None of this has been tried on a real laptop.
 
 ## The keys
 

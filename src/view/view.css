@@ -212,6 +212,8 @@ span:empty { display: none; }
   text-overflow: ellipsis;
 }
 #offline-note, #voice-note { color: var(--grey); }
+/* under CLAUDE ASKS a board note is the outcome of a press ("Not sent"): white and bold, not one more grey hint row */
+body[data-view="asking"] #voice-note[data-board] { color: #fff; font-weight: 700; }
 /* the failed turn's message: wraps over the free rows (view.js cuts it with an ellipsis beyond them) */
 #outarea > #out3[data-wrap] { height: auto; white-space: normal; overflow-wrap: anywhere; overflow: visible; }
 

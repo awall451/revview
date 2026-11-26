@@ -353,6 +353,9 @@ while :; do
   sleep 0.1
 done
 
+# the server's log is in the temp dir (removed at exit): show its sounds line here (cues on or off, and which player)
+grep -m1 '^sounds:' "$log" 2> /dev/null
+
 # --live: Claude ending within the first claude_window seconds after the server is up is a start failure (not signed in, a
 # first run that quits, a crash): say so and stop, exit 1 (as when it ends before the server is up). Later the run goes on
 # as before: a session the user ends normally is not an error.

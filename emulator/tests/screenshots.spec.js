@@ -106,7 +106,7 @@ test('screenshot asking-plan (CLAUDE ASKS, a plan to approve) is 1280x400', asyn
   expectPng1280x400(file);
 });
 
-for (const [id, hint, chosen] of [['asking-choice', 'Allow picks · Deny cancels', '#ask-o3'], ['asking-terminal', 'Answer in the terminal when parked', null]]) {
+for (const [id, hint, chosen] of [['asking-choice', 'Allow picks · Deny cancels', '#ask-o3'], ['asking-terminal', 'Answer in the terminal when parked · Deny cancels', null]]) {
   test(`screenshot ${id} (CLAUDE ASKS) is 1280x400`, async ({ openView, page }) => {
     const file = path.join(shotsDir(), `${id}.png`);
     await openView(loadFixture(id));

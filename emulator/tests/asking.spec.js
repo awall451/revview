@@ -300,7 +300,7 @@ test('asking in a session list row: ASKS chip and word', async ({ openView, page
   await expectFits(page);
 });
 
-const HINTS = { pick: 'Allow picks · Deny cancels', plan: 'Allow approves · Deny keeps planning', terminal: 'Answer in the terminal when parked' };
+const HINTS = { pick: 'Allow picks · Deny cancels', plan: 'Allow approves · Deny keeps planning', terminal: 'Answer in the terminal when parked · Deny cancels' };
 const chosen = (page) => page.locator('[data-chosen="true"]');
 
 test.describe('the highlighted choice and the hint row', () => {
@@ -347,11 +347,37 @@ test.describe('the highlighted choice and the hint row', () => {
     await expect(page.locator('#ask-hint')).toHaveText(HINTS.terminal);
     await openView({ ...base, ask: { kind: 'question', question: null, options: [], answer: 'terminal', choice: null } });
     await expect(page.locator('#ask-hint')).toHaveText(HINTS.terminal);
-    for (const t of Object.values(HINTS)) expect(cps(t)).toBeLessThan(40);
+    for (const t of Object.values(HINTS)) expect(cps(t)).toBeLessThan(56);
+    // the longest hint is not cut with an ellipsis (the real width, not the character count)
+    expect(await page.locator('#ask-hint').evaluate((e) => e.scrollWidth <= e.clientWidth)).toBe(true);
     await common(page);
   });
 
-  test('the emulator fixtures: asking-choice highlights option 3, asking-terminal none', async ({ openView, page }) => {
+  test.describe('a board note under CLAUDE ASKS', () => {
+  const TERMINAL = 'Answer in the terminal when parked';
+  test('the terminal note equal to the hint is shown once (QA r11-03)', async ({ openView, page }) => {
+    await openView(question({ answer: 'terminal', choice: null, multiSelect: true }, { note: TERMINAL }));
+    const rows = await page.evaluate((t) => [...document.querySelectorAll('body *')].filter((e) => e.getClientRects().length > 0 && e.textContent.startsWith(t) && e.children.length === 0).length, TERMINAL);
+    expect(rows).toBe(1);
+    await expect(page.locator('#ask-hint')).toHaveText(HINTS.terminal);
+    await common(page);
+  });
+
+  test('a refusal note differs from the hint in more than colour, and fits (QA r11-05)', async ({ openView, page }) => {
+    await openView(question({}, { note: 'Not sent: the question is not waiting any more' }));
+    const look = (sel) => page.locator(sel).evaluate((e) => { const c = getComputedStyle(e); return { w: Number(c.fontWeight), bg: c.backgroundColor, fg: c.color }; });
+    const hint = await look('#ask-hint');
+    const note = await look('#voice-note');
+    await expect(page.locator('#voice-note')).toHaveText('Not sent: the question is not waiting any more');
+    expect(note.w >= 700 && hint.w < 700 || note.bg !== hint.bg, 'weight or background differs').toBe(true);
+    expect(note.fg).not.toBe(hint.fg);
+    await common(page);
+    await openView(question({}, { note: 'Too early: press again' }));
+    await common(page);
+  });
+});
+
+test('the emulator fixtures: asking-choice highlights option 3, asking-terminal none', async ({ openView, page }) => {
     await openView(loadFixture('asking-choice'));
     await expect(page.locator('#ask-o3')).toHaveAttribute('data-chosen', 'true');
     await expect(chosen(page)).toHaveCount(1);

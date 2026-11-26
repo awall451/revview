@@ -923,3 +923,16 @@ test('--print-aliases: the comment line does not carry the path (a newline in it
     for (const l of lines.slice(1)) assert.match(l, /^alias revview(-keys|-stop)?='/);
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });
+
+test('run.sh prints the server\'s sounds line where the person running it sees it; REVVIEW_SPEECH with "sounds": "off" turns sounds off', async () => {
+  const cfg = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'emu-run-speech-')), 'speech.json');
+  runDirs.push(path.dirname(cfg));
+  fs.writeFileSync(cfg, JSON.stringify({ engines: [], sounds: 'off' }));
+  const run = start(['--no-browser'], { env: { REVVIEW_SPEECH: cfg } });
+  try {
+    await run.url();
+    await until(() => /^sounds: off/m.test(run.out), 'sounds line');
+    process.kill(run.child.pid, 'SIGTERM');
+    assert.equal((await run.exit()).code, 0);
+  } finally { run.finish(); }
+});

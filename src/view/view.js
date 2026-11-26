@@ -276,7 +276,11 @@ export function render(input) {
     // Claude asks the driver (AskUserQuestion / ExitPlanMode): the tool in row A, the ask block below it (renderAsk)
     set(el.tool, str(s.tool));
     if (s.offline === true) { set(el['offline-note'], 'No network: voice input will not work'); askRows += 1; }
-    if (voiceNote) { set(el['voice-note'], voiceNote); askRows += 1; }
+    // the terminal hint already says what that board note says (QA r11-03): once, not twice
+    const sameAsHint = s.ask?.answer !== 'pick' && s.ask?.answer !== 'plan' && voiceNote !== '' && voiceNote === TERMINAL_NOTE;
+    if (voiceNote && !sameAsHint) { set(el['voice-note'], voiceNote); askRows += 1; }
+    // a board note is the outcome of a press (not sent, too early): white and bold, apart from the grey hint (QA r11-05)
+    el['voice-note'].toggleAttribute('data-board', typeof s.note === 'string' && s.note !== '' && !sameAsHint);
   } else {
     set(el.tool, str(s.tool));
     if (answerWord(str(s.tool)) !== '') {
@@ -419,11 +423,12 @@ export function render(input) {
 }
 
 // ---- CLAUDE ASKS: the question (or the plan title) in big type, the options below, the counts in row A ----
+const TERMINAL_NOTE = 'Answer in the terminal when parked'; // the board note of actions.js
 const ASK_NOTE = 'Claude asks: look at the terminal when parked';
 const ASK_HINTS = {
   pick: 'Allow picks · Deny cancels',
   plan: 'Allow approves · Deny keeps planning',
-  terminal: 'Answer in the terminal when parked',
+  terminal: 'Answer in the terminal when parked · Deny cancels',
 };
 const ASK_LINES = 2; // the big text takes at most 2 lines
 const ASK_LINE_HEIGHT = 1.1;
