@@ -38,7 +38,7 @@ firmware. **[proposal]**
 | Right (next session) | F20 | navigation |
 | Press (enter; allow on a permission prompt) | F21 | navigation |
 | Back (hold: home) | F22 | navigation |
-| Menu | F23 | navigation |
+| Menu (hold: night/day look) | F23 | navigation |
 | Spare, or combos | F24 | either |
 
 **Reader.** **[proposal]** A small revview input service reads the dongle's `/dev/input/event*`.
@@ -61,6 +61,9 @@ owner to confirm.
 - Debounce: ignore a press within 30 ms of the last release, and ignore a release within 30 ms of the press of a hold/long-hold button (contact bounce: such a release is provisional; a re-press inside the window continues the same press, otherwise it resolves as a tap when the window ends). The firmware (ZMK) debounces too.
 - Tap: released before 400 ms. Hold: fires at 400 ms while still held. Long hold: fires at 1000 ms, for cancel only.
 - A button with no hold action fires on press, for the lowest latency: push-to-talk, deny, up, down, left, right.
+- **[proposal]** Menu has a hold action (400 ms: toggle night/day look; from `auto` it goes to the opposite of what
+  shows and leaves `auto`). So a menu tap fires on release (before 400 ms), not on press. Cost: the menu opens a little
+  later than the buttons above. Owner issue #30; bench N4, N5.
 
 **Dongle missing.** **[proposal]** The service watches hotplug (udev, or inotify on `/dev/input`) and tells the
 server with a `RevviewInput` presence event. The view shows a small NO BUTTONS tag at 3.55 mm. It is not a state
@@ -225,7 +228,7 @@ All at the existing `TYPE_MM` (state word 6.05 mm, other text 3.55 mm; `src/view
 
 **Built in WB4 (2026-11-22), with changes:** the position and a mic mark sit in the band, but only when the server
 runs with sessions. A crossed mic and a bottom note row show when push-to-talk does not go to the shown session.
-The list shows a mic on the selected session's row. Back closes one level; the menu button opens and closes the
+The list shows a mic on the selected session's row. Back closes one level; the menu button (tap, on release; **[proposal]** hold: night/day look) opens and closes the
 menu. Menu items: New session (choose a project row, press), Projects (read-only), Settings (read-only, four
 facts). The list and menu auto-close after 10 s. All at `TYPE_MM`. The glance-first line is built as: the lower
 area is replaced, the band stays. Legibility on the dash is not proven (bench V8). See DECISIONS "wheel buttons 4".

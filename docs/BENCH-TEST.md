@@ -475,3 +475,18 @@ Emulator only (fixed times in the screenshots); never seen on the panel or heard
 | T5 | Restart the revview service while a session works, then reload the kiosk page | The clock continues from when the state began (server clock), it does not restart at 0:00 after a page reload; after a server restart it starts at the next event (the server keeps no history) | untested |
 | T6 | The Pi's clock without network (no RTC): boot offline, then let the clock sync over the hotspot mid-drive | The bar's clock does not jump when the time syncs (the server uses a monotonic clock); note what it shows | untested |
 
+## Night and day looks (owner issue #30)
+
+Emulator only (the gallery has `night-<name>.png` for every shot); never seen on the panel, in sun or at night. All untested. `pi/backlight.sh` is untested too.
+
+| # | Do | Expect | Result |
+|---|---|---|---|
+| N1 | Look `day`, in real sun (sun on the panel, polarised sunglasses on and off), each state in turn | Every state is recognised in one glance at arm's length; no state needs leaning in; note any state or colour that washes out | untested |
+| N2 | Look `night`, at night on a dark road (no street lights), each state in turn | No glare; type readable (dim amber); no large bright area; the state is told by shape and word, not by colour alone | untested |
+| N3 | The switch: Settings, the Look row, press until `day`, `night`, `auto` (the row names "night now" when auto shows night) | The row cycles day, night, auto; the screen changes at once; a restart of the server goes back to `look` in `config/look.json` (accepted limit) | untested |
+| N4 | Hold the Menu button (F23) | The look toggles day / night at about 400 ms; from auto it goes to the opposite of what shows and leaves auto; no menu opens | untested |
+| N5 | Tap the Menu button | The menu still opens (and closes); it now opens on release, so note whether it feels slower than the other buttons (they fire on press) | untested |
+| N6 | Look `auto`; set the hours in `config/look.json` a few minutes ahead and wait; also leave the default 21:00 to 07:00 | The look changes at the configured hour by the Pi's local clock; no location is used | untested |
+| N7 | Look `auto`, cold boot with no network (clock not set; no RTC) | Before the clock is set (year before 2026) it shows day; after the clock is saved or synced it follows the hours; note what it showed at boot and whether a stale saved clock gave the wrong look until sync | untested |
+| N8 | `bash pi/backlight.sh night`, then `day`, as the kiosk user on the real panel; `ls /sys/class/backlight`; `command -v ddcutil` | Records whether any software brightness control exists (expected: none on the HDMI panel, exit 3, so only the dark look dims it); if one does, the panel dims and returns; note whether `ddcutil` works over this panel | untested |
+

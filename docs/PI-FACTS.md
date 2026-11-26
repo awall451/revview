@@ -244,3 +244,41 @@ The chromium wrapper adds `--user-data-dir` only for its own `--temp-profile` op
 systemd 255; the Pi has 257) found no unknown key in `pi/revview.service` or `pi/revview-unlock.service`; every key
 of both is in the 257 man pages.
 
+## 10. Backlight and clock (night and day looks, owner issue #30)
+
+For `pi/backlight.sh` (untested, not wired in) and the `auto` look. The unpacked package tree is only a partial one
+(the packages of `pi/tree/packages.lock`, built by `pi/tree/build.sh`; the copy used here was under `/tmp/pfc-deb-*`).
+Nothing was run.
+
+**Found in the tree**
+
+- `raspberrypi-sys-mods` 1:20260914, `usr/lib/udev/rules.d/60-backlight.rules`: for `SUBSYSTEM=="backlight"` on add it
+  does `chgrp video` and `chmod g+w` on `.../brightness`. So a `/sys/class/backlight/*/brightness` file is writable by
+  group `video` (the installer adds `video` to the kiosk user), with no sudo.
+- `systemd` 257.13-1~deb13u1: `systemd-backlight@.service` and `99-systemd.rules` save and restore the level of every
+  backlight device across reboots.
+- `systemd` `system-preset/90-systemd.preset`: `enable systemd-timesyncd.service`; `systemd` Recommends
+  `systemd-timesyncd | time-daemon`. The `systemd-timesyncd` package itself is not in `packages.lock`, so its files were
+  not read.
+- `raspi-utils-core` 20260626-1: `/usr/bin/vcgencmd`, `pinctrl`, `vcmailbox`, `vclog`.
+
+**Not found in the tree** (searched for `backlight`, `ddcutil`, `rpi_backlight`, `fake-hwclock`, `hwclock`,
+`display_power`): no `ddcutil` package or file, no `fake-hwclock`, no RTC set-up. There is no kernel in the tree, so the
+list of backlight drivers is not visible either.
+
+**From memory, unverified**
+
+- `rpi_backlight` (a `/sys/class/backlight` device) is the driver of the official Raspberry Pi DSI display, not of an
+  HDMI panel: from memory, unverified.
+- An HDMI panel has no `/sys/class/backlight` device; the Waveshare 7.9" HDMI panel very likely has no software backlight,
+  only a hardware control or PWM pad: from memory, unverified. Bench N8.
+- `ddcutil setvcp 10 <0-100>` sets brightness over DDC/CI on HDMI; the package is `ddcutil`, it needs `/dev/i2c-*` access
+  (group `i2c`), and many small HDMI panels do not answer DDC/CI: from memory, unverified.
+- `vcgencmd display_power 0|1` switches the display output on or off, not its brightness: from memory, unverified.
+- A Pi 4B has no real-time clock. Raspberry Pi OS used `fake-hwclock` (saves the time at shutdown and every hour, restores
+  it at boot) in older releases; whether Trixie still installs it, or relies on the systemd-timesyncd clock file
+  (`/var/lib/systemd/timesync/clock`, which moves the clock to at least its mtime at boot): from memory, unverified.
+  Either way a stale saved clock is wrong until network time sync, and with no saved clock the year is before 2026,
+  which is what `auto` treats as "clock not set" (shows day). Bench N7.
+- On a read-only root (overlay) the saved clock file is not written, so it may stay stale: from memory, unverified.
+

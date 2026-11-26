@@ -25,6 +25,7 @@ not marked here (package names, paths, keys, flags), is listed with how to check
 | `unlock.sh` | Run as root at boot and when the stick is plugged in: opens and mounts the data with the key file on the stick. |
 | `revview-unlock.service` | System unit template that runs `unlock.sh` (installed by `data-setup.sh`). |
 | `72-revview-key.rules` | udev rule template: the stick's UUID starts the unlock when it is plugged in late. |
+| `backlight.sh` | **Untested**, not wired into anything: `backlight.sh day\|night\|<percent>` tries `/sys/class/backlight`, then `ddcutil`, else exits 3 (the HDMI panel probably has no software backlight; `docs/PI-FACTS.md` section 10). |
 | `tree/` | Not for the Pi: development checks. `build.sh OUT` unpacks the real Trixie arm64 packages of `packages.lock` (about 140 MB download, never installed or run); `check.sh OUT` runs install.sh, readonly.sh and kiosk.sh against a copy and checks the names they use (`docs/PI-FACTS.md` section 9). Run on request, never by the gate. |
 
 ### Exit codes
