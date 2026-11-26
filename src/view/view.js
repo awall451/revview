@@ -196,6 +196,9 @@ export function render(input) {
   for (const k of ['tool', 'file', 'note1', 'note2', 'command', 'out1', 'out2', 'out3', 'offline-note', 'voice-note']) set(el[k], '');
   el.cmdbox.hidden = true;
   el.diff.hidden = true;
+  // a menu or list left #lower hidden: show it first, or everything below is fitted in a box of no height (QA r11-01);
+  // renderNav hides it again at the end of the same render
+  el.lower.hidden = false;
   el.ask.hidden = true;
   el['ask-meta'].hidden = true;
   let askRows = 0; // rows taken below the ask block (offline note, voice note)

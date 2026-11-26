@@ -256,7 +256,27 @@ test.describe('worst case: everything at its limit', () => {
   });
 });
 
-test('bad ask data shows the fixed note; other views draw none of it', async ({ openView, page }) => {
+// QA r11-01: the same state renders the same, whether or not the menu or the session list was open in between
+// (the lower area stayed hidden by the nav view, so the next ask was fitted in a box of no height).
+test('the asking view is the same after the menu or the session list was opened and closed', async ({ openView, page }) => {
+  const state = question();
+  await openView(state);
+  const snap = () => page.evaluate(() => ({
+    body: document.body.innerText,
+    font: getComputedStyle(document.getElementById('ask-question')).fontSize,
+    hint: document.getElementById('ask-hint').textContent,
+  }));
+  const before = await snap();
+  expect(before.hint).toBe('Allow picks · Deny cancels');
+  for (const kind of ['menu', 'list']) {
+    const nav = { kind, row: 0, rows: [{ label: 'New session', state: 'waiting', word: 'WAITING', target: true }] };
+    await page.evaluate((s) => window.revviewRender(s), { ...state, nav });
+    await page.evaluate((s) => window.revviewRender(s), state);
+    expect(await snap(), `after ${kind}`).toEqual(before);
+  }
+});
+
+test('bad ask data shows the fixed note; other views draw none of it',async ({ openView, page }) => {
   for (const ask of [null, undefined, {}, { kind: 'x' }, 'text', []]) {
     await openView({ ...base, ask });
     await expect(page.locator('#ask-question')).toHaveText(NOTE);
