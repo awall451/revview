@@ -402,3 +402,67 @@ test('question: deny answers the long poll with a deny; no key', async (t) => {
   assert.deepEqual(await r.p, { status: 200, body: JSON.stringify({ behavior: 'deny', message: DENY_MESSAGE }) });
   assert.deepEqual(c.ctx.sent, []);
 });
+
+// ---- QA r11-02: a held question / plan request that ends without revview answering leaves the bar
+test('question: Esc in the terminal (the hook connection closes): the question leaves the bar, push-to-talk works, no note', async (t) => {
+  const c = await setup(t);
+  const { r } = await askPrompt(c);
+  r.abort(); // Claude closes the hook connection at once
+  for (let i = 0; i < 100 && (await c.state()).state.view === 'asking'; i++) await sleep(10);
+  const st = (await c.state()).state;
+  assert.notEqual(st.view, 'asking');
+  assert.equal(st.ask, null);
+  assert.equal(st.note, null);
+  c.ctx.now = 5000;
+  await c.press('F21'); // push-to-talk: not "Answer the prompt first" any more
+  assert.notEqual((await c.state()).state.note, 'Answer the prompt first');
+});
+
+test('question: our own wait ran out (204): the question leaves the bar and the note says it is left for the terminal', async (t) => {
+  const c = await setup(t, { permissionWaitMs: 150 });
+  const { r } = await askPrompt(c);
+  assert.equal((await r.p).status, 204);
+  for (let i = 0; i < 100 && (await c.state()).state.view === 'asking'; i++) await sleep(10);
+  const st = (await c.state()).state;
+  assert.notEqual(st.view, 'asking');
+  assert.equal(st.note, 'Question left for the terminal');
+});
+
+test('plan: the request closes unanswered: the plan leaves the bar; a timeout says the plan is left for the terminal', async (t) => {
+  const c = await setup(t, { permissionWaitMs: 150 });
+  const PLAN = readLines('sessions/plan-approve.jsonl').map((e) => ({ ...e, session_id: SID }));
+  for (const e of PLAN.slice(0, 8)) await c.ev(e);
+  const r = c.perm(PLAN[8]);
+  assert.equal((await r.p).status, 204);
+  for (let i = 0; i < 100 && (await c.state()).state.view === 'asking'; i++) await sleep(10);
+  const st = (await c.state()).state;
+  assert.notEqual(st.view, 'asking');
+  assert.equal(st.note, 'Plan left for the terminal');
+});
+
+test('an answered question is not "left"; a newer question of the session is not cleared by the older one closing', async (t) => {
+  const c = await setup(t);
+  const { r } = await askPrompt(c);
+  c.ctx.now = 1600;
+  await c.press('F21'); // answered
+  assert.equal((await r.p).status, 200);
+  await sleep(100);
+  assert.equal((await c.state()).state.note, null);
+  // a second question; the first request's connection closing late must not touch it
+  const ASKQ = readLines('sessions/ask-question.jsonl').map((e) => ({ ...e, session_id: SID }));
+  await c.ev(ASKQ[1]);
+  await c.ev(ASKQ[2]);
+  const r2 = c.perm({ ...ASKQ[3], tool_use_id: 'toolu_second' });
+  for (let i = 0; i < 100 && (await c.state()).state.view !== 'asking'; i++) await sleep(10);
+  r.abort();
+  await sleep(150);
+  assert.equal((await c.state()).state.view, 'asking');
+  assert.equal(c.s.permissionsWaiting(), 1);
+  r2.abort();
+});
+
+test('POST /event RevviewAskGone is refused with 403', async (t) => {
+  const c = await setup(t);
+  const res = await c.post('/event', { hook_event_name: 'RevviewAskGone', session_id: SID, agent: null, since: 1, how: 'closed' });
+  assert.equal(res.status, 403);
+});

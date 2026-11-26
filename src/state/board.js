@@ -199,6 +199,8 @@ function withContext(board, patch) {
 //   starting-ptt  actions.js: push-to-talk during STARTING   goes when the selected session no longer shows STARTING
 //   answer-prompt actions.js: push-to-talk refused, the      goes when the selected session has no pending prompt left
 //                 selected session has a pending prompt
+//   left          RevviewAskGone: our wait for a question's   goes when the bar shows a question or plan again
+//                 answer ran out, the terminal may still ask
 //   ended         a session's end (here); the key-on Claude  a push-to-talk tap with no session clears it
 //                 that exited at once (BootDone)             (RevviewNoSessionPress); RevviewEndReason replaces it
 //   ended-last    the last session ended: "<name> ended:     as ended; hidden while the data is locked
@@ -206,7 +208,7 @@ function withContext(board, patch) {
 //   no-session    the server's boot (BootDone): "No session    hidden while the data is locked; not an ended note
 //                 yet: open the menu for New session"         (a push-to-talk tap does not clear it)
 const NOTE_RULES = {
-  plain: {}, 'too-early': {}, ask: {}, 'starting-ptt': {}, 'answer-prompt': {}, 'no-session': { hiddenLocked: true },
+  plain: {}, 'too-early': {}, ask: {}, 'starting-ptt': {}, 'answer-prompt': {}, left: {}, 'no-session': { hiddenLocked: true },
   ended: { ended: true }, 'ended-last': { ended: true, hiddenLocked: true },
 };
 export const NOTE_KINDS = Object.freeze(Object.keys(NOTE_RULES));
@@ -248,6 +250,8 @@ export function reduceBoard(board, event) {
     const sel = selectedKey(next);
     if (sel === null || !has(next.sessions, sel) || next.sessions[sel].pending.length === 0) next = { ...next, note: null };
   }
+  // "left for the terminal" is about the question that went; a new question or plan on the bar replaces it
+  if (noteKind(next.note) === 'left' && shownAsk(next) !== null) next = { ...next, note: null };
   if (noteKind(b.note) === 'too-early' && noteKind(next.note) === 'too-early') {
     const id = (x) => { const p = shownPrompt(x) ?? shownAsk(x); return p === null ? null : `${p.session}\u0000${p.agent}\u0000${p.since}`; };
     if (id(b) !== id(next)) next = { ...next, note: null };
@@ -469,6 +473,19 @@ function reduceInner(b, event) {
       const answer = { decision: event.decision, tool: gone.tool, file: gone.file, command: gone.command };
       const tick = b.tick + 1;
       return { ...b, tick, sessions: withSession(b.sessions, id, { ...live, pending: kept, answer, touched: tick }) };
+    }
+    case 'RevviewAskGone': { // a held question / plan request ended without revview answering (see routes-permission.js)
+      // Drops exactly that entry (session, agent, board tick `since`; a newer question is another entry), without an
+      // `answer`: the session is what it otherwise is, and push-to-talk works again. 'closed' (Claude closed the hook
+      // connection: Esc) says nothing; 'timeout' (our wait ran out, the picker may still be open) leaves a note.
+      if (!isStr(event.session_id) || live === null || (typeof event.agent !== 'string' && event.agent !== null)) return b;
+      if (typeof event.since !== 'number' || (event.how !== 'closed' && event.how !== 'timeout')) return b;
+      const gone = live.pending.find((p) => p.since === event.since && p.agent === event.agent && askIn(p) !== null);
+      if (gone === undefined) return b;
+      const tick = b.tick + 1;
+      const sessions = withSession(b.sessions, id, { ...live, pending: live.pending.filter((p) => p !== gone), touched: tick });
+      const note = event.how === 'timeout' ? noteOf('left', gone.ask.kind === 'plan' ? 'Plan left for the terminal' : 'Question left for the terminal') : b.note;
+      return { ...b, tick, sessions, note };
     }
     case 'RevviewButton': // a gesture is for the server's actions, never for the screen
       return b;

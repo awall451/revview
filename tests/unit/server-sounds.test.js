@@ -272,3 +272,24 @@ test('a question: moving the choice, a refused answer and the answer give no sec
   assert.deepEqual(cues(c.cueDir), ['needs', 'needs']);
   r2.catch(() => {});
 }));
+
+test('a question that closes unanswered (Esc) leaves the bar without a cue; the next question gives one cue', T, () => withServer({ server: { sessions: runner, clock: () => clock.now } }, async (c) => {
+  const q = asking(A);
+  await c.ev(q[1]);
+  await c.ev(q[2]);
+  const ac = new AbortController();
+  fetch(`${c.s.url}/permission`, { method: 'POST', body: JSON.stringify(q[3]), signal: ac.signal }).catch(() => {});
+  await until(() => c.s.state().view === 'asking', 'the asking view');
+  await until(() => cues(c.cueDir).length === 1, 'the needs cue');
+  ac.abort(); // Claude closes the hook connection: the question is gone
+  await until(() => c.s.state().view !== 'asking', 'the question gone');
+  await sleep(400);
+  assert.deepEqual(cues(c.cueDir), ['needs']); // clearing it played nothing
+  const second = { ...q[3], tool_use_id: 'toolu_second', tool_input: { questions: [{ ...q[3].tool_input.questions[0], question: 'Which size?' }] } };
+  await c.ev(q[1]);
+  const r2 = fetch(`${c.s.url}/permission`, { method: 'POST', body: JSON.stringify(second) });
+  await until(() => cues(c.cueDir).length === 2, 'the second needs cue');
+  await sleep(400);
+  assert.deepEqual(cues(c.cueDir), ['needs', 'needs']);
+  r2.catch(() => {});
+}));

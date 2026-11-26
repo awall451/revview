@@ -39,16 +39,28 @@ export function postPermission(ctx, req, res) {
     const input = ev.tool_name === 'AskUserQuestion' && ev.tool_input !== null && typeof ev.tool_input === 'object'
       && !Array.isArray(ev.tool_input) ? ev.tool_input : null;
     let over = false;
-    const id = ctx.registry.add(prompt, (decision) => {
+    // a question or a plan that revview did not answer and the terminal did not either (QA r11-02): the board drops
+    // it. 'closed': Claude closed the hook connection first (Esc on the picker; the hook's own timeout of 600 s is
+    // later than ours of 540 s), so the question is gone. 'timeout': our wait ran out and the 204 hands the question
+    // to the terminal, where it may still be open: the bar says it is left there, never that it is gone.
+    const gone = (how) => {
+      if (prompt.since !== null && (ev.tool_name === 'AskUserQuestion' || ev.tool_name === 'ExitPlanMode')) {
+        ctx.apply({ hook_event_name: 'RevviewAskGone', session_id: prompt.session, agent: prompt.agent, since: prompt.since, how });
+      }
+    };
+    const id = ctx.registry.add(prompt, (decision, why) => {
       if (over || res.writableEnded) return;
       over = true;
+      if (why === 'timeout') gone('timeout');
       if (decision === null) return res.writeHead(204).end();
       res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(decision));
     }, input);
     if (id === null) return text(res, 503, 'too many waiting permission requests');
     res.on('close', () => {
+      const unanswered = !over;
       over = true;
       ctx.registry.remove(id);
+      if (unanswered) gone('closed');
     });
   });
 }

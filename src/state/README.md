@@ -194,8 +194,10 @@ Claude asks the driver a question (`AskUserQuestion`) or for approval of a plan 
   (the `pre` entries of ask tools carry their `ask`). `promptOf` (`pendingPrompts`) has `ask` (null for a permission prompt).
 - It clears exactly like a permission prompt: `PostToolUse` with the `tool_use_id` (answered; an approved plan's Post has `tool_input {}`), `Stop`, a driver prompt, `idle_prompt`, `SessionEnd`.
 - Limits (recorded): an answer typed into the terminal is invisible until `PostToolUse`. A question or a plan dismissed with Esc
-  fires NOTHING: the bar keeps `asking` until the driver's next prompt (a plan rejected with "Tell Claude what to change" arrives as that plain
-  `UserPromptSubmit`), or until `SessionEnd` when there is no more. Which of several questions is on screen is unknown.
+  fires NO hook: the board alone would keep `asking` until the driver's next prompt (a plan rejected with "Tell Claude what to change" arrives as that plain
+  `UserPromptSubmit`), or until `SessionEnd`. The server closes that gap with the internal event `RevviewAskGone {session_id, agent, since, how: 'closed'|'timeout'}`
+  when the held `/permission` request ends unanswered: it removes exactly the pending entry with that `since` (only an ask entry; no `answer` is stored, no other
+  entry is touched). `timeout` also sets the note kind `left` ("Question left for the terminal" / "Plan left for the terminal"; goes with a gesture or when a question or plan is on the bar again). Which of several questions is on screen is unknown.
 - Choosing: with `nav` null and a `'pick'` ask shown, a tap of `up` / `down` moves `choice` one step (clamped to 0..options-1, no wrap; at an edge the same board comes back)
   and does not open the session list; for `'plan'` and `'terminal'` asks, and under an open list, they behave as usual. Hold gestures are unchanged.
 - `shownAsk(board)`: `null` unless `nav` is null and the view is `asking`, else `{ session, agent, since, tool, file, command, ask, answer, choice }` of the shown

@@ -424,7 +424,7 @@ at the next gesture):
 | Case | Bar says |
 |---|---|
 | the question on the bar changed between the gesture and the send (another `since`, the choice moved, a list opened, another session selected), or the label in the held request differs from the bar's | Not sent: the question changed |
-| the question is no longer held (answered or dismissed in the terminal: Claude ends the hook; timed out after 540 s; 16 requests already held) | Not sent: the question is not waiting any more |
+| the question is no longer held (answered in the terminal: Claude ends the hook; 16 requests already held; after an Esc or the 540 s timeout the bar has dropped the question, so there is nothing to press) | Not sent: the question is not waiting any more |
 | shown for less than 1.5 s | Too early: press again (as for permission prompts) |
 | the session is not one revview started (no tmux window of its own) | Not sent: not a session revview started |
 | several questions, multi-select, a request with no questions | Answer in the terminal when parked (plan: Approve in the terminal when parked) |
@@ -434,8 +434,19 @@ The held request releases its slot in every case: answered by the hook (the regi
 Claude when the terminal answered or the key approved the plan (the hook process is killed, the server sees the
 connection close and drops it). There is never a second answer: a question gets no key, a plan gets no hook allow.
 
-**Not solved:** a question dismissed with Esc in the terminal stays on the bar until the next event (no hook fires;
-a press then says "not waiting any more"). Which of several questions is on screen (several are refused).
+**A held request that ends unanswered (cycle 60, QA r11-02).** No hook fires on Esc, but Claude closes the hook
+connection at once (`fixtures/answers/events-esc.jsonl`). When the long poll ends without revview answering, the server
+applies the internal event `RevviewAskGone {session_id, agent, since, how}` (refused over HTTP) and the board drops exactly
+that entry, so push-to-talk works again and the session shows what it otherwise is (no cue plays; a later question cues
+once). The two cases are told apart by who ended the poll: `closed` (the connection closed before revview answered:
+Esc, or a killed hook; the hook's own 600 s timeout is later than our 540 s, so that never comes first) says nothing, the
+question is gone; `timeout` (our 540 s wait ran out and the 204 gave the question to the terminal, where the picker may
+still be open) leaves the note "Question left for the terminal" ("Plan left for the terminal"), kind `left`, gone with the
+next gesture or when a question is on the bar again. It never fires for an answered request, nor for another entry of the
+session (the entry is found by session, agent and `since`). Not tried on a real Claude after this change.
+
+**Not solved:** which of several questions is on screen (several are refused). After an Esc the session shows what its
+events say (WORKING until the next event), not that Claude is idle.
 
 ## Not recorded / not proven
 

@@ -43,12 +43,13 @@ export function createPermissionRegistry({
   let shownKey = null;
   let shownAt = 0;
 
-  const finish = (id, decision) => {
+  // why: 'timeout' when our own wait ran out (the second argument of respond); a swept or closed request gives none
+  const finish = (id, decision, why) => {
     const r = reqs.get(id);
     if (!r) return;
     reqs.delete(id);
     timers.clearTimeout(r.timer);
-    r.respond(decision);
+    r.respond(decision, why);
   };
 
   function findHit(shown, chosen) {
@@ -71,7 +72,7 @@ export function createPermissionRegistry({
       const id = randomUUID();
       const bound = prompt.since !== null && prompt.since !== undefined;
       const r = { key: key(prompt), ident: ident(prompt), bound, respond, input };
-      r.timer = timers.setTimeout(() => finish(id, null), waitMs);
+      r.timer = timers.setTimeout(() => finish(id, null, 'timeout'), waitMs);
       reqs.set(id, r);
       return id;
     },

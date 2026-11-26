@@ -2088,8 +2088,7 @@ by the first pane check (wrapped line, see above), fixed, server restarted, a ne
 it, Claude's Write then showed NEEDS PERMISSION, press allowed it, `hello.txt` was written. Afterwards no server,
 tmux or Chromium was left (`pgrep`), `~/.claude/settings.json` unchanged (md5 before and after).
 
-**Not solved:** a question dismissed with Esc stays on the bar until the next event (the server could clear it
-when the held request's connection closes without an answer; not done: a hook timeout looks the same); several
+**Not solved:** (fixed in the fix round after QA r11, see below: `RevviewAskGone`) a question dismissed with Esc stays on the bar until the next event; several
 questions and multi-select; "Type something" answers; nothing on the Pi or with the pods (bench QA2-1 to QA2-5).
 
 ## Sounds for state changes (cycle 60, owner issue #31, branch work/sounds; never heard: no audio device here)
@@ -2142,3 +2141,17 @@ Code: `src/sounds/` (README there), `config/speech.json`, `src/server/feed.js` (
 - **Not verified:** any sound at all, the volume against cabin noise, the audio device on the Pi (bench SC1-SC6).
   Verified on the VM: the WAV format and bytes, and the player argv run with a stand-in player script
   (`tests/unit/fixtures/sounds/fake-player.sh`); the timer tests looped 10 times under full CPU load.
+
+### Fix round after QA r11 (cycle 60, branch work/ask-fixes)
+
+- **r11-01 cause:** `renderNav` hides `#lower` while a menu or list is open and `render` only unhid it at its end, so the next
+  render (the menu closing over CLAUDE ASKS) measured `#lower` at height 0: no hint row, the smallest question type. `render`
+  now unhides `#lower` first (`renderNav` hides it again for a nav view). Other views were fitted the same wrong way after a nav.
+- **r11-02:** a held question / plan request that ends without revview answering is reported by the server as the internal
+  event `RevviewAskGone` (`how: 'closed'` when the hook connection closed first, `'timeout'` when our 540 s wait ran out).
+  Esc closes the connection at once and the hook's own timeout (600 s) is later than ours, so a close before our answer is a
+  gone question; our timeout hands the question to the terminal, where it may still be open, so only that case leaves the
+  note "Question left for the terminal" (note kind `left`) and never says it is gone. No cue plays when it leaves.
+- **r11-03/05:** the terminal-only hint reads "Answer in the terminal when parked · Deny cancels" (deny cancels a multi-select
+  question too); the board note of the same text is not drawn a second time; a board note under CLAUDE ASKS (the outcome of a press) is white and bold, the hint stays grey.
+- **r11-04 (up/down against the two-column layout):** not changed, the question goes to the owner.

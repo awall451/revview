@@ -169,7 +169,7 @@ for each (a throwing callback is caught and logged).
   process without an Origin header could otherwise forge a press or fake NO BUTTONS. With the bridge, `RevviewButton` takes the
   normal path (204, `seq += 1`, the board ignores it) and, when `button` matches `/^[a-z][a-z0-9-]{0,31}$/` and `gesture` is one
   of the three, is also logged with source `post`.
-- `POST /event` with `RevviewInterrupted`, `RevviewAnswered`, `RevviewSelect`, `RevviewNav`, `RevviewOwned`, `RevviewProjects` or `RevviewNote` is refused with
+- `POST /event` with `RevviewInterrupted`, `RevviewAnswered`, `RevviewAskGone`, `RevviewSelect`, `RevviewNav`, `RevviewOwned`, `RevviewProjects` or `RevviewNote` is refused with
   **403 always**, even with `--dev-bridge`: they are the board's internal events (what revview itself sent or chose, the selection, the
   list/menu, the owned sessions, the projects). Only `actions.js` and the server itself apply them; there is no HTTP route for `select`.
 - Gestures with source `device` or `bridge` (never `post`, never `dropped`) always go to the actions (`src/sessions/README.md`), with or
