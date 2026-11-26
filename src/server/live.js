@@ -1,6 +1,7 @@
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { performance } from 'node:perf_hooks';
 import { initialBoard, reduceBoard, boardView, selectedKey } from '../state/index.js';
 import { createActions, createPermissionRegistry } from '../sessions/index.js';
 import { createSpeaker, createClosingMemo, createReadAloud } from '../speech/index.js';
