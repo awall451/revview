@@ -501,7 +501,7 @@ installer's reboot (`dtparam=spi=on`, group `spi`).
 | # | Do | Expect | Result |
 |---|---|---|---|
 | LT1 | Wire the strip (5 V pin 2/4, GND pin 6, DIN pin 19 through 330-470 ohm, capacitor across the strip's supply), reboot after `install.sh`, `ls -l /dev/spidev0.0`, `id`, start the service | `/dev/spidev0.0` exists, group `spi`, you are in `spi`; every LED stays dark at power-up and while the service starts (no random colours). Note whether the 3.3 V data works without a level shifter | untested |
-| LT2 | `"lights": "off"` (the default) in `config/lights.json`, three sessions working | Nothing is lit; `pgrep -f spi-helper` finds no helper | untested |
+| LT2 | `"lights": "off"` (the default) in `config/lights.json`, three sessions working | Nothing is lit; `pgrep -f spi-helper` finds no helper (none is started until the lights are first switched on; after switching on and off in the Settings row the helper stays, with all LEDs dark) | untested |
 | LT3 | Settings, the Lights row, press to `on` | The LEDs start at once without a restart; the row says on; after a service restart it is back to what `config/lights.json` says | untested |
 | LT4 | Three sessions open (the bar shows three) | LED 1, 2, 3 are the sessions in the bar's order, the rest dark; a session that is working shows steady blue | untested |
 | LT5 | One session each in NEEDS PERMISSION, CLAUDE ASKS, WAITING | That LED flashes slowly, 1 s on and 1 s off, in all three; DONE and idle do not flash | untested |

@@ -31,7 +31,27 @@ test('off: dark frame, no timer', () => {
   s.lights.observe(b, b);
   assert.equal(s.live().length, 0);
   assert.deepEqual(s.lights.current(), [[0, 0, 0], [0, 0, 0], [0, 0, 0]]);
-  assert.ok(s.shown.length <= 1);
+  assert.equal(s.shown.length, 0, 'lights off since the start: nothing is sent to the driver');
+});
+
+test('off since the start: close() sends nothing either; after the first on, off sends dark and close sends dark', async () => {
+  const s = setup();
+  const b = initialBoard();
+  s.lights.observe(null, b);
+  await s.lights.close();
+  assert.equal(s.shown.length, 0);
+  assert.equal(s.closedCount(), 1);
+  const t = setup();
+  const on = working();
+  t.lights.observe(null, initialBoard());
+  t.lights.observe(initialBoard(), on);
+  assert.equal(t.shown.length, 1);
+  const off = reduceBoard(on, ev('RevviewLights', { mode: 'off' }));
+  t.lights.observe(on, off);
+  assert.deepEqual(t.shown.at(-1), [[0, 0, 0], [0, 0, 0], [0, 0, 0]]);
+  const n = t.shown.length;
+  await t.lights.close();
+  assert.ok(t.shown.length >= n);
 });
 
 test('steady state: frame shown once (dedupe), no timer; logs on/off', () => {

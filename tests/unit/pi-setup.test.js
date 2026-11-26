@@ -525,3 +525,20 @@ test('files.mjs: a symlink below the root is still refused, also in a child name
   assert.equal(w.failed(), true);
   assert.deepEqual(fs.readdirSync(path.join(r, 'elsewhere')), []);
 }));
+
+test('editConfigTxt: an explicit spi=off is left alone with a warning; a later spi=on wins; a commented off is ignored', () => {
+  const off = editConfigTxt('dtoverlay=vc4-kms-v3d\ndtparam=spi=off\n');
+  assert.doesNotMatch(off.text, /spi=on/);
+  assert.equal(off.text.match(/dtparam=spi=off/g).length, 1);
+  assert.ok(off.warnings.some((w) => /dtparam=spi=off.*lights will not work/.test(w)), off.warnings.join('|'));
+  assert.equal(editConfigTxt(off.text).text, off.text);
+  for (const form of ['dtparam=spi=false', 'dtparam=audio=on,spi=no', 'device_tree_param=spi=0']) {
+    const r = editConfigTxt(`dtoverlay=vc4-kms-v3d\n${form}\n`);
+    assert.doesNotMatch(r.text, /dtparam=spi=on/, form);
+    assert.ok(r.warnings.some((w) => /lights will not work/.test(w)), form);
+  }
+  const later = editConfigTxt('dtoverlay=vc4-kms-v3d\ndtparam=spi=off\ndtparam=spi=on\n');
+  assert.ok(!later.warnings.some((w) => /lights will not work/.test(w)));
+  const commented = editConfigTxt('dtoverlay=vc4-kms-v3d\n#dtparam=spi=off\n');
+  assert.match(commented.text, /^dtparam=spi=on$/m);
+});

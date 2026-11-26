@@ -526,3 +526,19 @@ test('install.sh: a config.txt that already enables spi is not given a second li
   assert.equal(fs.readFileSync(f, 'utf8').match(/^dtparam=spi=on$/gm).length, 1);
   assert.doesNotMatch(fs.readFileSync(f, 'utf8'), /disable_splash=1\ndtparam=spi/);
 }));
+
+test('install.sh: an explicit dtparam=spi=off stays as it is, no spi=on is added, and a warning says the lights will not work', withRoot((r) => {
+  const f = path.join(r, 'boot/firmware/config.txt');
+  fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace('#dtparam=spi=on', 'dtparam=spi=off'));
+  const res = run(base(r));
+  assert.equal(res.code, 0, res.out + res.err);
+  const cfg = fs.readFileSync(f, 'utf8');
+  assert.equal(cfg.match(/^dtparam=spi=off$/gm).length, 1);
+  assert.doesNotMatch(cfg, /^dtparam=spi=on$/m);
+  assert.match(res.out, /warning .*config\.txt: dtparam=spi=off .*lights will not work/);
+  const before = snapshot(r);
+  const again = run(base(r));
+  assert.equal(again.code, 0);
+  assert.deepEqual(snapshot(r), before);
+  assert.match(again.out, /lights will not work/);
+}));

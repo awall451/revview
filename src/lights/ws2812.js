@@ -32,8 +32,10 @@ export function createNullDriver() {
   return { show() {}, close: () => Promise.resolve() };
 }
 
-// show(frame) sends one hex line per frame to the helper (started on the first show). Any failure: one log line, dead.
-export function createSpiDriver({ argv, spawn = nodeSpawn, log = () => {}, timers, leds, closeWaitMs = 1000 }) {
+// show(frame) sends one hex line per frame to the helper (started on the first show). Any failure: one log line, the child
+// killed (SIGKILL), dead. Back-pressure: while stdin is full only the latest frame is held, sent on 'drain'; no drain within
+// stallMs is a failure. A stdin error alone waits (exitWaitMs) for the helper's own exit, which carries its stderr line.
+export function createSpiDriver({ argv, spawn = nodeSpawn, log = () => {}, timers, leds, closeWaitMs = 1000, stallMs = 3000, exitWaitMs = 500 }) {
   const setT = timers?.setTimeout ?? setTimeout;
   const clearT = timers?.clearTimeout ?? clearTimeout;
   let child = null;
@@ -42,10 +44,20 @@ export function createSpiDriver({ argv, spawn = nodeSpawn, log = () => {}, timer
   let errLine = '';
   let exited = Promise.resolve();
   let onExit = () => {};
+  let blocked = false; // stdin.write returned false: waiting for 'drain'
+  let pending = null; // the latest frame shown while blocked
+  let broken = false; // stdin failed: nothing more is written, the exit is awaited
+  let guard = null; // the stall timer or the exit-wait timer
+
+  const clearGuard = () => { if (guard !== null) { clearT(guard); guard = null; } };
+  const arm = (ms, fn) => { clearGuard(); guard = setT(fn, ms); guard?.unref?.(); };
 
   const die = (reason) => {
     if (dead) return;
     dead = true;
+    clearGuard();
+    pending = null;
+    if (child !== null) { try { child.kill('SIGKILL'); } catch { /* gone */ } }
     if (!closing) log(`lights: LED driver stopped (${reason}); the LEDs stay off until the server restarts`);
   };
 
@@ -54,15 +66,28 @@ export function createSpiDriver({ argv, spawn = nodeSpawn, log = () => {}, timer
       const c = spawn(argv[0], argv.slice(1), { shell: false, stdio: ['pipe', 'ignore', 'pipe'] });
       child = c;
       exited = new Promise((r) => { onExit = r; });
-      c.on('error', (e) => { child = null; die(`cannot start: ${e?.code ?? e?.message ?? 'error'}`); onExit(); });
+      c.on('error', (e) => { child = null; clearGuard(); die(`cannot start: ${e?.code ?? e?.message ?? 'error'}`); onExit(); });
       c.on('exit', (code, signal) => {
         child = null;
+        clearGuard();
         die(`exit ${code ?? signal}${errLine ? `: ${errLine}` : ''}`);
         onExit();
       });
       c.stderr?.on('data', (d) => { if (errLine === '') errLine = String(d).split('\n')[0].trim().slice(0, 200); });
       c.stderr?.on('error', () => {});
-      c.stdin?.on('error', (e) => die(`write failed: ${e?.code ?? e?.message ?? 'error'}`));
+      c.stdin?.on('error', (e) => {
+        if (dead || broken) return;
+        broken = true;
+        pending = null;
+        const why = `write failed: ${e?.code ?? e?.message ?? 'error'}`;
+        arm(exitWaitMs, () => die(why)); // the exit (with the helper's stderr line) normally comes first
+      });
+      c.stdin?.on('drain', () => {
+        if (dead || broken) return;
+        blocked = false;
+        clearGuard();
+        if (pending !== null) { const f = pending; pending = null; write(f); }
+      });
     } catch (e) {
       child = null;
       die(`cannot start: ${e?.code ?? e?.message ?? 'error'}`);
@@ -70,7 +95,14 @@ export function createSpiDriver({ argv, spawn = nodeSpawn, log = () => {}, timer
   }
 
   const write = (frame) => {
-    try { child.stdin.write(`${encodeWs2812(frame).toString('hex')}\n`); } catch (e) { die(`write failed: ${e?.message ?? 'error'}`); }
+    if (broken) return;
+    if (blocked) { pending = frame; return; }
+    try {
+      if (child.stdin.write(`${encodeWs2812(frame).toString('hex')}\n`) === false) {
+        blocked = true;
+        arm(stallMs, () => die('the helper is not reading its input'));
+      }
+    } catch (e) { die(`write failed: ${e?.message ?? 'error'}`); }
   };
 
   return {
@@ -85,6 +117,8 @@ export function createSpiDriver({ argv, spawn = nodeSpawn, log = () => {}, timer
       const c = child;
       if (c === null || dead) return;
       try {
+        pending = null;
+        blocked = false; // the dark frame goes out even when stdin is full (it queues behind what is there)
         write(Array.from({ length: leds }, () => [0, 0, 0]));
         c.stdin.end();
       } catch { /* gone already */ }

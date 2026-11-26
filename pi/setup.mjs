@@ -69,8 +69,12 @@ export function editConfigTxt(text) {
     warnings.push('no active dtoverlay=vc4-kms-v3d line in config.txt: the video= mode on the kernel command line needs KMS');
   }
   // SPI for the lights (WS2812B on MOSI): same test as raspi-config's get_spi; if none is active, ours goes in the block.
+  // The last active spi line decides (as for the firmware). An explicit off is the owner's choice: it stays, with a warning.
+  const spiLines = lines.filter((l) => /^(device_tree_param|dtparam)=([^,]*,)*spi(=[^,]*)?(,.*)?$/.test(l));
+  const spiOff = spiLines.length > 0 && /^(device_tree_param|dtparam)=([^,]*,)*spi=(off|false|no|0)(,.*)?$/.test(spiLines[spiLines.length - 1]);
   const spiOn = lines.some((l) => /^(device_tree_param|dtparam)=([^,]*,)*spi(=(on|true|yes|1))?(,.*)?$/.test(l));
-  const out = [...lines, ...(lines.length ? [''] : []), BLOCK_HEAD, '[all]', 'disable_splash=1', ...(spiOn ? [] : ['dtparam=spi=on'])];
+  if (spiOff) warnings.push('dtparam=spi=off is set (left as it is): the lights will not work until it is changed to dtparam=spi=on (then reboot)');
+  const out = [...lines, ...(lines.length ? [''] : []), BLOCK_HEAD, '[all]', 'disable_splash=1', ...(spiOn || spiOff ? [] : ['dtparam=spi=on'])];
   return { text: `${out.join('\n')}\n`, warnings };
 }
 

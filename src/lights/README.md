@@ -20,7 +20,9 @@ Python helper is only compiled in the tests. Nothing here has driven a real LED.
 | waiting | #c8a2ff | slow flash |
 | failed | #c8a2ff (the waiting band) | fast flash, 250 ms on / 250 ms off (2 Hz, the fastest allowed) |
 
-No session = dark. Lights off = all dark. The flash phase is `floor(now / half) % 2`, from absolute time, so all LEDs
+No session = dark. Lights off = all dark, but nothing is sent to the driver (so no helper process exists) until the lights
+have been on once; after that, off sends a dark frame and the helper stays. LEDs left lit by a hard kill stay lit while the
+lights are off, until power-off. The flash phase is `floor(now / half) % 2`, from absolute time, so all LEDs
 flash in step. `classify.js` derives the state like the bar does: a pending question/plan is asking, any other
 pending prompt or activity permission is permission, then failed, then starting, then the activity.
 
@@ -46,7 +48,9 @@ bytes. The helper exits 3 when the spidev module is missing and 4 when the devic
 ## Failure and stop
 
 A spawn error, a write error (EPIPE) or an early helper exit logs ONE line (`lights: LED driver stopped (...)`),
-and the driver stays dead until the server restarts. Clean stop: `close()` shows a dark frame, ends stdin, waits up
+and the driver stays dead until the server restarts; the child is killed (SIGKILL) when the driver dies. A write error
+waits for the helper's own exit so the line carries its stderr (`cannot open /dev/spidev0.0`), with a short fallback.
+While the helper's stdin is full only the latest frame is held and sent on `drain`; no drain for 3 s is a failure. Clean stop: `close()` shows a dark frame, ends stdin, waits up
 to a second for the helper, then SIGKILL. If Node crashes, the helper sees EOF on stdin and writes a dark frame. If
 the helper itself is killed with SIGKILL, or the power is cut, the LEDs keep the last colour until the next
 power-up or the next frame.

@@ -2315,7 +2315,10 @@ wire, data on SPI0 MOSI, GPIO10 (header pin 19). One LED per session, in the bar
   2.4 MHz, so 417 ns per SPI bit; then 90 zero bytes = 300 us latch) and feeds one hex line per frame on stdin to a
   small helper, `src/lights/spi-helper.py` (python3 + `spidev` from Debian's `python3-spidev`), which sets mode 0 and
   the clock (the ioctl Node cannot do) and writes the bytes. No npm dependency. The helper is started on the first
-  frame (lights off = no process). No SPI device, no module, a dead helper: one log line `lights: LED driver stopped
+  frame, and no frame is sent (so no helper is started) until the lights are first on: with `"lights": "off"` at start
+  there is no helper process. After the first on, switching off sends a dark frame and the helper stays. Consequence:
+  LEDs left lit by a hard kill (a kill that stops node and the helper before they send dark) stay lit while the lights are off,
+  until power-off, because nothing sends them a dark frame. No SPI device, no module, a dead helper: one log line `lights: LED driver stopped
   (...)`, the LEDs stay off until the server restarts, the bar goes on, no respawn.
 - **Stop and crash.** Clean stop (SIGTERM, `close()`): a dark frame, stdin closed, the helper writes dark and exits
   (SIGKILL after 1 s). Server crash or SIGKILL: the helper sees EOF on stdin and writes dark (as long as it still

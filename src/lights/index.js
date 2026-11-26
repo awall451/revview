@@ -19,6 +19,7 @@ export function createLights({ driver, leds, brightness, clock = Date.now, timer
   let timer = null;
   let closed = false;
   let wasOn = null;
+  let everOn = false; // nothing goes to the driver (so no helper starts) until the lights are first on
   let warned = false;
   const warn = (e) => { if (!warned) { warned = true; log(`lights: ${String(e?.message ?? e)}`); } };
   const dark = () => Array.from({ length: leds }, () => [0, 0, 0]);
@@ -35,8 +36,9 @@ export function createLights({ driver, leds, brightness, clock = Date.now, timer
     let states = [];
     try {
       on = lightsOn(board);
+      if (on) everOn = true;
       states = on ? lightStates(board) : [];
-      push(lightsFrame({ on, night: nightOf(board), states, now: clock(), leds, brightness }));
+      if (everOn) push(lightsFrame({ on, night: nightOf(board), states, now: clock(), leds, brightness }));
     } catch (e) { warn(e); }
     if (on && needsFlash(states.slice(0, leds))) timer = setT(() => { timer = null; if (!closed) update(); }, TICK_MS);
   }
@@ -57,7 +59,7 @@ export function createLights({ driver, leds, brightness, clock = Date.now, timer
       if (closed) return;
       closed = true;
       if (timer !== null) { clearT(timer); timer = null; }
-      try { driver.show(dark()); } catch (e) { warn(e); }
+      if (everOn) { try { driver.show(dark()); } catch (e) { warn(e); } }
       last = dark();
       try { await driver.close(); } catch (e) { warn(e); }
     },

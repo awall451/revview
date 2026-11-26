@@ -85,7 +85,7 @@ settings and hooks and your repositories are in that user's home. The user is pu
    on the other port, `--no-apt` to skip packages. It prints one line per thing it did. What it does:
    - packages (only the missing ones): `chromium tmux python3 espeak-ng wlr-randr sox overlayroot` *(names checked against the Trixie package lists, 2026-11-24, `docs/PI-FACTS.md`; that they work on the Pi is untested; `sox` records the microphone for `/voice`; `overlayroot` is what the read-only step needs: raspi-config would otherwise `apt-get install` it at `enable` time, so it is installed now while the Pi is online)*;
    - groups `input`, `audio`, `video` and `spi` for the user (`video`: `vcgencmd` for `--thermal`; `spi`: `/dev/spidev0.0` for the lights, the group is created when missing);
-   - `dtparam=spi=on` in `/boot/firmware/config.txt` (inside the installer's own block, only when no active spi line exists; it takes a reboot);
+   - `dtparam=spi=on` in `/boot/firmware/config.txt` (inside the installer's own block, only when no active spi line exists; it takes a reboot. An explicit `dtparam=spi=off` is the owner's choice and is left alone: the installer prints a warning that the lights will not work until it is changed to `dtparam=spi=on`. An spi line inside a conditional `[section]` is treated as global, not handled);
    - quiet boot: `/boot/firmware/config.txt` gets `disable_splash=1`; `/boot/firmware/cmdline.txt` loses `splash` and
      gets `quiet loglevel=0 logo.nologo vt.global_cursor_default=0` (kept on ONE line, CRLF becomes LF). It also
      drops `fbcon=rotate:N` and any earlier `video=<connector>:...` token that has `rotate=` (what an earlier run
@@ -350,7 +350,9 @@ need changing. The paths in that file are the ones above.
 **Untested on hardware** (bench group LT in `docs/BENCH-TEST.md`). One WS2812B addressable RGB LED per Claude session
 (up to 8, in bar order) on a single data wire from the Pi's SPI0 MOSI. The server runs `src/lights/spi-helper.py`
 (`python3-spidev`) when started with `--lights-config`; the unit passes `/opt/revview/config/lights.json` (the repo's
-path). That file says `"lights": "off"` by default, so nothing is driven until you turn it on.
+path). That file says `"lights": "off"` by default, so nothing is driven until you turn it on: with it off at start no SPI helper process is started and no dark frame is
+sent. Once on, switching off sends dark and keeps the helper. LEDs left lit by a hard kill therefore stay lit while the
+lights are off, until power-off.
 
 **Wiring** (header pin numbers; GPIO10 = SPI0 MOSI = pin 19; nothing else in revview uses the 40-pin header, and
 SPI0 is GPIO 7-11, so no collision with the other revview parts):

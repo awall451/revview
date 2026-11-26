@@ -56,23 +56,39 @@ async function withServer(opts, fn) {
   }
 }
 
-test('permission request: LED 0 amber (capped, flashing); Stop: green steady; SessionEnd: dark', T, () => withServer({}, async (c) => {
-  assert.deepEqual(c.driver.frames[0], [DARK, DARK, DARK]); // the first frame, at creation: nobody yet
-  await c.ev({ hook_event_name: 'SessionStart', session_id: A, cwd: '/w/a' });
-  await c.ev({ hook_event_name: 'UserPromptSubmit', session_id: A, prompt: 'go' });
-  await c.ev({ hook_event_name: 'PermissionRequest', session_id: A, tool_name: 'Bash', tool_input: { command: 'ls' } });
-  const seen = new Set();
-  await until(() => { for (const f of c.driver.frames) seen.add(f[0].join(',')); return seen.has(AMBER.join(',')) && seen.has('0,0,0'); }, 'the slow flash (amber and dark)', 5000);
-  assert.deepEqual(c.driver.frames.at(-1).slice(1), [DARK, DARK]);
-  await c.ev({ hook_event_name: 'Stop', session_id: A, last_assistant_message: 'done' });
-  await until(() => c.last()[0].join(',') === GREEN.join(','), 'green');
-  const n = c.driver.frames.length;
-  await sleep(600);
-  assert.equal(c.driver.frames.length, n, 'steady: no more frames');
-  assert.deepEqual((await c.devLights()).frame[0], GREEN);
-  await c.ev({ hook_event_name: 'SessionEnd', session_id: A });
-  await until(() => isDark(c.last()), 'dark after SessionEnd');
-}));
+// fake time for the lights ticks: the server's clock and timers are injected; ticks are fired by hand (as lights-index.test.js does)
+const fakeTime = () => {
+  const list = [];
+  const clock = { now: 0 };
+  const timers = { setTimeout(fn, ms) { const t = { fn, ms, cleared: false, fired: false, unref() {} }; list.push(t); return t; }, clearTimeout(t) { if (t) t.cleared = true; } };
+  const ticks = () => list.filter((t) => t.ms === 250 && !t.cleared && !t.fired);
+  const tick = (now) => { clock.now = now; const t = ticks().at(-1); assert.ok(t, 'a flash tick is scheduled'); t.fired = true; t.fn(); };
+  return { clock: () => clock.now, timers, ticks, tick };
+};
+
+test('permission request: LED 0 amber (capped, flashing); Stop: green steady; SessionEnd: dark', T, async () => {
+  const ft = fakeTime();
+  await withServer({ server: { clock: ft.clock, timers: ft.timers } }, async (c) => {
+    assert.deepEqual(c.driver.frames[0], [DARK, DARK, DARK]); // the first frame, when the lights are on: nobody yet
+    await c.ev({ hook_event_name: 'SessionStart', session_id: A, cwd: '/w/a' });
+    await c.ev({ hook_event_name: 'UserPromptSubmit', session_id: A, prompt: 'go' });
+    await c.ev({ hook_event_name: 'PermissionRequest', session_id: A, tool_name: 'Bash', tool_input: { command: 'ls' } });
+    await until(() => c.last()[0].join(',') === AMBER.join(','), 'amber (phase 0)');
+    assert.deepEqual(c.last().slice(1), [DARK, DARK]);
+    ft.tick(1000); // the second half of the slow flash
+    assert.deepEqual(c.last(), [DARK, DARK, DARK]);
+    ft.tick(2000);
+    assert.equal(c.last()[0].join(','), AMBER.join(','));
+    await c.ev({ hook_event_name: 'Stop', session_id: A, last_assistant_message: 'done' });
+    await until(() => c.last()[0].join(',') === GREEN.join(','), 'green');
+    assert.equal(ft.ticks().length, 0, 'steady: no flash tick is scheduled');
+    const n = c.driver.frames.length;
+    assert.deepEqual((await c.devLights()).frame[0], GREEN);
+    assert.equal(c.driver.frames.length, n, 'steady: no more frames');
+    await c.ev({ hook_event_name: 'SessionEnd', session_id: A });
+    await until(() => isDark(c.last()), 'dark after SessionEnd');
+  });
+});
 
 test('the Settings row Lights turns the lights off (a dark frame) and on again', T, () => withServer({}, async (c) => {
   await c.ev({ hook_event_name: 'SessionStart', session_id: A, cwd: '/w/a' });
@@ -89,15 +105,16 @@ test('the Settings row Lights turns the lights off (a dark frame) and on again',
   await until(() => c.last()[0].join(',') === GREEN.join(','), 'green again');
 }));
 
-test('config lights off: dark at start, the board says off; close() shows a dark frame and closes the driver', T, async () => {
+test('config lights off: the driver is never shown nor started; the board says off; close() closes it', T, async () => {
   const driver = recorder();
   const s = await startLiveServer({ port: 0, devBridge: true, lights: { config: CONFIG('off'), driver } });
   try {
     assert.equal((await (await fetch(`${s.url}/dev/lights`)).json()).lights, 'off');
-    assert.deepEqual(driver.frames, [[DARK, DARK, DARK]]);
+    await post(s, { hook_event_name: 'SessionStart', session_id: A, cwd: '/w/a' });
+    assert.deepEqual(driver.frames, [], 'nothing is sent while the lights have never been on');
   } finally { await s.close(); }
   assert.equal(driver.closed, 1);
-  assert.deepEqual(driver.frames.at(-1), [DARK, DARK, DARK]);
+  assert.deepEqual(driver.frames, [], 'close() sends nothing either');
 });
 
 test('close() while a session is lit: the last show is all dark, driver.close ran once', T, async () => {
@@ -110,7 +127,7 @@ test('close() while a session is lit: the last show is all dark, driver.close ra
   assert.equal(driver.closed, 1);
   assert.ok(isDark(driver.frames.at(-1)));
   const n = driver.frames.length;
-  await sleep(400);
+  await post(s, { hook_event_name: 'SessionEnd', session_id: A }).catch(() => {}); // the server is closed: refused, and no frame
   assert.equal(driver.frames.length, n, 'no frames after close');
 });
 
@@ -145,7 +162,6 @@ test('a driver that cannot start: exactly one stopped line, the server keeps ans
       await post(s, { hook_event_name: 'SessionStart', session_id: id, cwd: '/w/x' });
       await post(s, { hook_event_name: 'Stop', session_id: id, last_assistant_message: 'x' });
     }
-    await sleep(500);
     assert.equal((await fetch(`${s.url}/state`)).status, 200);
     assert.equal(lines.filter((l) => /lights: LED driver stopped/.test(l)).length, 1, lines.join('\n'));
     assert.equal(lines.length, 1);

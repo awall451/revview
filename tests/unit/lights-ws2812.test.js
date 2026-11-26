@@ -129,14 +129,107 @@ test('driver: helper exit -> one log line with stderr, no respawn', () => {
   assert.deepEqual(logs, ['lights: LED driver stopped (exit 3: no spidev module (install python3-spidev)); the LEDs stay off until the server restarts']);
 });
 
-test('driver: stdin EPIPE -> one log line', () => {
+test('driver: stdin EPIPE then exit: the one log line carries the helper stderr, not EPIPE', () => {
   const { d, made, logs } = mk();
   d.show(RED);
   made[0].stdin.emit('error', Object.assign(new Error('x'), { code: 'EPIPE' }));
-  made[0].emit('exit', 1, null);
+  assert.equal(logs.length, 0, 'waits for the exit');
+  made[0].stdin.emit('error', Object.assign(new Error('x'), { code: 'EPIPE' }));
   d.show(RED);
+  assert.equal(made[0].written.length, 1, 'not writable any more');
+  made[0].stderr.emit('data', Buffer.from('cannot open /dev/spidev0.0: No such file\n'));
+  made[0].emit('exit', 2, null);
+  assert.deepEqual(logs, ['lights: LED driver stopped (exit 2: cannot open /dev/spidev0.0: No such file); the LEDs stay off until the server restarts']);
+});
+
+test('driver: stdin EPIPE and no exit: after a short wait one log line with EPIPE, and the child is killed', () => {
+  const { d, made, logs, timers } = mk();
+  d.show(RED);
+  made[0].stdin.emit('error', Object.assign(new Error('x'), { code: 'EPIPE' }));
+  const t = timers.list.at(-1);
+  assert.ok(t.ms <= 2000);
+  t.fn();
   assert.equal(logs.length, 1);
   assert.match(logs[0], /EPIPE/);
+  assert.deepEqual(made[0].killed, ['SIGKILL']);
+  made[0].emit('exit', null, 'SIGKILL');
+  assert.equal(logs.length, 1);
+});
+
+test('driver: a stuck child is killed when the driver dies (spawn kept, no second helper)', async () => {
+  const { d, made, logs, timers } = mk();
+  d.show(RED);
+  made[0].stdin.emit('error', Object.assign(new Error('x'), { code: 'EPIPE' }));
+  timers.list.at(-1).fn();
+  assert.deepEqual(made[0].killed, ['SIGKILL']);
+  await d.close();
+  d.show(RED);
+  assert.equal(made.length, 1);
+  assert.equal(logs.length, 1);
+});
+
+test('driver: back-pressure: only the latest frame is held, and sent on drain', () => {
+  const { d, made } = mk();
+  const F = (n) => [[n, 0, 0], [0, 0, 0]];
+  d.show(F(1));
+  let accept = false;
+  made[0].stdin.write = (s) => { made[0].written.push(s); return accept; };
+  d.show(F(2)); // accepted by the fake but returns false: blocked from now on
+  d.show(F(3));
+  d.show(F(4));
+  d.show(F(5));
+  assert.equal(made[0].written.length, 2, 'no write while blocked');
+  accept = true;
+  made[0].stdin.emit('drain');
+  assert.equal(made[0].written.length, 3);
+  assert.equal(made[0].written.at(-1), `${hx(encodeWs2812(F(5)))}\n`, 'the latest frame only');
+  d.show(F(6));
+  assert.equal(made[0].written.length, 4, 'flowing again');
+  made[0].stdin.emit('drain');
+  assert.equal(made[0].written.length, 4, 'nothing held: nothing sent');
+});
+
+test('driver: no drain within the stall time: dead, one log line, SIGKILL, no respawn', () => {
+  const { d, made, logs, timers } = mk({ stallMs: 4321 });
+  d.show(RED);
+  made[0].stdin.write = (s) => { made[0].written.push(s); return false; };
+  d.show(RED);
+  d.show(RED);
+  const t = timers.list.filter((x) => !x.cleared).at(-1);
+  assert.equal(t.ms, 4321);
+  t.fn();
+  assert.equal(logs.length, 1);
+  assert.match(logs[0], /^lights: LED driver stopped \(.*not reading.*\); the LEDs stay off until the server restarts$/);
+  assert.deepEqual(made[0].killed, ['SIGKILL']);
+  d.show(RED);
+  made[0].emit('exit', null, 'SIGKILL');
+  d.show(RED);
+  assert.equal(made.length, 1);
+  assert.equal(logs.length, 1);
+});
+
+test('driver: a drain in time clears the stall timer', () => {
+  const { d, made, logs, timers } = mk();
+  d.show(RED);
+  made[0].stdin.write = (s) => { made[0].written.push(s); return false; };
+  d.show(RED);
+  const t = timers.list.at(-1);
+  made[0].stdin.emit('drain');
+  assert.equal(t.cleared, true);
+  assert.deepEqual(logs, []);
+});
+
+test('driver: close while blocked still sends the dark frame and ends stdin', async () => {
+  const { d, made } = mk();
+  d.show(RED);
+  made[0].stdin.write = (s) => { made[0].written.push(s); return false; };
+  d.show(RED);
+  d.show(RED);
+  const p = d.close();
+  assert.equal(made[0].written.at(-1), `${hx(encodeWs2812([[0, 0, 0], [0, 0, 0]]))}\n`);
+  assert.equal(made[0].ended, true);
+  made[0].emit('exit', 0, null);
+  await p;
 });
 
 test('driver: null driver and helperArgv', async () => {
