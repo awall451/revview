@@ -2210,3 +2210,52 @@ Code: `src/sounds/` (README there), `config/speech.json`, `src/server/feed.js` (
 - **Laptop demo:** scene 11 `tasks` (the task-list recording, the clock counts, then QUIET after 24 s: `run.sh demo` alone
   starts the server with `--quiet-minutes 0.4`; no other scene holds that long at normal speed). No new key: the key sheet
   is at its line limit, so scene 11 is reached only by the loop, after scene 10 (the key-sheet tests now check the first ten).
+
+## Night and day looks for the bar (cycle 62, owner issue #30, branch work/night-day; nothing seen on the panel)
+
+- **Setting.** `look` = `day` | `night` | `auto`, lasting place `config/look.json` (`--look-config <path>`; default `day`,
+  today's look). A bad file logs and gives day, never no bar. The board holds the mode (`RevviewLook`, internal) and
+  "night now" from the server's clock monitor (`RevviewLookClock`, internal, every 30 s); `boardView` sends the effective
+  look (`look: 'day' | 'night'`) with every state. Run time: the Settings row `Look: day / night / auto, night now`
+  (always the last row; press cycles day, night, auto). Not kept over a restart (accepted limit, no persistence built).
+- **Auto.** Fixed hours from the config (`night.from` / `night.to`, local wall clock, default 21:00 to 07:00, no
+  location). The Pi has no RTC: while the clock reads a year before 2026 (not set) auto shows day and the server logs it
+  once. A saved clock restored at boot (systemd-timesyncd's clock file; read-only root may keep it stale, see PI-FACTS
+  section 10, from memory) can be wrong until time sync: then auto may show the wrong look; the menu hold corrects it.
+- **Long press: Menu hold (400 ms) toggles day/night.** Free holds were read aloud (taken), cancel (taken), back
+  (taken), menu, press and spare. Press is allow on a permission prompt (not touched); spare may not exist on the pods.
+  So menu gets `"hold": true` in both shipped key maps: a menu tap now fires on release (< 400 ms) instead of on press,
+  the accepted cost. Push-to-talk, deny and the arrows still fire on press. From auto a hold goes to the opposite of
+  what shows and leaves auto. A hold never opens, closes or moves a list or menu (it clears a note like any gesture).
+- **View.** One attribute, `data-look` on `<html>`, and CSS variables in `src/view/view.css` (day values = the old
+  hard-coded colours; the chip colours in view.js are `var(--chip-*)` now). A state without `look` keeps the current
+  look, so NO LINK after a lost link stays night. Live mode remembers the last look in localStorage (a reload while the
+  server is away is not a glare); static fixtures ignore it. `boot.html` takes `?look=night`; nothing passes it yet
+  (`pi/kiosk.sh` opens it without), so the first seconds of a boot are in the day look: open item.
+- **Night palette.** Black page; band = dark tint of the state colour (luminance at most 0.02; NEEDS PERMISSION the
+  brightest, `#2e1c00`); band word, shape, clock, QUIET/HOT/LOW POWER/NO BUTTONS tags and mic `#d98a3a`; text `#c87a30`,
+  grey `#a8641f`, strong notes (refusals, Denied/Allowed, failed, tasks count, ≥) `#f0a050`; diff `#3fa060` / `#d0605a`;
+  selected row and the chosen ask option inverted `#b46c24` with `#0a0500` text; NO LINK black with an amber outline. No
+  pure white. Shapes unchanged and all drawn in one colour in night, so a state is told by shape, word and place
+  (checked by `emulator/tests/contrast.spec.js`: one shape colour in night, distinct shape markup per state; that is the
+  greyscale check, no greyscale image was looked at by a person).
+- **Day look: unchanged on purpose.** Measured, black on every band colour is at least 7.57:1 (OFFLINE `#ff6b6b`, the
+  lowest), every other text at least 8.32:1: WCAG AAA everywhere. 21:1 everywhere would mean white on black and lose the
+  band colours, so the existing 70 shots stay byte-identical (`cmp` before/after).
+- **Contrast (WCAG 2, computed colours in the emulator; re-run with `emulator/tests/contrast.spec.js`, table in
+  `out/contrast.md`).** Lowest ratio per element kind, day / night: state word and band text 7.57 / 5.96, tags 9.21 /
+  5.96, diff 8.32 / 5.50, selected row 9.74 / 4.66, grey text 10.59 / 4.51, chosen ask option 17.21 / 4.94, primary text
+  21.00 / 6.28, strong notes 21.00 / 9.85. The test asks day >= 7 and night >= 4.5 for every text, and in night no
+  background over 40x40 px above luminance 0.25 (the largest is 0.206, the selected row / chosen option). Night grey and
+  the selected row sit just above 4.5: a palette change must keep them there.
+- **Screenshots.** Every gallery shot also as `night-<name>.png` (flat, the gallery reads `shots/*.png`): 70 day + 70
+  night. `shootBoth()` in `emulator/tests/harness.js` flips the attribute on the rendered page (no second render; the
+  boot page is loaded again with `&look=night`). `tools/check` is unchanged (its shots step checks the day names only).
+  Time: the shot specs are within noise of before (screenshots.spec.js 17 s before, 15-18 s after); the whole emulator
+  step measured 194 s on main and 231 s on the branch on a busy VM, while two of the slower unchanged specs measured
+  faster on the branch when run alone, so the difference is load, not the look.
+- **Backlight.** `pi/backlight.sh day|night|<percent>` (UNTESTED): sysfs backlight, else `ddcutil`, else exit 3 "no
+  software backlight". The Waveshare 7.9" HDMI panel very likely has none (from memory); not wired to the look. Bench
+  N1 to N8 (untested): sun, night, the switch, auto and cold boot, the backlight.
+- A pre-existing heavy test (`asking.spec.js`, worst case fit on each option: 18 page loads, about 8 s alone) hit the
+  15 s timeout in one full run here; it is marked `test.slow()`, the assertions are unchanged.

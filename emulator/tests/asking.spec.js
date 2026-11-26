@@ -418,6 +418,8 @@ test('the emulator fixtures: asking-choice highlights option 3, asking-terminal 
   });
 
   test('worst case fit with the highlight on each of the four options; the hint row gives way to the offline and voice notes', async ({ openView, page }) => {
+    // 18 page loads with full fit checks: about 8 s alone, over the 15 s default under a full parallel run (seen in cycle 62)
+    test.slow();
     const longQ = 'Which of these many colours, shapes, sizes and materials should the new file use, and why? '.repeat(3).slice(0, 200);
     const all = { offline: true, voice: 'not-owned', others: 12, hot: true, lowPower: true, buttons: 'missing' };
     const cases = [{ question: longQ }, { question: 'W'.repeat(199) + '…' }, { question: '这是一个非常长的问题用来测试全角文字的宽度'.repeat(10).slice(0, 200) }];
