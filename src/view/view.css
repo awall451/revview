@@ -43,7 +43,9 @@
   --chip-unknown: #5ce1e6;
 }
 /* Night: black page, dim amber type, dark tints for the bands, nothing bright and large. The shapes are drawn in currentColor, so
-   every state is still told apart by shape, word and place, not by colour. */
+   every state is still told apart by shape and word. The states that need the driver (NEEDS PERMISSION, CLAUDE ASKS, OFFLINE)
+   also get a flag: the shape sits cut out dark in a solid amber block at the left edge of the band, full band height (below),
+   so they differ from WORKING / DONE by form and place at a glance. The block is #b46c24, luminance 0.206 (limit 0.25). */
 :root[data-look="night"] {
   --page: #000;
   --fg: #c87a30;
@@ -71,6 +73,8 @@
   --ask-bg: #b46c24;
   --ask-fg: #0a0500;
   --ask-outline: #d98a3a;
+  --flag-bg: #b46c24;
+  --flag-fg: #0a0500;
   --chip-working: #3a78b8;
   --chip-waiting: #8a68c0;
   --chip-permission: #c88418;
@@ -117,6 +121,17 @@ body[data-view="no-link"] #band {
   background: var(--band);
   color: var(--band-fg);
   font-size: var(--detail-font);
+}
+/* night only: the flag of a state that needs the driver. #shape itself becomes the block (so the contrast spec measures it);
+   it reaches the left edge (margin cancels the band padding) and the full height. The glyph keeps its size. */
+:root[data-look="night"] body:is([data-view="permission"], [data-view="asking"], [data-view="offline"]) #shape {
+  box-sizing: border-box;
+  width: calc(var(--state-font) * 0.72 + 48px);
+  height: 84px;
+  padding: 22px 24px;
+  margin: 0 0.25em 0 -24px;
+  background: var(--flag-bg);
+  color: var(--flag-fg);
 }
 #shape { flex: none; width: calc(var(--state-font) * 0.72); height: calc(var(--state-font) * 0.72); }
 #state-word {

@@ -17,6 +17,7 @@ const OUT = process.env.REVVIEW_CONTRAST_OUT || path.join(repoRoot, 'out', 'cont
 const MIN_DAY = 7;
 const MIN_NIGHT = 4.5;
 const MAX_AREA_LUM = 0.25; // night: relative luminance of any background bigger than 40x40 px
+const NEEDS_DRIVER = ['permission', 'asking', 'offline']; // night: these views carry the flag (see view.css)
 const LOOKS = ['day', 'night'];
 
 const NOW = 1_800_000_000_000;
@@ -93,6 +94,7 @@ test('contrast of every state in both looks (day >= 7, night >= 4.5, nothing big
   const problems = [];
   const nightShapes = new Map(); // view -> markup
   const nightShapeColours = new Set();
+  const flagColours = new Set();
   let maxAreaLum = { lum: 0, where: '' };
   const minByCat = { day: {}, night: {} };
 
@@ -126,15 +128,21 @@ test('contrast of every state in both looks (day >= 7, night >= 4.5, nothing big
           const c = parseColor(p.c);
           if (c && c.a > 0 && c.r === 255 && c.g === 255 && c.b === 255) problems.push(`${id} night: pure white ${p.prop} on #${p.name}`);
         }
-        nightShapeColours.add(got.shapeColor);
         const view = await page.evaluate(() => document.body.dataset.view);
+        // the flag: #shape is a solid block with the glyph cut out dark, only for the states that need the driver
+        const flagged = got.areas.some((a) => a.name === 'shape' && a.w * a.h > 40 * 40);
+        if (flagged !== NEEDS_DRIVER.includes(view)) problems.push(`${id} night: view ${view} ${flagged ? 'has' : 'lacks'} the flag`);
+        if (!flagged) nightShapeColours.add(got.shapeColor);
+        else flagColours.add(got.shapeColor);
         if (!SYNTHETIC[id] && FIXTURE_IDS.includes(id)) nightShapes.set(view, got.shapeMarkup);
       }
     }
   }
 
   // greyscale: one colour for every shape, so the shapes (all different) tell the states apart
-  expect([...nightShapeColours], 'night: every #shape has the same colour').toHaveLength(1);
+  expect([...nightShapeColours], 'night: every #shape without the flag has the same colour').toHaveLength(1);
+  expect([...flagColours], 'night: every flagged #shape has the same colour (dark in the block)').toHaveLength(1);
+  expect(flagColours.has(nightShapeColours.values().next().value), 'the glyph in the flag is not the band amber').toBe(false);
   expect(new Set(nightShapes.values()).size, 'night: every view has its own shape').toBe(nightShapes.size);
   expect(nightShapes.size).toBeGreaterThan(0);
 

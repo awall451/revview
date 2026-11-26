@@ -2219,7 +2219,8 @@ Code: `src/sounds/` (README there), `config/speech.json`, `src/server/feed.js` (
   look (`look: 'day' | 'night'`) with every state. Run time: the Settings row `Look: day / night / auto, night now`
   (always the last row; press cycles day, night, auto). Not kept over a restart (accepted limit, no persistence built).
 - **Auto.** Fixed hours from the config (`night.from` / `night.to`, local wall clock, default 21:00 to 07:00, no
-  location). The Pi has no RTC and systemd starts its clock at its build time (2026-04), so the year alone proves nothing
+  location; from later than to wraps over midnight; from equal to to means never night, auto always shows day, kept on
+  purpose and said in the `config/look.json` comment). The Pi has no RTC and systemd starts its clock at its build time (2026-04), so the year alone proves nothing
   (the first version of this rule, "year before 2026", would never have applied on the Pi). The clock counts as set only
   when systemd-timesyncd's file `/run/systemd/timesync/synchronized` exists (an injected probe, `clockSynced`) and the
   year is 2026 or later (second guard); until then auto shows day and the server logs it once; the 30 s check follows the
@@ -2241,9 +2242,15 @@ Code: `src/sounds/` (README there), `config/speech.json`, `src/server/feed.js` (
   brightest, `#2e1c00`); band word, shape, clock, QUIET/HOT/LOW POWER/NO BUTTONS tags and mic `#d98a3a`; text `#c87a30`,
   grey `#a8641f`, strong notes (refusals, Denied/Allowed, failed, tasks count, ≥) `#f0a050`; diff `#3fa060` / `#d0605a`;
   selected row and the chosen ask option inverted `#b46c24` with `#0a0500` text; NO LINK black with an amber outline. No
-  pure white. Shapes unchanged and all drawn in one colour in night, so a state is told by shape, word and place
-  (checked by `emulator/tests/contrast.spec.js`: one shape colour in night, distinct shape markup per state; that is the
-  greyscale check, no greyscale image was looked at by a person).
+  pure white. Shapes unchanged, and distinct per state.
+  **The flag (cycle 63, QA r12-03).** The first version said a state is told "by shape, word and place"; the word and
+  shape sat in the same place for every state and the band tints are near black, so NEEDS PERMISSION against WORKING
+  rested on a 40 px glyph. Now the states that need the driver (NEEDS PERMISSION, CLAUDE ASKS, OFFLINE) carry a flag: the
+  shape sits cut out dark (`#0a0500`) in a solid amber block (`#b46c24`, luminance 0.206, inside the 0.25 limit) at the
+  left edge of the band, full band height, about 88 px wide. WORKING, DONE, WAITING and the rest have no block, and NO
+  LINK keeps its outline, so the difference is one of form and place, not colour or glyph alone (amber and dim red/amber
+  only, no new hue, no white). `emulator/tests/contrast.spec.js` pins it: the flag exists exactly on those three states,
+  the shape colour is one amber everywhere else. Emulator only; whether it reads in one second on the panel is bench N2.
 - **Day look: unchanged on purpose.** Measured, black on every band colour is at least 7.57:1 (OFFLINE `#ff6b6b`, the
   lowest), every other text at least 8.32:1: WCAG AAA everywhere. 21:1 everywhere would mean white on black and lose the
   band colours, so 69 of the 70 existing shots stay byte-identical (`cmp` against the gate/main set); `wb4-settings.png`

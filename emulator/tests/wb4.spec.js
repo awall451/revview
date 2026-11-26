@@ -126,7 +126,7 @@ test('quiet: owned session after a restart, UNKNOWN with its note', async ({ ope
   await expect(page.locator('#note2')).toHaveText('No events from this session yet');
   await expect(page.locator('#voice-mark')).toHaveAttribute('data-mark', 'mic');
   await common(page, 'quiet', testInfo);
-  await shot(page, 'wb4-quiet');
+  await shot(page, 'wb4-unknown-after-restart');
 });
 
 test('note-start-failed: the refused start note on a normal view', async ({ openView, page }, testInfo) => {

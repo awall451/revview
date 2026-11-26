@@ -126,7 +126,7 @@ anything you can see:
   Enter (each press cycles day, night, auto; not kept over a restart; the lasting setting is `"look"` in
   `config/look.json`, or `--look-config <path>` for another file). Or **hold M** for about half a second: it toggles day
   and night (M tapped still opens the menu, now when you release it). The gallery has a `night-<name>.png` for every shot.
-  The `--keys` sheet does not list the hold: `emulator/keys-sheet.js` is at its line limit and was not changed.
+  The `--keys` sheet lists the hold (the M row, HOLD column: day/night).
 - **Sounds.** The server plays a short cue when the selected session needs you, finishes or fails (a softer one
   for other sessions), through the first of `aplay`, `pw-play`, `paplay` that your laptop has (`cuePlayers` in
   `config/speech.json`). With none of them it stays silent and its log says `sounds: cues, no cue player found

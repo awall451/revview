@@ -482,7 +482,7 @@ Emulator only (the gallery has `night-<name>.png` for every shot); never seen on
 | # | Do | Expect | Result |
 |---|---|---|---|
 | N1 | Look `day`, in real sun (sun on the panel, polarised sunglasses on and off), each state in turn | Every state is recognised in one glance at arm's length; no state needs leaning in; note any state or colour that washes out | untested |
-| N2 | Look `night`, at night on a dark road (no street lights), each state in turn | No glare; type readable (dim amber); no large bright area; the state is told by shape and word, not by colour alone | untested |
+| N2 | Look `night`, at night on a dark road (no street lights), each state in turn | No glare; type readable (dim amber); no large bright area; the states that need you (NEEDS PERMISSION, CLAUDE ASKS, OFFLINE) show a solid amber block at the left edge of the band with the shape dark inside it, and WORKING / DONE / WAITING do not: from the driver's seat, can you tell "needs me" from "busy" in one second, without reading? Note if the block glares | untested |
 | N3 | The switch: Settings, the Look row, press until `day`, `night`, `auto` (the row names "night now" when auto shows night) | The row cycles day, night, auto; the screen changes at once; a restart of the server goes back to `look` in `config/look.json` (accepted limit) | untested |
 | N4 | Hold the Menu button (F23) | The look toggles day / night at about 400 ms; from auto it goes to the opposite of what shows and leaves auto; no menu opens | untested |
 | N5 | Tap the Menu button | The menu still opens (and closes); it now opens on release, so note whether it feels slower than the other buttons (they fire on press) | untested |
