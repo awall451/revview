@@ -225,7 +225,9 @@ test('--live without a dir uses the current directory; with TMUX set a hint abou
   try {
     const { sock } = await run.up();
     assert.equal(tmux(sock, 'list-windows', '-t', 'revview', '-F', '#{pane_current_path}').stdout.trim(), fx.proj);
-    assert.match(run.out, /TMUX=/);
+    // the hint is printed two lines after the attach line: wait for it, not for the attach line
+    await until(() => /^\(you are inside tmux: .*TMUX=\)$/m.test(run.out), 'the hint about the attach line');
+    assert.match(run.out, /^\(you are inside tmux: .*TMUX=\)$/m);
     process.kill(run.child.pid, 'SIGTERM');
     assert.equal((await run.exit()).code, 0);
   } finally { run.finish(); }
