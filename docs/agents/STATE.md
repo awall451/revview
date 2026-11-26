@@ -1,6 +1,6 @@
 # STATE
 
-Detail and history: `HISTORY.md` (the old STATE, verbatim), `JOURNAL-archive.md` (journal before cycle 36), `docs/DECISIONS.md`, `docs/PI-FACTS.md`. Read them only when needed. The owner's console counts cycles (this file was last written in cycle 52); that number is used. Gate main: 1676 tests.
+Detail and history: `HISTORY.md` (the old STATE, verbatim), `JOURNAL-archive.md` (journal before cycle 36), `docs/DECISIONS.md`, `docs/PI-FACTS.md`. Read them only when needed. The owner's console counts cycles (this file was last written in cycle 60); that number is used. Gate main: e2ec885, 1930 tests (cycle 60).
 
 ## Status per charter stage
 
@@ -8,7 +8,7 @@ Detail and history: `HISTORY.md` (the old STATE, verbatim), `JOURNAL-archive.md`
 2. Hook wiring and spoken summary: built and merged (hooks, `POST /permission`, `src/speech/`, `speakOnStop` default off). Proven with recordings and stand-ins. Nothing has made a sound.
 3. Push-to-talk and wheel buttons (WB1-WB6): built and merged (input layer, sessions in tmux, allow/deny, selection, list and menu, read aloud, dongle files, ZMK reference). Proven with fakes, constructed traces and the emulator. No real device was ever read.
 4. Pi image (`pi/`: installer, kiosk, rotation, quiet boot, read-only root, encrypted data, key map merge): built and merged. Tested against a fake root on the build VM. Never run on a Pi.
-- Extras since: laptop emulator `emulator/run.sh` (demo, `--live`, `--stop`, guide `docs/EMULATOR-LAPTOP.md`), compaction note on the bar, "Session ended: <reason>" note, HOT / LOW POWER marks (`--thermal`).
+- Extras since: laptop emulator `emulator/run.sh` (demo, `--live`, `--stop`, guide `docs/EMULATOR-LAPTOP.md`), compaction note on the bar, "Session ended: <reason>" note, HOT / LOW POWER marks (`--thermal`). Since cycle 59-60: CLAUDE ASKS (questions and plans shown and answered from the wheel buttons, `docs/BUTTONS.md` section 10), sound cues (`src/sounds/`, Settings row Sounds), the Pi scripts checked against a tree of the real packages (`pi/tree/`), the long drive (`tools/long-drive`, `docs/LONG-DRIVE.md`, out of the gate).
 
 ## Unproven
 
@@ -33,12 +33,19 @@ Nothing is proven on a Pi. The list is `docs/BENCH-TEST.md` (groups: First after
 
 ## In flight
 
-- Nothing. No ready or work branch, no worktree, no held change. Published: main 0b0329f (2026-11-24), nothing ahead of it.
+- Cycle 60, submitted on main e2ec885 (1930 tests): `ready/ask-fixes` (fd92dcc, the fix round after QA r11; full check on the branch 1944) and `ready/lead-notes-60` stacked on it. When merged: delete `ready/ask-fixes`, `work/ask-fixes`, `ready/lead-notes-60`, `lead-notes-60`; `owner-publish request` was made in cycle 60 and covers main at publish time. If the gate fails it: fix round from the gate's log (core).
+- Merged in cycle 60 and set `done`: owner issues #27, #32 (main 32abd00), #33, #28, #31 (main e2ec885). No worktree, no held change.
+- Owner question open: `owner-inbox ask ask-updown-order` (QA r11-04: the options under CLAUDE ASKS are in two columns, up/down move in reading order 1-2-3-4). Default taken: keep reading order. The answer comes as an owner message.
 
-## Next
+## Next (the owner's focus order: open issues first)
 
-- Nothing planned: every approved backlog item is done or taken. The team waits for the owner's bench (`docs/BENCH-TEST.md`). `owner-focus blocked` was said in cycle 50. Next cycle: sync, inbox, stop, unless the owner has sent something. An idle cycle in which nothing changed writes no note and submits nothing (cycle 52 was the last idle note); the journal's last entry then stays true.
-- Small `pi/` leftovers for the next `pi/` change: `readonly.sh --dry-run` exits 2 when overlayroot is missing (say so in the help); an fstab line where `ro` is not right after `defaults` makes `disable` give up after 3 calls; PI-FACTS E11 and E13 are only part-checked.
+- Cycle 61: #29 time in state / quiet mark / task progress (backlog 14c692, Opus, core; `owner-backlog taken` first, issue `in_progress`). Then #30 night and day looks (dedc86). Both change the bar and the screenshot set, so one after the other, not in parallel. #29's 'a cue if sounds exist': sounds exist now (`src/sounds/classify.js`; a cue only on a change of a session's class).
+- Open after cycle 60 (none blocking; QA files `docs/agents/issues/qa-20261126-r11-*`): the Settings choice for Sounds is not kept over a server restart (nothing writes settings at run time; the Pi root is read-only; `sounds` in `config/speech.json` is the lasting place): needs a writable place (the data partition) and a decision; `pi/install.sh` does not install `alsa-utils` (`aplay`; PI-FACTS P16, bench SC): add with the next `pi/` change and its names fixture; after Esc on a question the session shows WORKING until its next event; several questions, multi-select and 'other' are terminal-only; the view matches the one note text 'Answer in the terminal when parked' (duplicated constant from `actions.js`: make it a note kind or a shared constant); `src/speech/index.js` uses the global `setTimeout` for the 2 s wait before speech; a repeated identical Stop event repeats the spoken summary (no cue); a demo scene jump can play two cues in a row; no sounds test for the 540 s timeout case; QA did not test: two sessions with a question each, the 'terminal does not show the plan' refusal, a real desktop window.
+- #34 lights per project (backlog b801af) is a FUTURE GOAL: the owner's text says not to run it now; no parts are chosen. Do not take it until the owner says so. The idea: one LED per session in the housing on the Pi's GPIO, colour and pattern by state (working steady, needs you slow flash, failed fast flash, none off), same colours as the bar; it comes after sounds (#31) and reuses its "what changed, for which session" logic. Open then: LED type and count (addressable strip on one pin, or plain RGB LEDs on three pins each), wiring, driver.
+- Small leftovers from cycle 59 (none blocking): no plan scene in the laptop demo; row A under CLAUDE ASKS shows the raw tool name; read aloud drops file names from a plan title ("add hello.sh" is read "add"); `pi/tree/check.sh` writes into its copy of the tree through `install.sh --root` (an absolute symlink in the copy would be followed; the packages are pinned by hash); a cmdline with both `overlayroot=disabled` and `overlayroot=tmpfs` counts as on (not checked which the initramfs honours); two old QA issue files still say `journalctl --user -u revview` (the right form is `sudo journalctl --user-unit=revview`).
+- For the owner to judge (told in the #33 comment): NO LINK shows for about 1 s on every event-stream reset; events posted while the server is down are lost (no persistence, by design).
+- Going further than the package tree (running raspi-config's edits or `cryptsetup --help` for arm64) would need `qemu-user-static` and binfmt set up by root: not requested; it would show program output under emulation, still not the Pi.
+- `pi/`: PI-FACTS E13 stays part-checked (the default PBKDF shows only in `cryptsetup --help`); 22 rows stay from memory (Pi-only). The tree tool: `pi/tree/build.sh` (43 pinned packages, about 140 MB, on request) and `pi/tree/check.sh`.
 - Small `src/server/` leftovers for the next change there (found during the split, not fixed, none visible to the user): the owned poll's "window ... disappeared" log line prints the window name raw (the "ended" line strips control characters); the SSE ping and the owned poll use the global `setInterval`, not the injected `timers`; `close()` does not clear the demo client set; `unlocked` in `monitors.js` is set and never read; the usage comment is in both `index.js` and `cli.js`; the README file table lacks `datalock.js`, `netmon.js`, `thermal.js`.
 - Open escalations: see `ESCALATIONS.md` (the cycle schedule only; the others are resolved).
 
@@ -48,9 +55,15 @@ Nothing is proven on a Pi. The list is `docs/BENCH-TEST.md` (groups: First after
 - Brief a fix round as "check out the branch in your own worktree": an area lead cannot enter another agent's worktree.
 - Ask for a looped run under CPU load whenever a test waits on timers.
 - The team does not edit the owner's design documents (`docs/DESIGN.md`); it tells the owner.
+- A live trial with a real Claude Code must not use `/model` (it writes `~/.claude/settings.json`); start it with `--model`. Every tool that starts servers must be checked for leftovers (`pgrep`) before its worktree is removed.
+- A fix round: remove the first agent's worktree (after checking it is clean), then the next agent checks the branch out in its own.
 - A Sonnet lead sent back twice, or failing at the gate, is redone on Opus ("Redo on Opus:").
 - Idle cycles: sync, verdicts, inbox, stop. No invented work; an idle cycle should cost well under $1.
 - Never use another route when the proxy refuses a domain; test the domain, report, wait.
 - Nothing is marked as working on hardware before the owner's bench says so.
 - Do not invent features beyond the charter.
 - Do not start QA or leads without a reason.
+
+- A new test must not hard-code the number of recordings in `fixtures/sessions` (the cycle 59 gate failure of long-drive: 6 became 10 when another branch merged first).
+- When branches are stacked, the stack's tip gets one full check before submitting (cycle 60: a Sonnet platform lead built the stack, added the tests where the features meet, and ran it).
+- QA gets a turn budget in its brief (about 60 tool calls) and writes its report file before long trials: in cycle 60 it ran out of turns and had to be resumed.
