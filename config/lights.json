@@ -1,0 +1,9 @@
+{
+  "_comment": "Lights: small WS2812B LEDs in the housing, one per session in the bar's order (pi/README.md, Lights). Off by default. Read at server start, only when the server is started with --lights-config (pi/revview.service does); the Settings row \"Lights\" turns them on or off until the server restarts. Untested on hardware.",
+  "lights": "off",
+  "leds": 8,
+  "driver": "ws2812-spi",
+  "device": "/dev/spidev0.0",
+  "brightness": { "day": 48, "night": 12 },
+  "_comment_brightness": "The cap of each colour channel out of 255 (at most 64): about 20 mA per channel at 255, so 48 gives at most about 11 mA per LED. Night (the night look) uses the night value."
+}
