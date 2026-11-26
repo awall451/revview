@@ -81,7 +81,8 @@ const NAV_ROWS = 6;
 const NAV_TITLES = { list: 'SESSIONS', menu: 'MENU', new: 'NEW SESSION: CHOOSE A PROJECT', projects: 'PROJECTS', settings: 'SETTINGS (READ ONLY)' };
 const NAV_EMPTY = { list: 'No sessions', new: 'No projects: add paths to the projects file', projects: 'No projects: add paths to the projects file' };
 // chip colours: the band colour of the state (view.css has the same values per body[data-view])
-const CHIP = { working: '#5eb1ff', waiting: '#c8a2ff', permission: '#ffb020', asking: '#e6f25a', done: '#4fdc7a', unknown: '#5ce1e6' };
+// CSS variables (view.css): the day and night looks give them their colours
+const CHIP = Object.fromEntries(['working', 'waiting', 'permission', 'asking', 'done', 'unknown'].map((k) => [k, `var(--chip-${k})`]));
 
 const $ = (id) => document.getElementById(id);
 const str = (v) => (typeof v === 'string' ? v : '');
@@ -237,11 +238,22 @@ function cleanState(s) {
   return s;
 }
 
+const LOOK_KEY = 'revview.look';
+let liveLook = false; // live mode remembers the last look in localStorage; static mode (?fixture, ?state) ignores it
+function setLook(look) {
+  document.documentElement.dataset.look = look;
+  if (liveLook) {
+    try { localStorage.setItem(LOOK_KEY, look); } catch { /* storage may be unavailable */ }
+  }
+}
+
 export function render(input) {
   const s = cleanState(input);
   const view = s.view;
   const note = Object.hasOwn(NOTES, view) || view === 'offline';
 
+  const look = input && typeof input === 'object' ? input.look : undefined; // not part of the cleaned state
+  if (look === 'day' || look === 'night') setLook(look); // any other value leaves the current look (NO LINK after a lost link keeps it)
   el.shape.innerHTML = SHAPES[view];
   el.shape.dataset.shape = view;
   set(el['state-word'], LABELS[view]);
@@ -745,6 +757,7 @@ async function loadStatic(q) {
 }
 
 const root = document.documentElement;
+const query = new URLSearchParams(location.search);
 
 // Live: the server pushes {seq, now, state} on /events. A dead link shows "no link", never a stale state.
 function live() {
@@ -793,11 +806,18 @@ function live() {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
+document.documentElement.dataset.look = 'day';
+if (!query.has('fixture') && !query.has('state')) {
+  liveLook = true;
+  try {
+    const last = localStorage.getItem(LOOK_KEY);
+    if (last === 'day' || last === 'night') document.documentElement.dataset.look = last;
+  } catch { /* storage may be unavailable */ }
+}
 window.revviewRender = render;
 applyTypeSizes();
 await document.fonts.ready;
 applyTypeSizes();
-const query = new URLSearchParams(location.search);
 if (query.has('fixture') || query.has('state')) {
   root.dataset.link = 'static';
   render(await loadStatic(query));

@@ -12,15 +12,20 @@
   --state-font: 55px;
   --detail-font: 32px;
   --sans: "DejaVu Sans", "WenQuanYi Zen Hei", "IPAGothic", sans-serif;
+  --page: #000; /* day; ?look=night sets data-look on <html> (same values as src/view/view.css) */
+  --fg: #fff;
+  --nolink-bg: #000;
+  --nolink-fg: #fff;
 }
-html, body { margin: 0; width: 1280px; height: 400px; overflow: hidden; background: #000; }
+:root[data-look="night"] { --fg: #c87a30; --nolink-fg: #d98a3a; }
+html, body { margin: 0; width: 1280px; height: 400px; overflow: hidden; background: var(--page); }
 body {
   display: flex;
   flex-direction: column;
   font-family: var(--sans);
   font-size: var(--detail-font);
   line-height: 1.2;
-  color: #fff;
+  color: var(--fg);
 }
 #band {
   flex: none;
@@ -30,9 +35,9 @@ body {
   display: flex;
   align-items: center;
   gap: 0.25em;
-  background: #000;
-  color: #fff;
-  border: 4.04px solid #fff;
+  background: var(--nolink-bg);
+  color: var(--nolink-fg);
+  border: 4.04px solid var(--nolink-fg);
   font-size: var(--detail-font);
 }
 #shape { flex: none; width: calc(var(--state-font) * 0.72); height: calc(var(--state-font) * 0.72); }
@@ -84,6 +89,8 @@ body {
   }
   sizes();
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(sizes);
+
+  if (/[?&]look=night(?:&|$)/.test(location.search)) document.documentElement.dataset.look = 'night';
 
   var m = /[?&]port=(\d+)(?:&|$)/.exec(location.search);
   var port = m && +m[1] >= 1 && +m[1] <= 65535 ? +m[1] : 8138;

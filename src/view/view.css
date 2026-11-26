@@ -7,35 +7,103 @@
   --diff-font: 32px;
   --sans: "DejaVu Sans", "WenQuanYi Zen Hei", "IPAGothic", sans-serif;
   --mono: "DejaVu Sans Mono", "WenQuanYi Zen Hei Mono", "IPAGothic", monospace;
+  /* The colours: DAY values here, the night look overrides them below (one attribute, data-look on <html>, set by view.js). */
+  --page: #000;
+  --fg: #fff;
   --grey: #b8b8b8;
+  --strong: #fff;
   --band: #b0b0b0;
+  --band-fg: #000;
+  --b-working: #5eb1ff;
+  --b-waiting: #c8a2ff;
+  --b-permission: #ffb020;
+  --b-asking: #e6f25a;
+  --b-done: #4fdc7a;
+  --b-starting: #e0e0e0;
+  --b-offline: #ff6b6b;
+  --b-insert-key: #ff8ad8;
+  --b-unknown: #5ce1e6;
+  --b-ended: #d8c28a;
+  --b-none: #b0b0b0;
+  --nolink-bg: #000;
+  --nolink-fg: #fff;
+  --diff-add: #5fe08a;
+  --diff-del: #ff7a7a;
+  --sel-bg: #fff;
+  --sel-fg: #000;
+  --sel-dim: #444;
+  --ask-bg: #e6f25a;
+  --ask-fg: #000;
+  --ask-outline: #fff;
+  --chip-working: #5eb1ff;
+  --chip-waiting: #c8a2ff;
+  --chip-permission: #ffb020;
+  --chip-asking: #e6f25a;
+  --chip-done: #4fdc7a;
+  --chip-unknown: #5ce1e6;
+}
+/* Night: black page, dim amber type, dark tints for the bands, nothing bright and large. The shapes are drawn in currentColor, so
+   every state is still told apart by shape, word and place, not by colour. */
+:root[data-look="night"] {
+  --page: #000;
+  --fg: #c87a30;
+  --grey: #a8641f;
+  --strong: #f0a050;
+  --band-fg: #d98a3a;
+  --b-working: #0a1a2a;
+  --b-waiting: #1a1030;
+  --b-permission: #2e1c00;
+  --b-asking: #1c1f04;
+  --b-done: #07200f;
+  --b-starting: #1c1c1c;
+  --b-offline: #2a0a0a;
+  --b-insert-key: #2a0a22;
+  --b-unknown: #052024;
+  --b-ended: #1f1a0c;
+  --b-none: #181818;
+  --nolink-bg: #000;
+  --nolink-fg: #d98a3a;
+  --diff-add: #3fa060;
+  --diff-del: #d0605a;
+  --sel-bg: #b46c24;
+  --sel-fg: #0a0500;
+  --sel-dim: #1a0c00;
+  --ask-bg: #b46c24;
+  --ask-fg: #0a0500;
+  --ask-outline: #d98a3a;
+  --chip-working: #3a78b8;
+  --chip-waiting: #8a68c0;
+  --chip-permission: #c88418;
+  --chip-asking: #a8b030;
+  --chip-done: #3a9a58;
+  --chip-unknown: #38a0a4;
 }
 [hidden] { display: none !important; }
-html, body { margin: 0; width: 1280px; height: 400px; overflow: hidden; background: #000; }
+html, body { margin: 0; width: 1280px; height: 400px; overflow: hidden; background: var(--page); }
 body {
   display: flex;
   flex-direction: column;
   font-family: var(--sans);
   font-size: var(--detail-font);
   line-height: 1.2;
-  color: #fff;
+  color: var(--fg);
 }
-body[data-view="working"] { --band: #5eb1ff; }
-body[data-view="waiting"] { --band: #c8a2ff; }
-body[data-view="permission"] { --band: #ffb020; }
-body[data-view="asking"] { --band: #e6f25a; }
-body[data-view="done"] { --band: #4fdc7a; }
-body[data-view="starting"] { --band: #e0e0e0; }
-body[data-view="offline"] { --band: #ff6b6b; }
-body[data-view="insert-key"] { --band: #ff8ad8; }
-body[data-view="unknown"] { --band: #5ce1e6; }
-body[data-view="ended"] { --band: #d8c28a; }
-body[data-view="none"] { --band: #b0b0b0; }
+body[data-view="working"] { --band: var(--b-working); }
+body[data-view="waiting"] { --band: var(--b-waiting); }
+body[data-view="permission"] { --band: var(--b-permission); }
+body[data-view="asking"] { --band: var(--b-asking); }
+body[data-view="done"] { --band: var(--b-done); }
+body[data-view="starting"] { --band: var(--b-starting); }
+body[data-view="offline"] { --band: var(--b-offline); }
+body[data-view="insert-key"] { --band: var(--b-insert-key); }
+body[data-view="unknown"] { --band: var(--b-unknown); }
+body[data-view="ended"] { --band: var(--b-ended); }
+body[data-view="none"] { --band: var(--b-none); }
 /* no-link is inverted (black band, white word, shape and outline) so no coloured state can look like it */
 body[data-view="no-link"] #band {
-  --band: #000;
-  color: #fff;
-  border: 4.04px solid #fff; /* 0.6 mm at 1280/190 px/mm; inside the band (border-box) */
+  --band: var(--nolink-bg);
+  color: var(--nolink-fg);
+  border: 4.04px solid var(--nolink-fg); /* 0.6 mm at 1280/190 px/mm; inside the band (border-box) */
 }
 
 #band {
@@ -47,7 +115,7 @@ body[data-view="no-link"] #band {
   align-items: center;
   gap: 0.25em;
   background: var(--band);
-  color: #000;
+  color: var(--band-fg);
   font-size: var(--detail-font);
 }
 #shape { flex: none; width: calc(var(--state-font) * 0.72); height: calc(var(--state-font) * 0.72); }
@@ -168,7 +236,7 @@ span:empty { display: none; }
 /* task progress "tasks 3/7" at the right end of row A, before the diff: never shrinks, the file gives way */
 #line2 > #tasks { flex: none; overflow: visible; margin-left: auto; display: flex; gap: 0.3em; }
 #tasks-word { color: var(--grey); }
-#tasks-count { font-weight: 700; color: #fff; }
+#tasks-count { font-weight: 700; color: var(--strong); }
 #session:not([hidden]) + #tasks { margin-left: 0.8em; }
 #tasks:not([hidden]) ~ #ask-meta, #tasks:not([hidden]) ~ #diff { margin-left: 0.8em; }
 #diff {
@@ -178,9 +246,9 @@ span:empty { display: none; }
   font-size: var(--diff-font);
   font-weight: 700;
 }
-#diff-approx { color: #fff; margin-right: 0.3em; } /* "≥": the counts are a lower bound */
-#diff-added { color: #5fe08a; }
-#diff-removed { color: #ff7a7a; margin-left: 0.4em; }
+#diff-approx { color: var(--strong); margin-right: 0.3em; } /* "≥": the counts are a lower bound */
+#diff-added { color: var(--diff-add); }
+#diff-removed { color: var(--diff-del); margin-left: 0.4em; }
 
 /* note2 (note views) or the command: rows of 40 px; view.js cuts the command with an ellipsis at the end of its
    last allowed row (6 minus the output rows shown). No fixed heights: an empty part takes no room. */
@@ -213,7 +281,7 @@ span:empty { display: none; }
 }
 #ask-options { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 24px; }
 .ask-opt { height: 40px; display: flex; gap: 0.4em; min-width: 0; }
-.ask-chosen { background: #e6f25a; color: #000; outline: 3px solid #fff; outline-offset: -3px; padding: 0 8px; box-sizing: border-box; }
+.ask-chosen { background: var(--ask-bg); color: var(--ask-fg); outline: 3px solid var(--ask-outline); outline-offset: -3px; padding: 0 8px; box-sizing: border-box; }
 .ask-n { flex: none; font-weight: 700; }
 .ask-t { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #ask-steps, #ask-hint { flex: none; height: 40px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -232,7 +300,7 @@ span:empty { display: none; }
 }
 #offline-note, #voice-note { color: var(--grey); }
 /* under CLAUDE ASKS a board note is the outcome of a press ("Not sent"): white and bold, not one more grey hint row */
-body[data-view="asking"] #voice-note[data-board] { color: #fff; font-weight: 700; }
+body[data-view="asking"] #voice-note[data-board] { color: var(--strong); font-weight: 700; }
 /* the failed turn's message: wraps over the free rows (view.js cuts it with an ellipsis beyond them) */
 #outarea > #out3[data-wrap] { height: auto; white-space: normal; overflow-wrap: anywhere; overflow: visible; }
 
@@ -259,24 +327,24 @@ body[data-view="asking"] #voice-note[data-board] { color: #fff; font-weight: 700
   font-weight: 700;
 }
 #nav .title #nav-title { flex: 1 1 0; white-space: nowrap; }
-#nav .more { flex: none; width: 24px; height: 24px; display: block; color: #fff; }
+#nav .more { flex: none; width: 24px; height: 24px; display: block; color: var(--fg); }
 #nav .chev { width: 24px; height: 24px; display: block; }
 #nav .row { flex: none; height: 40px; display: flex; align-items: stretch; }
 #nav .bar { display: block; flex: none; width: 14px; margin-right: 10px; }
 #nav .body { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 16px; padding: 0 14px; }
-#nav .row[data-selected="true"] .bar { background: #fff; }
-#nav .row[data-selected="true"] .body { background: #fff; color: #000; }
+#nav .row[data-selected="true"] .bar { background: var(--sel-bg); }
+#nav .row[data-selected="true"] .body { background: var(--sel-bg); color: var(--sel-fg); }
 #nav .chip { display: block; flex: none; width: 22px; height: 22px; box-sizing: border-box; border: 2px solid currentColor; }
 #nav .label { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; }
 #nav .label.proj { display: flex; align-items: baseline; }
 #nav .label.proj .base { flex: none; max-width: calc(100% - 16px); overflow: hidden; font-weight: 700; }
 #nav .label.proj .dir { flex: 1 1 0; min-width: 0; margin-left: 16px; overflow: hidden; white-space: nowrap; color: var(--grey); }
-#nav .row[data-selected="true"] .label.proj .dir { color: #444; }
+#nav .row[data-selected="true"] .label.proj .dir { color: var(--sel-dim); }
 #nav .word { flex: none; font-weight: 700; white-space: nowrap; }
-#nav .row-mic { --band: #000; flex: none; width: 1.1em; height: 1.1em; display: block; }
-#nav .row[data-selected="true"] .row-mic { --band: #fff; }
+#nav .row-mic { --band: var(--page); flex: none; width: 1.1em; height: 1.1em; display: block; }
+#nav .row[data-selected="true"] .row-mic { --band: var(--sel-bg); }
 #nav .mic { width: 100%; height: 100%; display: block; }
 
 /* "Denied: Bash" / "Allowed: Bash" on the tool row: revview's own answer, said in words */
-#tool[data-answer] { font-weight: 700; color: #fff; }
-#tool[data-failed] { font-weight: 700; color: #fff; }
+#tool[data-answer] { font-weight: 700; color: var(--strong); }
+#tool[data-failed] { font-weight: 700; color: var(--strong); }

@@ -1,7 +1,7 @@
 // The quiet HOT and LOW POWER tags: board-level marks (the box, not a session), never a state takeover.
 import fs from 'node:fs';
 import path from 'node:path';
-import { test, expect, shotsDir } from './harness.js';
+import { test, expect, shotsDir, shootBoth } from './harness.js';
 import { FIXTURE_IDS, loadFixture } from '../fixtures.js';
 import { loadWorstCase, asPermission } from '../worst-case.js';
 import { expectFits, checkContrastAndFloor } from './checks.js';
@@ -159,7 +159,7 @@ for (const id of FIXTURE_IDS.filter((v) => !NO_TAG.has(v))) {
 test('screenshot thermal-tags is 1280x400', async ({ openView, page }) => {
   const file = path.join(shotsDir(), 'thermal-tags.png');
   await openView({ ...worst });
-  await page.screenshot({ path: file });
+  await shootBoth(page, path.basename(file, '.png'));
   const b = fs.readFileSync(file);
   expect([b.readUInt32BE(16), b.readUInt32BE(20)]).toEqual([1280, 400]);
 });

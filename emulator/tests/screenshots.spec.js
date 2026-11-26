@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { test, expect, shotsDir } from './harness.js';
+import { test, expect, shotsDir, shootBoth } from './harness.js';
 import { expectFits } from './checks.js';
 import { startLiveServer } from '../../src/server/index.js';
 import { FIXTURE_IDS, loadFixture } from '../fixtures.js';
@@ -23,7 +23,7 @@ for (const id of FIXTURE_IDS) {
     await openView(id);
     await expect(page.locator('body')).toHaveAttribute('data-view', loadFixture(id).view);
     await expect(page.locator('html')).toHaveAttribute('data-rendered', /\S/);
-    await page.screenshot({ path: file });
+    await shootBoth(page, path.basename(file, '.png'));
     expectPng1280x400(file);
   });
 }
@@ -32,7 +32,7 @@ test('screenshot compacting (WORKING while Claude compacts its context) is 1280x
   const file = path.join(shotsDir(), 'compacting.png');
   await openView('compacting');
   await expect(page.locator('#tool')).toHaveText('Compacting context');
-  await page.screenshot({ path: file });
+  await shootBoth(page, path.basename(file, '.png'));
   expectPng1280x400(file);
 });
 
@@ -41,7 +41,7 @@ test('screenshot thermal (WORKING with the HOT and LOW POWER tags) is 1280x400',
   await openView('thermal');
   await expect(page.locator('#hot-tag')).toBeVisible();
   await expect(page.locator('#power-tag')).toBeVisible();
-  await page.screenshot({ path: file });
+  await shootBoth(page, path.basename(file, '.png'));
   expectPng1280x400(file);
 });
 
@@ -50,7 +50,7 @@ test('screenshot more-sessions (others and a lower-bound diff) is 1280x400', asy
   await openView({ ...loadFixture('working'), others: 2, diffIncomplete: true });
   await expect(page.locator('#others')).toHaveText('+2');
   await expect(page.locator('#diff-approx')).toBeVisible();
-  await page.screenshot({ path: file });
+  await shootBoth(page, path.basename(file, '.png'));
   expectPng1280x400(file);
 });
 
@@ -60,7 +60,7 @@ test('screenshot last-session-ended (r7-01 note) is 1280x400 and the note fits',
   await openView({ view: 'unknown', voice: 'no-session', note });
   await expect(page.locator('#note1')).toHaveText(note);
   await expectFits(page);
-  await page.screenshot({ path: file });
+  await shootBoth(page, path.basename(file, '.png'));
   expectPng1280x400(file);
   // the longest label the reducer lets through for this note (80 characters)
   await openView({ view: 'unknown', voice: 'no-session', note: `${'W'.repeat(80)} ended: open the menu for New session` });
@@ -79,6 +79,14 @@ test('screenshot boot page is 1280x400', async ({ page }) => {
   await page.evaluate(() => document.fonts.ready);
   await page.screenshot({ path: file });
   expectPng1280x400(file);
+  // the night look of the boot page comes from its query, not from view.js
+  const nightFile = path.join(shotsDir(), 'night-boot.png');
+  await page.goto(`file://${boot}?port=${port}&look=night`);
+  await expect(page.locator('#state-word')).toHaveText('NO LINK');
+  await expect(page.locator('html')).toHaveAttribute('data-look', 'night');
+  await page.evaluate(() => document.fonts.ready);
+  await page.screenshot({ path: nightFile });
+  expectPng1280x400(nightFile);
 });
 
 for (const wc of WORST_CASE_IDS) {
@@ -90,7 +98,7 @@ for (const wc of WORST_CASE_IDS) {
       await expect(page.locator('body')).toHaveAttribute('data-view', view);
       if (view === 'permission') await expect(page.locator('#cmdbox')).toBeHidden(); // none of the worst cases is a Bash tool
       await expect(page.locator('html')).toHaveAttribute('data-rendered', view);
-      await page.screenshot({ path: file });
+      await shootBoth(page, path.basename(file, '.png'));
       expectPng1280x400(file);
     });
   }
@@ -102,7 +110,7 @@ test('screenshot asking-plan (CLAUDE ASKS, a plan to approve) is 1280x400', asyn
   await expect(page.locator('body')).toHaveAttribute('data-view', 'asking');
   await expect(page.locator('#ask-steps')).toBeVisible();
   await expectFits(page);
-  await page.screenshot({ path: file });
+  await shootBoth(page, path.basename(file, '.png'));
   expectPng1280x400(file);
 });
 
@@ -115,7 +123,7 @@ for (const [id, hint, chosen] of [['asking-choice', 'Allow picks · Deny cancels
     if (chosen !== null) await expect(page.locator(chosen)).toHaveAttribute('data-chosen', 'true');
     else await expect(page.locator('[data-chosen]')).toHaveCount(0);
     await expectFits(page);
-    await page.screenshot({ path: file });
+    await shootBoth(page, path.basename(file, '.png'));
     expectPng1280x400(file);
   });
 }
@@ -128,7 +136,7 @@ test('screenshot asking-long (CLAUDE ASKS, worst case) is 1280x400', async ({ op
   await expect(page.locator('#ask-t4')).toBeVisible();
   await expect(page.locator('#ask-question')).toHaveAttribute('data-full', content.ask.question);
   await expectFits(page);
-  await page.screenshot({ path: file });
+  await shootBoth(page, path.basename(file, '.png'));
   expectPng1280x400(file);
 });
 
@@ -138,7 +146,7 @@ test('screenshot permission-offline (needs the driver, no network) is 1280x400',
   await openView({ ...loadFixture('permission'), offline: true, tool: 'Bash', command, others: 1 });
   await expect(page.locator('#state-word')).toHaveText('NEEDS PERMISSION');
   await expect(page.locator('#offline-note')).toBeVisible();
-  await page.screenshot({ path: file });
+  await shootBoth(page, path.basename(file, '.png'));
   expectPng1280x400(file);
 });
 
@@ -165,7 +173,7 @@ for (const [id, base, extra, check] of [
     await openView({ ...loadFixture(base), ...timed(754000), ...extra });
     await check(page);
     await expectFits(page);
-    await page.screenshot({ path: file });
+    await shootBoth(page, path.basename(file, '.png'));
     expectPng1280x400(file);
   });
 }
@@ -177,6 +185,6 @@ test('screenshot quiet (WORKING 1h05, QUIET 7 MIN, tasks) is 1280x400', async ({
   await expect(page.locator('#quiet-tag')).toHaveText('QUIET 7 MIN');
   await expect(page.locator('#tasks-count')).toHaveText('3/7');
   await expectFits(page);
-  await page.screenshot({ path: file });
+  await shootBoth(page, path.basename(file, '.png'));
   expectPng1280x400(file);
 });

@@ -1,8 +1,7 @@
 // WB4: the bar's new looks (mic mark and position, shown-is-not-target notes, prompt elsewhere, list and menu).
 // Every state comes from the real board (emulator/wb4/recipes.js); one 1280x400 screenshot per look.
 import fs from 'node:fs';
-import path from 'node:path';
-import { test, expect, shotsDir } from './harness.js';
+import { test, expect, shotsDir, shootBoth } from './harness.js';
 import { expectFits, checkContrastAndFloor } from './checks.js';
 import { textSizeMm } from '../mm.js';
 import { RANGE_MM } from '../../src/view/type.js';
@@ -15,10 +14,7 @@ test.beforeAll(() => {
 });
 
 async function shot(page, name) {
-  const file = path.join(shotsDir(), `${name}.png`);
-  await page.screenshot({ path: file });
-  const b = fs.readFileSync(file);
-  expect([b.readUInt32BE(16), b.readUInt32BE(20)]).toEqual([1280, 400]);
+  await shootBoth(page, name);
 }
 
 const rect = (page, sel) => page.locator(sel).evaluate((e) => {

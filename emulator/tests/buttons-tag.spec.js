@@ -1,7 +1,7 @@
 // The quiet NO BUTTONS tag: shown only when the wheel buttons are known to be missing, never a state takeover.
 import fs from 'node:fs';
 import path from 'node:path';
-import { test, expect, shotsDir } from './harness.js';
+import { test, expect, shotsDir, shootBoth } from './harness.js';
 import { FIXTURE_IDS, loadFixture } from '../fixtures.js';
 import { expectFits, checkContrastAndFloor } from './checks.js';
 import { textSizeMm } from '../mm.js';
@@ -94,7 +94,7 @@ test('screenshot no-buttons is 1280x400', async ({ openView, page }) => {
   const file = path.join(shotsDir(), 'no-buttons.png');
   await openView({ ...loadFixture('working'), buttons: 'missing' });
   await expect(page.locator('#buttons-tag')).toBeVisible();
-  await page.screenshot({ path: file });
+  await shootBoth(page, path.basename(file, '.png'));
   const b = fs.readFileSync(file);
   expect([b.readUInt32BE(16), b.readUInt32BE(20)]).toEqual([1280, 400]);
 });
@@ -103,7 +103,7 @@ test('screenshot no-buttons-permission (worst band) is 1280x400', async ({ openV
   const file = path.join(shotsDir(), 'no-buttons-permission.png');
   await openView({ ...worst, buttons: 'missing' });
   await expect(page.locator('#buttons-tag')).toBeVisible();
-  await page.screenshot({ path: file });
+  await shootBoth(page, path.basename(file, '.png'));
   const b = fs.readFileSync(file);
   expect([b.readUInt32BE(16), b.readUInt32BE(20)]).toEqual([1280, 400]);
 });
