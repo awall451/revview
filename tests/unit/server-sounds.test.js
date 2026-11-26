@@ -277,6 +277,7 @@ test('a question that closes unanswered (Esc) leaves the bar without a cue; the 
   const q = asking(A);
   await c.ev(q[1]);
   await c.ev(q[2]);
+  const { AbortController } = globalThis;
   const ac = new AbortController();
   fetch(`${c.s.url}/permission`, { method: 'POST', body: JSON.stringify(q[3]), signal: ac.signal }).catch(() => {});
   await until(() => c.s.state().view === 'asking', 'the asking view');
