@@ -13,6 +13,6 @@
     { "key": "R", "button": "read-aloud", "hold": true },
     { "key": "Esc", "button": "cancel", "longHold": true },
     { "key": "N", "button": "deny" },
-    { "key": "M", "button": "menu" }
+    { "key": "M", "button": "menu", "hold": true }
   ]
 }

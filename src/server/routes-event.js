@@ -11,7 +11,7 @@ const DIFF_TOOLS = ['Edit', 'Write', 'MultiEdit']; // the only tools whose PostT
 const BUTTON_RE = /^[a-z][a-z0-9-]{0,31}$/;
 const GESTURES = ['tap', 'hold', 'long-hold'];
 // made only by revview itself (the actions, the boot path): no POST may forge them, not even under --dev-bridge
-const INTERNAL_EVENTS = ['RevviewInterrupted', 'RevviewAnswered', 'RevviewAskGone', 'RevviewSelect', 'RevviewNav', 'RevviewOwned', 'RevviewProjects', 'RevviewNote', 'RevviewBootBegin', 'RevviewBootDone', 'RevviewLaunching', 'RevviewLaunchExpired', 'RevviewNoSessionPress', 'RevviewCompactExpired', 'RevviewEndReason', 'RevviewThermal', 'RevviewSounds', 'RevviewQuiet'];
+const INTERNAL_EVENTS = ['RevviewInterrupted', 'RevviewAnswered', 'RevviewAskGone', 'RevviewSelect', 'RevviewNav', 'RevviewOwned', 'RevviewProjects', 'RevviewNote', 'RevviewBootBegin', 'RevviewBootDone', 'RevviewLaunching', 'RevviewLaunchExpired', 'RevviewNoSessionPress', 'RevviewCompactExpired', 'RevviewEndReason', 'RevviewThermal', 'RevviewSounds', 'RevviewLook', 'RevviewLookClock', 'RevviewQuiet'];
 
 // A body over the limit that still looks like a hook event means an event was lost (QA issue 11).
 export function noteDropped(ctx, prefix) {

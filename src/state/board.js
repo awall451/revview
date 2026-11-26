@@ -34,6 +34,8 @@ export function initialBoard() {
     note: null, // the bottom note row: null or { kind, text } (see NOTE_RULES); cleared by the driver's next gesture
     projects: [], // project paths from the config file (display only)
     sounds: null, // null = the server has no sound feature; else 'off' | 'cues' | 'speech' (cues and speech), RevviewSounds
+    look: 'day', // 'day' | 'night' | 'auto' (absent/null = day), RevviewLook (the Settings row, the menu hold)
+    lookNight: false, // the clock says night now (absent = false): set only by the server's clock monitor, RevviewLookClock
   };
 }
 
@@ -44,11 +46,18 @@ export function initialBoard() {
 const MAX_LAUNCHING = 8;
 const NAV_KINDS = ['list', 'menu', 'new', 'projects', 'settings'];
 const MENU_ROWS = ['New session', 'Projects', 'Settings'];
-const SETTINGS_ROWS = 4; // the fixed rows; a 5th (Sounds) is there while b.sounds is not null
+const SETTINGS_ROWS = 4; // the fixed rows; then Sounds (while b.sounds is not null), then Look (always, the last row)
 const SOUNDS_MODES = ['off', 'cues', 'speech'];
 const SOUNDS_NEXT = { cues: 'speech', speech: 'off', off: 'cues' };
 const SOUNDS_LABELS = { off: 'Sounds: off', cues: 'Sounds: cues', speech: 'Sounds: cues and speech' };
 const soundsOn = (b) => SOUNDS_MODES.includes(b.sounds);
+const LOOK_MODES = ['day', 'night', 'auto'];
+const LOOK_NEXT = { day: 'night', night: 'auto', auto: 'day' };
+const lookOf = (b) => (LOOK_MODES.includes(b.look) ? b.look : 'day');
+// the effective look: always exactly 'day' or 'night'
+const effectiveLook = (b) => { const m = lookOf(b); return m === 'night' || (m === 'auto' && b.lookNight === true) ? 'night' : 'day'; };
+const lookLabel = (b) => { const m = lookOf(b); return m === 'auto' ? `Look: auto, ${b.lookNight === true ? 'night' : 'day'} now` : `Look: ${m}`; };
+const lookRow = (b) => SETTINGS_ROWS + (soundsOn(b) ? 1 : 0); // the Look row is the last settings row
 
 function isValidSession(s) {
   return isObj(s) && isObj(s.state) && typeof s.state.activity === 'string' && isObj(s.state.diff)
@@ -64,6 +73,8 @@ function isValidBoard(b) {
     && (b.spokenTo === null || typeof b.spokenTo === 'string')
     && (b.buttons === null || typeof b.buttons === 'boolean')
     && (b.sounds === undefined || b.sounds === null || SOUNDS_MODES.includes(b.sounds))
+    && (b.look === undefined || b.look === null || LOOK_MODES.includes(b.look))
+    && (b.lookNight === undefined || typeof b.lookNight === 'boolean')
     && (b.hot === undefined || typeof b.hot === 'boolean') && (b.lowPower === undefined || typeof b.lowPower === 'boolean')
     && (b.selected === null || typeof b.selected === 'string') && (b.want === null || typeof b.want === 'string')
     && (b.owned === null || (Array.isArray(b.owned) && b.owned.every((x) => typeof x === 'string')))
@@ -460,7 +471,7 @@ const NAV_GESTURES = new Set(['tap', 'hold', 'long-hold']);
 function navRows(b, kind) {
   if (kind === 'list') return orderOf(b).length;
   if (kind === 'menu') return MENU_ROWS.length;
-  if (kind === 'settings') return SETTINGS_ROWS + (soundsOn(b) ? 1 : 0);
+  if (kind === 'settings') return lookRow(b) + 1;
   return b.projects.length;
 }
 const clampRow = (row, rows) => (rows === 0 ? 0 : Math.min(row, rows - 1));
@@ -485,6 +496,8 @@ function reduceNav(b, event) {
   if (button === 'timeout') return b.nav === null ? b : { ...b, nav: null };
   const gesture = event.gesture;
   if (!NAV_GESTURES.has(gesture)) return b;
+  // a menu hold flips the effective look (leaving auto); it never opens, closes or moves a list or menu
+  if (button === 'menu' && gesture === 'hold') return { ...b, look: effectiveLook(b) === 'night' ? 'day' : 'night' };
   const tap = gesture === 'tap';
   const order = orderOf(b);
   const n = order.length;
@@ -540,6 +553,7 @@ function reduceNav(b, event) {
     if (kind === 'menu') return go({ kind: ['new', 'projects', 'settings'][row], row: 0 });
     if (kind === 'new') return go(null);
     if (kind === 'settings' && row === SETTINGS_ROWS && soundsOn(b)) return { ...b, sounds: SOUNDS_NEXT[b.sounds], nav: { kind, row } };
+    if (kind === 'settings' && row === lookRow(b)) return { ...b, look: LOOK_NEXT[lookOf(b)], nav: { kind, row } };
   }
   return b;
 }
@@ -560,6 +574,10 @@ function reduceInner(b, event) {
       return typeof event.present === 'boolean' && b.buttons !== event.present ? { ...b, buttons: event.present } : b;
     case 'RevviewSounds':
       return SOUNDS_MODES.includes(event.mode) && b.sounds !== event.mode ? { ...b, sounds: event.mode } : b;
+    case 'RevviewLook':
+      return LOOK_MODES.includes(event.mode) && b.look !== event.mode ? { ...b, look: event.mode } : b;
+    case 'RevviewLookClock':
+      return typeof event.night === 'boolean' && (b.lookNight === true) !== event.night ? { ...b, lookNight: event.night } : b;
     case 'RevviewThermal': { // the box's heat / supply, board-level; a non-boolean field keeps its old value
       const hot = typeof event.hot === 'boolean' ? event.hot : b.hot === true;
       const lowPower = typeof event.lowPower === 'boolean' ? event.lowPower : b.lowPower === true;
@@ -1028,6 +1046,7 @@ function navView(b) {
       `Projects: ${b.projects.length} in the config file`,
     ].map((label) => ({ label }));
     if (soundsOn(b)) rows.push({ label: SOUNDS_LABELS[b.sounds], change: true });
+    rows.push({ label: lookLabel(b), change: true });
   } else {
     const gone = kind === 'new' ? b.projectsMissing ?? [] : [];
     rows = b.projects.map((label) => (gone.includes(label) ? { label, missing: true } : { label }));
@@ -1098,6 +1117,7 @@ export function boardView(board) {
       buttons,
       hot: b.hot === true,
       lowPower: b.lowPower === true,
+      look: effectiveLook(b),
       since: null,
       quietSince: null,
       tasks: null,
@@ -1140,6 +1160,7 @@ export function boardView(board) {
     buttons,
     hot: b.hot === true,
     lowPower: b.lowPower === true,
+    look: effectiveLook(b),
     since: shown.since ?? null,
     quietSince: activity === 'working' && classOf(shown) === 'working' ? shown.quietAt ?? null : null,
     tasks: tasksOf(shown),

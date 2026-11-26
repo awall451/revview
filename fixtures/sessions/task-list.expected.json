@@ -25,6 +25,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": null,
@@ -62,6 +63,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": null,
@@ -99,6 +101,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": null,
@@ -136,6 +139,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": null,
@@ -173,6 +177,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": null,
@@ -210,6 +215,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": null,
@@ -247,6 +253,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": null,
@@ -284,6 +291,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -324,6 +332,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -364,6 +373,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -404,6 +414,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -444,6 +455,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -484,6 +496,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -524,6 +537,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -564,6 +578,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -604,6 +619,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -644,6 +660,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -684,6 +701,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -724,6 +742,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -764,6 +783,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -804,6 +824,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -846,6 +867,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -888,6 +910,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -930,6 +953,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -972,6 +996,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -1014,6 +1039,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -1056,6 +1082,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -1098,6 +1125,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -1138,6 +1166,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -1180,6 +1209,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -1222,6 +1252,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -1264,6 +1295,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -1306,6 +1338,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -1348,6 +1381,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -1390,6 +1424,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -1432,6 +1467,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -1472,6 +1508,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -1514,6 +1551,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -1556,6 +1594,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -1598,6 +1637,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -1640,6 +1680,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -1682,6 +1723,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -1724,6 +1766,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -1766,6 +1809,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -1806,6 +1850,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -1848,6 +1893,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -1890,6 +1936,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -1932,6 +1979,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -1974,6 +2022,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -2016,6 +2065,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -2058,6 +2108,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -2100,6 +2151,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -2142,6 +2194,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -2184,6 +2237,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -2226,6 +2280,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -2268,6 +2323,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -2310,6 +2366,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -2352,6 +2409,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -2394,6 +2452,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": {
@@ -2434,6 +2493,7 @@
       "buttons": "unknown",
       "hot": false,
       "lowPower": false,
+      "look": "day",
       "since": null,
       "quietSince": null,
       "tasks": null,

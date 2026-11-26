@@ -124,7 +124,7 @@ test('shipped config/buttons.json matches the BUTTONS.md table', () => {
     ['F13', 'push-to-talk', false, false], ['F14', 'read-aloud', true, false], ['F15', 'cancel', false, true],
     ['F16', 'deny', false, false], ['F17', 'up', false, false], ['F18', 'down', false, false],
     ['F19', 'left', false, false], ['F20', 'right', false, false], ['F21', 'press', false, false],
-    ['F22', 'back', true, false], ['F23', 'menu', false, false], ['F24', 'spare', false, false],
+    ['F22', 'back', true, false], ['F23', 'menu', true, false], ['F24', 'spare', false, false],
   ];
   assert.deepEqual(c.bindings.map((b) => [b.keyName, b.button, b.hold, b.longHold]), expect);
   assert.ok(c.bindings.every((b) => b.mods.length === 0));

@@ -145,7 +145,7 @@ test('mode change through the Settings row: off to cues to speech decides what t
   await sleep(200);
   assert.deepEqual(cues(c.cueDir), []);
   await cycle(c); // off -> cues
-  assert.equal(c.s.state().nav.rows.at(-1).label, 'Sounds: cues');
+  assert.equal(c.s.state().nav.rows.at(-2).label, 'Sounds: cues');
   await c.ev({ hook_event_name: 'UserPromptSubmit', session_id: B, prompt: 'x' });
   await c.ev(stop(B));
   await until(() => cues(c.cueDir).length === 1, 'an other cue in cues mode');
@@ -155,7 +155,7 @@ test('mode change through the Settings row: off to cues to speech decides what t
 
 test('speech mode: the Stop of the selected session is spoken after its cue ended', T, () => withServer({ sounds: 'cues', cueMs: 400 }, async (c) => {
   await cycle(c); // cues -> speech
-  assert.equal(c.s.state().nav.rows.at(-1).label, 'Sounds: cues and speech');
+  assert.equal(c.s.state().nav.rows.at(-2).label, 'Sounds: cues and speech');
   await c.ev({ hook_event_name: 'UserPromptSubmit', session_id: A, prompt: 'go' });
   await c.ev(stop(A));
   const [t] = await until(() => (spoken(c.speechDir).length ? spoken(c.speechDir) : null), 'the spoken text');

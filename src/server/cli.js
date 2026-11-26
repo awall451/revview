@@ -1,7 +1,8 @@
 // Live server: hook scripts POST raw Claude Code hook JSON to /event, the state core
 // (src/state) reduces it, and the new state is pushed to the page over Server-Sent Events.
 // It also serves the view. Binds to 127.0.0.1 only; see src/server/README.md.
-//   node src/server/index.js [port] [--input [path]] [--dev-bridge [--dev-keys file] [--dev-demo]] [--sessions] [--start dir]... [--projects file] [--speech file] [--boot] [--netmon] [--thermal] [--data-lock [dir]] [--quiet-minutes N]   (port default 8138, or REVVIEW_PORT)
+//   node src/server/index.js [port] [--input [path]] [--dev-bridge [--dev-keys file] [--dev-demo]] [--sessions] [--start dir]... [--projects file] [--speech file] [--look-config file] [--boot] [--netmon] [--thermal] [--data-lock [dir]] [--quiet-minutes N]   (port default 8138, or REVVIEW_PORT)
+//   --look-config file: the bar's look (day | night | auto with night hours; default config/look.json); a bad file logs and uses day
 //   --boot: key-on start: show STARTING until the first session is on the board; with no tmux windows, start one session in $REVVIEW_START (or each --start dir)
 //   --data-lock [dir]: the data is locked until the topmost mount on dir (default /srv/revview-data, or $REVVIEW_DATA_MOUNT) is ext4 from /dev/mapper/revview-data;
 //     locked shows INSERT KEY, no session starts (key-on and New session wait); a posted RevviewDataLock is only a poke to re-read the mount table
@@ -19,6 +20,7 @@ import { loadSpeechConfig, pickEngine, describeChoice, SpeechConfigError, DEFAUL
 import { DEFAULT_PORT, startLiveServer } from './live.js';
 import { bootSessions, bootAfterUnlock, netmonTarget, installShutdown } from './boot.js';
 import { pickPlayer } from '../sounds/index.js';
+import { loadLookConfig, LookConfigError, DEFAULT_LOOK_CONFIG_PATH } from './look.js';
 
 export function parseArgs(argv) {
   const out = { port: null, inputPath: null, devBridge: false, sessions: false, start: [], projects: null };
@@ -63,6 +65,11 @@ export function parseArgs(argv) {
       if (next === undefined || next.startsWith('--')) throw new Error('--claude-settings needs an absolute file path');
       if (!next.startsWith('/')) throw new Error(`--claude-settings needs an absolute file path, got ${next}`);
       out.claudeSettings = next;
+      i++;
+    } else if (a === '--look-config') {
+      const next = argv[i + 1];
+      if (next === undefined || next.startsWith('--')) throw new Error('--look-config needs a file');
+      out.lookConfig = next;
       i++;
     } else if (a === '--speech') {
       const next = argv[i + 1];
@@ -162,7 +169,18 @@ export async function main(argv = process.argv.slice(2)) {
     console.error(e.message);
     speechLine = 'speech: off (bad speech config, see the log)';
   }
-  const live = await startLiveServer({ port: args.port, input, devBridge: args.devBridge, devKeys, devDemo: args.devDemo === true, sessions: runner, projects, speech, boot: args.boot, netmon, thermal, dataLock: args.dataLock ? { mountPoint: args.dataLock } : null, ...(args.quietMinutes !== undefined ? { quietMs: args.quietMinutes * 60000 } : {}) });
+  // a bad look config means the day look, never no bar
+  let look = null;
+  let lookLine;
+  try {
+    look = loadLookConfig(args.lookConfig ?? DEFAULT_LOOK_CONFIG_PATH);
+    lookLine = look.mode === 'auto' ? `look: auto (night ${look.night.from}-${look.night.to})` : `look: ${look.mode}`;
+  } catch (e) {
+    if (!(e instanceof LookConfigError)) throw e;
+    console.error(e.message);
+    lookLine = 'look: day (bad look config, see the log)';
+  }
+  const live = await startLiveServer({ port: args.port, input, devBridge: args.devBridge, devKeys, devDemo: args.devDemo === true, sessions: runner, projects, speech, look, boot: args.boot, netmon, thermal, dataLock: args.dataLock ? { mountPoint: args.dataLock } : null, ...(args.quietMinutes !== undefined ? { quietMs: args.quietMinutes * 60000 } : {}) });
   if (args.boot && runner && args.dataLock) {
     const log = (m) => console.error(m);
     bootAfterUnlock({ live, runner, dirs: args.start, log }).then(() => log('boot: key-on session step done'));
@@ -182,6 +200,7 @@ export async function main(argv = process.argv.slice(2)) {
   if (runner) console.log(`sessions: private tmux server (${args.tmuxSocket ? `-S ${args.tmuxSocket}` : '-L revview'}), ${selectId === null ? 'selected: none' : `${selectedNow ? 'selected' : 'wanted'}: ${selectId}`}`);
   console.log(speechLine);
   if (soundsLine) console.log(soundsLine);
+  console.log(lookLine);
   if (netmonLine) console.log(netmonLine);
   if (thermalLine) console.log(thermalLine);
   if (args.boot) console.log('boot: STARTING until the first session is on the board');

@@ -29,22 +29,24 @@ test('a board without the sounds field is valid and behaves as null', () => {
   delete b.sounds;
   const r = run(toSettings, b);
   assert.equal(boardView(r).nav.kind, 'settings');
-  assert.equal(rowsOf(r).length, 4);
+  assert.equal(rowsOf(r).length, 5); // 4 plus the Look row
 });
 
-test('settings: 4 rows and no change marker while sounds is null', () => {
+test('settings: 4 rows and no change marker while sounds is null, then the Look row', () => {
   const v = boardView(run(toSettings)).nav;
   assert.equal(v.kind, 'settings');
-  assert.equal(v.rows.length, 4);
-  assert.ok(v.rows.every((r) => Object.keys(r).join() === 'label'));
+  assert.equal(v.rows.length, 5);
+  assert.ok(v.rows.slice(0, 4).every((r) => Object.keys(r).join() === 'label'));
+  assert.deepEqual(v.rows[4], { label: 'Look: day', change: true });
 });
 
 test('settings: a 5th row with the label and the change marker for each mode', () => {
   const labels = { off: 'Sounds: off', cues: 'Sounds: cues', speech: 'Sounds: cues and speech' };
   for (const [mode, label] of Object.entries(labels)) {
     const rows = rowsOf(run([sounds(mode), ...toSettings]));
-    assert.equal(rows.length, 5);
+    assert.equal(rows.length, 6); // 4, Sounds, Look
     assert.deepEqual(rows[4], { label, change: true });
+    assert.deepEqual(rows[5], { label: 'Look: day', change: true });
     assert.ok(rows.slice(0, 4).every((r) => r.change === undefined));
   }
 });
@@ -71,10 +73,13 @@ test('press on rows 0..3 changes nothing', () => {
 
 test('up and down reach row 4 only when the row exists', () => {
   const without = run([...toSettings, nav('down'), nav('down'), nav('down'), nav('down')]);
-  assert.equal(without.nav.row, 3);
+  assert.equal(without.nav.row, 4); // the Look row is the last one
+  const noLook = run([...toSettings, nav('down'), nav('down'), nav('down')]);
+  assert.equal(noLook.nav.row, 3);
+  assert.equal(reduceBoard(noLook, nav('press')), noLook); // row 3 is not the Look row (that is row 4)
   const withRow = run([sounds('off'), ...toSettings, nav('down'), nav('down'), nav('down'), nav('down'), nav('down')]);
-  assert.equal(withRow.nav.row, 4);
-  assert.equal(reduceBoard(withRow, nav('up')).nav.row, 3);
+  assert.equal(withRow.nav.row, 5);
+  assert.equal(reduceBoard(withRow, nav('up')).nav.row, 4);
 });
 
 test('back from settings returns to the menu row 2, also from the Sounds row', () => {

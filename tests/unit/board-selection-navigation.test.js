@@ -170,9 +170,14 @@ test('nav: normal view opening, row = shown session index', () => {
   }
   assert.deepEqual(reduceBoard(initialBoard(), nav('up')).nav, { kind: 'list', row: 0 }); // no sessions: no id
   assert.deepEqual(reduceBoard(b, nav('menu')).nav, { kind: 'menu', row: 0 });
-  for (const [k, g] of [['push-to-talk', 'tap'], ['cancel', 'tap'], ['deny', 'tap'], ['back', 'tap'], ['spare', 'tap'], ['up', 'hold'], ['press', 'long-hold'], ['menu', 'hold']]) {
+  for (const [k, g] of [['push-to-talk', 'tap'], ['cancel', 'tap'], ['deny', 'tap'], ['back', 'tap'], ['spare', 'tap'], ['up', 'hold'], ['press', 'long-hold'], ['menu', 'long-hold']]) {
     assert.equal(reduceBoard(b, nav(k, g)), b, `${k} ${g}`);
   }
+  // a menu hold is the look toggle (board-look.test.js): it opens no list and moves no highlight
+  const held = reduceBoard(b, nav('menu', 'hold'));
+  assert.equal(held.nav, null);
+  assert.equal(held.selected, b.selected);
+  assert.equal(held.look, 'night');
   assert.equal(reduceBoard(b, nav('timeout', 'hold')), b);
   b = reduceBoard(b, nav('menu'));
   assert.equal(reduceBoard(b, nav('timeout', 'hold')).nav, null);
@@ -231,7 +236,7 @@ test('nav menu, new, projects, settings', () => {
   assert.equal(reduceBoard(pr, nav('up')), pr);
   let s2 = st;
   for (let i = 0; i < 6; i += 1) s2 = reduceBoard(s2, nav('down'));
-  assert.equal(s2.nav.row, 3); // 4 settings rows
+  assert.equal(s2.nav.row, 4); // 4 settings rows and the Look row
   assert.equal(reduceBoard(nw, nav('press')).nav, null);
   assert.equal(reduceBoard(pr, nav('press')), pr);
   assert.equal(reduceBoard(st, nav('press')), st);
@@ -292,7 +297,7 @@ test('nav rows content', () => {
   assert.deepEqual(boardView({ ...b, nav: { kind: 'projects', row: 5 } }).nav, { kind: 'projects', row: 0, rows: [{ label: '/p/x' }] });
   assert.deepEqual(boardView({ ...initialBoard(), nav: { kind: 'new', row: 3 } }).nav, { kind: 'new', row: 0, rows: [] });
   assert.deepEqual(boardView({ ...b, nav: { kind: 'settings', row: 0 } }).nav.rows.map((r) => r.label), [
-    'Voice: needs tap mode (/voice tap in Claude Code)', 'Wheel buttons: not known', 'Sessions: 3 on the bar, 1 started by revview', 'Projects: 1 in the config file',
+    'Voice: needs tap mode (/voice tap in Claude Code)', 'Wheel buttons: not known', 'Sessions: 3 on the bar, 1 started by revview', 'Projects: 1 in the config file', 'Look: day',
   ]);
   assert.equal(boardView({ ...b, buttons: true, nav: { kind: 'settings', row: 0 } }).nav.rows[1].label, 'Wheel buttons: found');
   assert.equal(boardView({ ...b, buttons: false, nav: { kind: 'settings', row: 0 } }).nav.rows[1].label, 'Wheel buttons: not found');

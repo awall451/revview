@@ -87,7 +87,7 @@ gesture.
       is not waiting any more'; every other reason (unbound, ambiguous, no-input, not-one-question, multi-select, choice,
       needs-choice, session) -> 'Answer in the terminal when parked' ('Approve in the terminal when parked' for a plan).
       Every refusal is `done: false` with the reason. Push-to-talk stays refused.
-  - up, down, left, right, menu, back (tap and hold) are `RevviewNav`. spare does nothing.
+  - up, down, left, right, menu, back (tap and hold) are `RevviewNav`. spare does nothing. A `menu` hold (400 ms; the shipped maps give `menu` a hold, so its tap fires on release) is the look toggle: the board flips day/night, nothing is sent, no note, and no list or menu opens, closes or moves (the nav timer is re-armed as for any gesture).
   - **read-aloud tap** speaks for `selectedKey(board)` through the `readAloud` object (`src/speech`); none selected:
     refused. **read-aloud hold or long-hold** stops speech, also with a list open. With no speech engine a tap puts the
     fixed note "Read aloud: no speech engine installed". Read aloud never sends a key and never answers a prompt.

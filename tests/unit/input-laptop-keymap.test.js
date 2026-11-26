@@ -205,3 +205,22 @@ test('server without devBridge: no /dev/keys (404), /dev/key unchanged (not a ro
     await s.close();
   }
 });
+
+// menu has a hold (the look toggle): the tap fires on release, a 400 ms hold gives gesture 'hold' (and no tap after it)
+test('menu: a short press is a tap, a 400 ms hold is a hold, in both shipped maps', () => {
+  for (const [file, key] of [[LAPTOP, KEY_CODES.M], [WHEEL, KEY_CODES.F23]]) {
+    const clock = fakeClock();
+    const out = [];
+    const p = createInputPipeline({ config: loadConfig(file), clock, onGesture: (g) => out.push(`${g.button}:${g.gesture}`) });
+    p.feed(key, 1);
+    clock.advance(80);
+    p.feed(key, 0);
+    clock.advance(100);
+    assert.deepEqual(out, ['menu:tap'], file);
+    p.feed(key, 1);
+    clock.advance(400);
+    p.feed(key, 0);
+    clock.advance(100);
+    assert.deepEqual(out, ['menu:tap', 'menu:hold'], file);
+  }
+});

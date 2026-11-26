@@ -26,7 +26,7 @@ export const LABELS = {
   'read-aloud': { tap: 'read aloud', hold: 'stop speech' },
   cancel: { tap: 'Esc to Claude', longHold: 'Ctrl+C' },
   deny: { tap: 'deny / ASKS: cancel' },
-  menu: { tap: 'menu' },
+  menu: { tap: 'menu', hold: 'day/night' },
 };
 
 const pad = (s, n) => String(s).padEnd(n);

@@ -13,7 +13,7 @@
     { "key": "F20", "button": "right" },
     { "key": "F21", "button": "press" },
     { "key": "F22", "button": "back", "hold": true },
-    { "key": "F23", "button": "menu" },
+    { "key": "F23", "button": "menu", "hold": true },
     { "key": "F24", "button": "spare" }
   ]
 }

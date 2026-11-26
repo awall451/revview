@@ -1,0 +1,6 @@
+{
+  "_comment": "The look of the bar: day (the normal light look), night (a dark look) or auto (night by the clock, see below). Default day = today's look. Read at server start (--look-config to use another file).",
+  "look": "day",
+  "night": { "from": "21:00", "to": "07:00" },
+  "_comment_night": "auto: night from..to by the Pi's wall clock (local time, fixed hours, no location). The Pi has no RTC: before the clock is set (year before 2026) auto shows day. The Settings row and the menu hold change the look until the server restarts."
+}

@@ -26,6 +26,7 @@
   "buttons": "unknown",
   "hot": true,
   "lowPower": true,
+  "look": "day",
   "since": null,
   "quietSince": null,
   "tasks": null,

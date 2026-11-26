@@ -122,6 +122,11 @@ anything you can see:
   says "no session selected" and nothing is spoken. And a speech engine must be installed by you, with no setting:
   the server reads `config/speech.json` by default, which uses Piper only when it is at `/opt/piper/piper` with the
   lessac voice and `aplay` exists, else espeak-ng. Without an engine it does nothing. `run.sh` installs nothing.
+- **Night look.** To see the dark look: press M (the menu), Down to the Settings item and Enter, Down to the Look row,
+  Enter (each press cycles day, night, auto; not kept over a restart; the lasting setting is `"look"` in
+  `config/look.json`, or `--look-config <path>` for another file). Or **hold M** for about half a second: it toggles day
+  and night (M tapped still opens the menu, now when you release it). The gallery has a `night-<name>.png` for every shot.
+  The `--keys` sheet does not list the hold: `emulator/keys-sheet.js` is at its line limit and was not changed.
 - **Sounds.** The server plays a short cue when the selected session needs you, finishes or fails (a softer one
   for other sessions), through the first of `aplay`, `pw-play`, `paplay` that your laptop has (`cuePlayers` in
   `config/speech.json`). With none of them it stays silent and its log says `sounds: cues, no cue player found
@@ -151,7 +156,7 @@ Space     push-to-talk  talk
 R         read-aloud    read aloud      stop speech
 Esc       cancel        Esc to Claude                Ctrl+C
 N         deny          deny / ASKS: cancel
-M         menu          menu
+M         menu          menu            day/night
 Demo keys (demo mode only; the demo player takes them, not the bar):
   1-9 and 0  jump: working, permission, done, waiting, offline, insert-key,
        ended, compaction (mid-turn), compact-cmd (/compact), asking (a question)
