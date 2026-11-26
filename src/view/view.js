@@ -116,15 +116,17 @@ function set(node, text) {
 
 // ---- time: the clock and the quiet mark in the band ----
 // What the shown state says about time, plus the clock it is read against. Live: the server's clock is the page's clock plus
-// `liveOffset` (set on every message from msg.now; 0 when the message has none). Static (?fixture, ?state, revviewRender): the state's own `now`.
+// `liveOffset` (set on every message from msg.now, against performance.now(), which a stepped wall clock does not move; with no `now` the page's own Date.now()). Static (?fixture, ?state, revviewRender): the state's own `now`.
 // A tick (once a second) only repaints the clock and the quiet text, it never renders again.
 const TIME_VIEWS = new Set(['working', 'permission', 'asking']);
 const finite = (v) => typeof v === 'number' && Number.isFinite(v);
-let liveOffset = null;
+let liveOffset = null; // server clock minus performance.now() (steady: a step of the page's wall clock changes nothing); 0 with no `now`: then Date.now() is read
+let liveOwn = false;
 const timeState = { view: '', since: NaN, quietSince: NaN, staticNow: NaN, clockRoom: true };
 
 function serverNow() {
-  return liveOffset !== null ? Date.now() + liveOffset : timeState.staticNow;
+  if (liveOffset === null) return timeState.staticNow;
+  return liveOwn ? Date.now() : performance.now() + liveOffset;
 }
 
 function paintTime() {
@@ -766,7 +768,8 @@ function live() {
       try { msg = JSON.parse(ev.data); } catch { return; }
       if (!msg || typeof msg !== 'object') return;
       // the server's clock is the page's clock plus this offset; a message without `now` leaves the page's own clock (offset 0)
-      liveOffset = finite(msg.now) ? msg.now - Date.now() : 0;
+      liveOwn = !finite(msg.now);
+      liveOffset = liveOwn ? 0 : msg.now - performance.now();
       render(msg.state);
       if (Number.isInteger(msg.seq)) root.dataset.seq = String(msg.seq);
     };

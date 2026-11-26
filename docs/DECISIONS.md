@@ -2163,7 +2163,7 @@ Code: `src/sounds/` (README there), `config/speech.json`, `src/server/feed.js` (
   effective class began: working, waiting, done, permission, asking, or a failed turn; offline / locked overlays, notes, the
   list and compaction marks never reset it). Working -> permission -> working starts the clock again: "time in the current
   state" literally (after an approved Bash the clock is the run time of that command). The SSE message and `GET /state` are
-  `{seq, now, state}`; the page computes `offset = now - Date.now()` on each message and ticks once a second itself, so a
+  `{seq, now, state}`; the page computes `offset = now - performance.now()` on each message (monotonic; `Date.now()` would jump when the Pi's time is stepped, fix round 2, bug found in review) and ticks once a second itself, so a
   page whose own clock is wrong still shows the right elapsed time, and a reload keeps it. Static fixtures carry `now` in the
   state (static only), so screenshots are fixed.
 - **Which states have a clock:** WORKING, NEEDS PERMISSION, CLAUDE ASKS (how long Claude has been busy, or has waited for the

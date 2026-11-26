@@ -98,8 +98,8 @@ else null), `tasks` (`{done, total}` or null). Nav session rows have `quiet: boo
   under the list/menu) when `tasks.total >= 1` and `0 <= done <= total`. It never shrinks: the file (and the tool) give way.
   `data-full` "3 of 7 tasks done". The word is there so it is not read as the session position "2/3".
 - **List rows**: a session row with `quiet: true` reads `QUIET` instead of its state word (the chip keeps its colour).
-- **Time source.** Live: every message sets `offset = msg.now - Date.now()` (0 when `now` is missing or not finite); the server's time is
-  `Date.now() + offset`, so a wrong page clock changes nothing. A timer once a second repaints only the clock and the QUIET text
+- **Time source.** Live: every message sets `offset = msg.now - performance.now()` (when `now` is missing or not finite the page reads its own `Date.now()`); the server's time is
+  `performance.now() + offset`: `performance.now()` is monotonic, so a wrong page clock changes nothing and a step of it (the Pi sets its time over the network mid-drive, Chromium included) does not make the clock jump. A timer once a second repaints only the clock and the QUIET text
   (never a full render). Static (`?fixture`, `?state`, `revviewRender`): the state's own `now` key (static only, a finite number; not
   part of the reducer's state) is the time and nothing ticks; without `now` there is no clock and no QUIET. Gallery screenshots use a fixed
   `now` and `since`.

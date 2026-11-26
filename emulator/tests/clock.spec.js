@@ -287,6 +287,38 @@ test.describe('room', () => {
     }
   }
 
+  test('the clock is whole or hidden, never a clipped part of a number (and the bare 9+ beside QUIET is the sessions hint)', async ({ openView, page }) => {
+    const cases = [];
+    for (const wc of ['time-marks', 'time-mic']) for (const view of ['working', 'permission']) {
+      const content = loadWorstCase(wc);
+      cases.push([`${view} ${wc}`, { ...loadFixture(view), ...(view === 'permission' ? asPermission(content) : content) }]);
+    }
+    for (const ms of [7 * SEC, 59 * MIN + 59 * SEC, 23 * HOUR + 59 * MIN, 100 * HOUR]) for (const others of [0, 1, 12]) {
+      cases.push([`working ${ms} ms, others ${others}`, { ...loadFixture('working'), others, ...marks, ...at(ms), quietSince: NOW - 7 * MIN }]);
+    }
+    for (const [name, state] of cases) {
+      await openView(state);
+      const r = await page.evaluate(() => {
+        const el = document.getElementById('clock');
+        const full = el.dataset.full;
+        const box = el.getBoundingClientRect();
+        const band = document.getElementById('band').getBoundingClientRect();
+        return { hidden: el.dataset.room === 'hidden', shown: box.width > 0 && getComputedStyle(el).display !== 'none', text: el.textContent, full, within: box.right <= band.right + 0.5 && el.scrollWidth <= el.clientWidth + 1,
+          hint: document.getElementById('others').textContent.trim(), hintFull: document.getElementById('others').dataset.full };
+      });
+      if (r.shown) {
+        expect(r.text, name).toMatch(/^(\d{1,2}:\d\d|\d{1,2}h\d\d|99h\+)$/); // a whole clock
+        expect(r.within, name).toBe(true);
+      } else {
+        expect(r.hidden || r.text === '', name).toBe(true);
+      }
+      if (name.includes('working') && !name.includes('time-mic') && state.others > 9) {
+        expect(r.hint, name).toBe('9+'); // the hint: more than nine other sessions
+        expect(r.hintFull, name).toBe('12 more Claude sessions');
+      }
+    }
+  });
+
   test('asking with a clock and counts fits', async ({ openView, page }) => {
     await openView({ ...loadFixture('asking-choice'), ...at(59 * MIN + 59 * SEC), others: 9, ...marks });
     await expectFits(page);
@@ -334,6 +366,29 @@ test.describe('live', () => {
       await page.clock.fastForward(61 * SEC);
       await expect(clock(page)).toHaveText('13:40');
       expect(await page.locator('html').getAttribute('data-seq')).toBe(seq);
+    } finally {
+      await server.close();
+    }
+  });
+
+  test('the page clock stepping mid-run (a network time sync on the Pi) does not move the clock or QUIET', async ({ page }) => {
+    const { c, server, post } = await boot();
+    try {
+      await page.goto(`${server.url}/`);
+      for (const e of start) await post(e);
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'working');
+      c.t = T0 + 754 * SEC;
+      await post({ hook_event_name: 'PreToolUse', session_id: ID, cwd: '/w/revview', tool_name: 'Bash', tool_input: { command: 'ls' } });
+      await expect(clock(page)).toHaveText(/^12:3[4-9]$/);
+      // the page's Date.now steps 6 h forward, then 9 h back (the page's timers and performance.now go on steadily)
+      await page.evaluate(() => { const real = Date.now; Date.now = () => real() + 6 * 3600 * 1000; });
+      await page.waitForTimeout(2500); // two ticks
+      await expect(clock(page)).toHaveText(/^12:(3[6-9]|4\d)$/);
+      await expect(page.locator('#quiet-tag')).toBeHidden();
+      await page.evaluate(() => { const real = Date.now; Date.now = () => real() - 15 * 3600 * 1000; });
+      await page.waitForTimeout(2200);
+      await expect(clock(page)).toHaveText(/^12:(3[8-9]|4\d|5\d)$/);
+      await expect(page.locator('#quiet-tag')).toBeHidden();
     } finally {
       await server.close();
     }
