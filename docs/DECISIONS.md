@@ -2155,3 +2155,52 @@ Code: `src/sounds/` (README there), `config/speech.json`, `src/server/feed.js` (
 - **r11-03/05:** the terminal-only hint reads "Answer in the terminal when parked · Deny cancels" (deny cancels a multi-select
   question too); the board note of the same text is not drawn a second time; a board note under CLAUDE ASKS (the outcome of a press) is white and bold, the hint stays grey.
 - **r11-04 (up/down against the two-column layout):** not changed, the question goes to the owner.
+
+## How long and how far: clock, quiet mark, task progress (cycle 61, owner issue #29, branch work/time-progress)
+
+- **Where time comes from.** The state core stays pure: `reduceBoard(board, event, at)` takes the server's clock as data
+  (`at`, ms since the epoch); the server passes `ctx.clock()` for every event it applies. Each session keeps `since` (when its
+  effective class began: working, waiting, done, permission, asking, or a failed turn; offline / locked overlays, notes, the
+  list and compaction marks never reset it). Working -> permission -> working starts the clock again: "time in the current
+  state" literally (after an approved Bash the clock is the run time of that command). The SSE message and `GET /state` are
+  `{seq, now, state}`; the page computes `offset = now - Date.now()` on each message and ticks once a second itself, so a
+  page whose own clock is wrong still shows the right elapsed time, and a reload keeps it. Static fixtures carry `now` in the
+  state (static only), so screenshots are fixed.
+- **Which states have a clock:** WORKING, NEEDS PERMISSION, CLAUDE ASKS (how long Claude has been busy, or has waited for the
+  driver). Not WAITING FOR ME and not DONE: an idle bar with a running clock draws the eye for nothing, and the band has no
+  room to spare. Not the note views.
+- **Format:** `m:ss` under an hour (`0:07`, `59:59`); `1h05` from one hour to under 100 hours; `99h+` beyond. A negative
+  elapsed time (clock skew) shows `0:00`. The clock is detail size (3.3-3.7 mm), bold, beside the state word.
+- **Quiet mark.** A working session that sent no hook event for `quietMs` (default 5 min; `--quiet-minutes N`, decimals
+  allowed, 0 = off) gets the tag `QUIET N MIN` (N from 1, `99+` from 100) right after the clock; it looks like the HOT tag.
+  "An event" is ANY hook event the server receives for that session id (`/event` and `/permission`), also ones the board
+  otherwise ignores (SubagentStop, unknown names): the board clears the mark on them, the one deliberate exception to "an
+  ignored event returns the same board". The timer is per session through the injected `timers` (at most 64, a SessionEnd
+  drops it), so sessions other than the selected one get the mark too; in the list their row reads QUIET. The server sends
+  the time of the last event it saw (`RevviewQuiet {session_id, since}`, internal, 403 over HTTP); the reducer marks only a
+  working session (not permission / asking: those already say they need the driver).
+- **Quiet cue: a new generated cue `quiet`** (three even 70 ms taps at 440 Hz, amplitude between `other` and `done`). None of the
+  existing cues fits: needs/failed would tell the driver something false (nothing asks, nothing failed), done would be a lie,
+  other is for other sessions. It plays once per appearance (the session's sound class changes to `quiet`); another session's
+  mark plays `other`; Sounds off is silent; a waiting quiet cue is not replaced by `other`.
+- **Task list, recorded first** (`fixtures/sessions/task-list.jsonl`, Claude Code 2.1.332, haiku, interactive in a pty):
+  Claude keeps the list with `TaskCreate` and `TaskUpdate`, not TodoWrite. `TaskCreate` Post: `tool_input {subject,
+  description, activeForm}`, `tool_response.task.id` ("1", "2", ...). `TaskUpdate`: `tool_input {taskId, status}` only (no
+  subject), Post `tool_response {success, taskId, updatedFields, statusChange {from, to}}`. Hook events `TaskCreated` and
+  `TaskCompleted` (`task_id`, `task_subject`, `task_description`) also exist; we do not register them (PostToolUse is enough,
+  one source, no double counting). The same tools were used under `claude -p`. **The task tools appeared only with
+  `CLAUDE_CODE_ENABLE_TODO_TOOLS=1`** in the recorder's fresh config: without it haiku had no task tool and no list was
+  kept. Whether the owner's Claude Code has them by default is not known here; nothing in revview sets that variable
+  (it changes Claude's behaviour: the owner's choice).
+- **done/total** = completed ids / all ids of the session's list (`deleted` removes an id). An update for an id we never saw
+  created makes the list partial and nothing is shown (an honest total is unknown, e.g. after a server restart mid-list). A
+  TaskCreate after all tasks are completed starts a new list; a SessionStart other than `compact` clears it; subagent task
+  events (`agent_id`) are ignored; at most 200 ids. Shown as `tasks 3/7` (the word, so it is not read as the session
+  position `2/3`) at the right of row A before the diff, in the views that show the tool row; the file gives way.
+- **Room.** Band order: shape, word, clock, quiet tag, hint (+N / position), repo, tags. When it does not fit, the repo gives way
+  first, then the clock hides (its `data-full` stays), then (the old rule) LOW POWER and HOT. The quiet tag, the hint, the
+  mic and NO BUTTONS never hide. Worst cases (`emulator/worst-case/time-marks.json`, `time-mic.json`): the clock hides and
+  so does HOT in the mic case; everything shown fits. In the tight band the quiet tag keeps 16 px from the state word.
+- **Laptop demo:** scene 11 `tasks` (the task-list recording, the clock counts, then QUIET after 24 s: `run.sh demo` alone
+  starts the server with `--quiet-minutes 0.4`; no other scene holds that long at normal speed). No new key: the key sheet
+  is at its line limit, so scene 11 is reached only by the loop, after scene 10 (the key-sheet tests now check the first ten).
