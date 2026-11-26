@@ -281,12 +281,12 @@ test('nav rows content', () => {
   assert.equal(v.nav.kind, 'list');
   assert.equal(v.nav.row, 1);
   assert.equal(v.nav.rows.length, 3);
-  assert.deepEqual(v.nav.rows[0], { label: 'a', word: 'PERMISSION', state: 'permission', target: false, voice: true });
-  assert.deepEqual(v.nav.rows[1], { label: 'b', word: 'WORKING', state: 'working', target: true, voice: false });
-  assert.deepEqual(v.nav.rows[2], { label: 'c', word: 'WORKING', state: 'working', target: false, voice: false });
+  assert.deepEqual(v.nav.rows[0], { label: 'a', word: 'PERMISSION', state: 'permission', target: false, voice: true, quiet: false });
+  assert.deepEqual(v.nav.rows[1], { label: 'b', word: 'WORKING', state: 'working', target: true, voice: false, quiet: false });
+  assert.deepEqual(v.nav.rows[2], { label: 'c', word: 'WORKING', state: 'working', target: false, voice: false, quiet: false });
   const closed = reduceBoard(b, nav('timeout'));
   const unk = boardView(reduceBoard(run([ev('SessionStart', { session_id: 'Z' })]), nav('up')));
-  assert.deepEqual(unk.nav.rows[0], { label: '', word: 'WAITING', state: 'waiting', target: false, voice: null });
+  assert.deepEqual(unk.nav.rows[0], { label: '', word: 'WAITING', state: 'waiting', target: false, voice: null, quiet: false });
   const menu = boardView(reduceBoard(closed, nav('menu')));
   assert.deepEqual(menu.nav, { kind: 'menu', row: 0, rows: [{ label: 'New session' }, { label: 'Projects' }, { label: 'Settings' }] });
   assert.deepEqual(boardView({ ...b, nav: { kind: 'projects', row: 5 } }).nav, { kind: 'projects', row: 0, rows: [{ label: '/p/x' }] });

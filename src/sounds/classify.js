@@ -1,13 +1,15 @@
 // Which cue a board change deserves. Pure: no clock, no I/O.
 import { selectedKey, shownKey } from '../state/index.js';
 
-// 'needs' | 'failed' | 'done' | null for one session entry of board.sessions
+// 'needs' | 'failed' | 'done' | 'quiet' | null for one session entry of board.sessions
 export function cueClass(board, key) {
   const s = board?.sessions?.[key];
   if (!s || typeof s !== 'object') return null;
   if ((Array.isArray(s.pending) && s.pending.length > 0) || s.state?.activity === 'permission') return 'needs';
   if (s.state?.failed) return 'failed';
   if (s.state?.activity === 'done') return 'done';
+  // quiet: working and silent for a while (the state core sets s.quietAt to a ms timestamp; s.quiet === true is a quiet placeholder, not this)
+  if (s.state?.activity === 'working' && Number.isFinite(s.quietAt)) return 'quiet';
   return null;
 }
 

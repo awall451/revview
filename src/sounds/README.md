@@ -4,7 +4,7 @@ Short audio cues for the bar, made by a deterministic generator with no download
 
 ## Cue files
 
-Four cues, each a canonical 44-byte-header PCM WAV: mono, 16-bit little-endian, 22050 Hz, well under one second.
+Five cues, each a canonical 44-byte-header PCM WAV: mono, 16-bit little-endian, 22050 Hz, well under one second.
 They differ by pattern, not only by pitch.
 
 | Cue | Meaning | Pattern |
@@ -13,6 +13,7 @@ They differ by pattern, not only by pitch.
 | `done` | a turn finished | one 880 Hz bell-like tone with a decay |
 | `failed` | a turn failed | a falling pair, 523 then 330 Hz |
 | `other` | a change in a session that is not the selected one | one short, quiet 600 Hz tone |
+| `quiet` | a working session sent no hook event for a while (the quiet mark appeared) | three short even taps at 440 Hz, gentler than needs/failed, louder than other |
 
 The generator is `wav.js` (`cueWav(name)`); `npm run cues` rewrites `cues/*.wav` from it.
 `tests/unit/sounds-wav.test.js` holds the committed bytes equal to the generator and checks the format, the
@@ -25,7 +26,7 @@ device on the VM): only the format and the bytes are checked.
 (no player found: `play()` returns `{ played: false, reason: 'no player' }`). The file `<dir>/<cue>.wav` is the last argument. It is started with
 `shell: false`, `detached: true` (own process group) and `stdio: 'ignore'`.
 
-- Queue of one: one cue plays, one may wait. A newer cue replaces the waiting one, except that a waiting needs/done/failed cue is never replaced by `other`.
+- Queue of one: one cue plays, one may wait. A newer cue replaces the waiting one, except that a waiting needs/done/failed/quiet cue is never replaced by `other`.
   A burst gives at most two sounds, never overlapping.
 - Before a cue starts it awaits `waitBefore()` (the server passes `speaker.idle()`: a cue does not talk over speech), at most 30 s, then the cue is dropped silently.
 - A child running longer than `maxMs` gets SIGKILL to its group. All timeouts use the injected `timers`.
@@ -35,8 +36,9 @@ device on the VM): only the format and the bytes are checked.
 ## Which change gives which cue
 
 `classify.js` (pure). `cueClass(board, key)` is `needs` (a pending prompt or `activity === 'permission'`: a permission prompt, a question or a plan),
-else `failed` (`state.failed`, a StopFailure), else `done` (`activity === 'done'`), else null. Working, waiting (also after `idle_prompt`: the done cue already said
-it), starting and quiet placeholders give no cue. `cueFor(prev, next)` looks at every session whose class changed to a non-null one. The selected session
+else `failed` (`state.failed`, a StopFailure), else `done` (`activity === 'done'`), else `quiet` (`activity === 'working'` and `session.quiet` is a finite number: the state core's quiet mark), else null.
+The class changes to `quiet` once per appearance, so there is one cue per appearance; clearing the mark gives nothing. Working (without the mark), waiting
+(also after `idle_prompt`: the done cue already said it), starting and placeholders give no cue. `cueFor(prev, next)` looks at every session whose class changed to a non-null one. The selected session
 (else the one the bar shows, `shownKey`) gives its own cue; any other session gives `other`; the selected one wins when both change in one step. Selection,
 navigation, notes, compaction marks and a repeated identical event do not change a class, so they give nothing. `createSounds({ player, log }).observe(prev, next)`
 plays the result when `board.sounds` is `cues` or `speech`, and logs `sounds: <mode>` when the mode changes.

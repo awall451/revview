@@ -52,7 +52,9 @@ const soundsOn = (b) => SOUNDS_MODES.includes(b.sounds);
 
 function isValidSession(s) {
   return isObj(s) && isObj(s.state) && typeof s.state.activity === 'string' && isObj(s.state.diff)
-    && Array.isArray(s.open) && Array.isArray(s.pending) && Array.isArray(s.pre) && Number.isInteger(s.touched) && Number.isInteger(s.born) && typeof s.dropped === 'boolean';
+    && Array.isArray(s.open) && Array.isArray(s.pending) && Array.isArray(s.pre) && Number.isInteger(s.touched) && Number.isInteger(s.born) && typeof s.dropped === 'boolean'
+    && [s.since, s.quietAt, s.lastAt].every((x) => x === undefined || x === null || finiteNum(x))
+    && (s.tasks === undefined || s.tasks === null || (isObj(s.tasks) && isObj(s.tasks.ids) && typeof s.tasks.partial === 'boolean'));
 }
 
 // Only boards this module built are used; anything else is replaced, so nothing below can throw on it.
@@ -235,9 +237,116 @@ const endReasonText = (t) => {
   return c.length > REASON_MAX ? `${c.slice(0, REASON_MAX - 1)}\u2026` : c;
 };
 
-export function reduceBoard(board, event) {
+// ---- time, quiet mark and task list (a post-pass; the reduction below is untouched) ----
+const finiteAt = (at) => typeof at === 'number' && Number.isFinite(at) && at >= 0;
+const finiteNum = (x) => typeof x === 'number' && Number.isFinite(x);
+// The class a session is in, for "time in this state": what boardView shows ignoring the offline/locked overlays;
+// a failed turn counts as its own class.
+const classOf = (s) => (s.pending.length > 0 ? (askIn(s.pending[0]) !== null ? 'asking' : 'permission') : s.state.failed ? 'failed' : s.state.activity);
+const MAX_TASKS = 200;
+const MAX_TASK_ID = 64;
+const TASK_STATES = ['pending', 'in_progress', 'completed'];
+const taskId = (raw) => {
+  const id = typeof raw === 'string' ? raw : typeof raw === 'number' && Number.isFinite(raw) ? String(raw) : '';
+  return id !== '' && id.length <= MAX_TASK_ID ? id : '';
+};
+
+// The task list after one event (the same reference when nothing changes). Source: PostToolUse of TaskCreate / TaskUpdate.
+function nextTasks(t, event) {
+  const name = event.hook_event_name;
+  if (name === 'SessionStart') return event.source === 'compact' ? t : null;
+  if (name !== 'PostToolUse' || isStr(event.agent_id)) return t;
+  const input = isObj(event.tool_input) ? event.tool_input : {};
+  const resp = isObj(event.tool_response) ? event.tool_response : {};
+  const empty = { ids: {}, partial: false };
+  if (event.tool_name === 'TaskCreate') {
+    const id = taskId(isObj(resp.task) ? resp.task.id : undefined);
+    if (id === '') return t;
+    let cur = t ?? empty;
+    if (has(cur.ids, id)) return t;
+    const vals = Object.values(cur.ids);
+    if (vals.length >= 1 && vals.every((v) => v === 'completed')) cur = empty; // a new list
+    if (cur.partial === false && Object.keys(cur.ids).length >= MAX_TASKS) return { ids: cur.ids, partial: true };
+    if (Object.keys(cur.ids).length >= MAX_TASKS) return t;
+    return { ids: { ...cur.ids, [id]: 'pending' }, partial: cur.partial };
+  }
+  if (event.tool_name === 'TaskUpdate') {
+    const id = taskId(input.taskId);
+    if (id === '') return t;
+    const status = isObj(resp.statusChange) && typeof resp.statusChange.to === 'string' ? resp.statusChange.to : input.status;
+    const cur = t ?? empty;
+    if (status === 'deleted') {
+      if (!has(cur.ids, id)) return cur.partial && t !== null ? t : { ids: cur.ids, partial: true };
+      const ids = {};
+      for (const k of Object.keys(cur.ids)) if (k !== id) Object.defineProperty(ids, k, { value: cur.ids[k], enumerable: true, writable: true, configurable: true });
+      return { ids, partial: cur.partial };
+    }
+    if (!TASK_STATES.includes(status)) return t;
+    if (has(cur.ids, id)) return cur.ids[id] === status ? t : { ids: { ...cur.ids, [id]: status }, partial: cur.partial };
+    // an update for a task we never saw created: the total is unknown
+    return { ids: Object.keys(cur.ids).length >= MAX_TASKS ? cur.ids : { ...cur.ids, [id]: status }, partial: true };
+  }
+  return t;
+}
+
+// RevviewQuiet {session_id, since?}: the session has been silent while working; quietAt = since (preferred) or lastAt.
+function reduceQuiet(b, event) {
+  const s = isStr(event.session_id) && has(b.sessions, event.session_id) ? b.sessions[event.session_id] : undefined;
+  if (s === undefined || classOf(s) !== 'working' || (s.quietAt ?? null) !== null) return b;
+  // the server sends the time of the last event it saw for the session (also ones the board ignores); else the board's own
+  const from = finiteNum(event.since) ? event.since : s.lastAt ?? null;
+  return from === null ? b : { ...b, sessions: withSession(b.sessions, event.session_id, { ...s, quietAt: from }) };
+}
+
+// Stamps since / quietAt / lastAt / tasks onto the sessions of `r` (the core's result for `event`).
+function stampBoard(b, r, event, at) {
+  const hook = !event.hook_event_name.startsWith('Revview');
+  const tid = hook ? targetOf(event, b.sessions) : null;
+  const timed = finiteAt(at);
+  let sessions = r.sessions;
+  for (const k of Object.keys(r.sessions)) {
+    const s = r.sessions[k];
+    const p = has(b.sessions, k) ? b.sessions[k] : undefined;
+    const target = hook && k === tid;
+    let since = p?.since ?? null;
+    let quietAt = p?.quietAt ?? null;
+    let lastAt = p?.lastAt ?? null;
+    let tasks = p?.tasks ?? null;
+    if (timed) {
+      const cls = classOf(s);
+      if (p === undefined || classOf(p) !== cls) since = at;
+      if (cls !== 'working') quietAt = null;
+      if (target) {
+        // any later hook event of the session ends the quiet mark, even one the reducer otherwise ignores
+        if (s !== p || quietAt !== null) lastAt = at;
+        quietAt = null;
+      }
+    }
+    if (target) tasks = nextTasks(tasks, event);
+    if (since === (s.since ?? null) && quietAt === (s.quietAt ?? null) && lastAt === (s.lastAt ?? null) && tasks === (s.tasks ?? null)) continue;
+    const out = { ...s };
+    for (const [key, v] of [['since', since], ['quietAt', quietAt], ['lastAt', lastAt], ['tasks', tasks]]) {
+      if (v === null) delete out[key]; else out[key] = v;
+    }
+    sessions = withSession(sessions, k, out);
+  }
+  return sessions === r.sessions ? r : { ...r, sessions };
+}
+
+// `at` (optional, the server's clock in ms since the epoch) is the only way time enters: when it is a finite number
+// >= 0 the sessions get `since` / `lastAt` / `quietAt`; without it those stay absent and nothing else changes.
+export function reduceBoard(board, event, at) {
   const b = isValidBoard(board) ? board : initialBoard();
   if (!isObj(event) || typeof event.hook_event_name !== 'string') return b;
+  if (event.hook_event_name === 'RevviewQuiet') return reduceQuiet(b, event);
+  const r = reduceBoardCore(b, event);
+  // the post-pass only looks at events that can touch a session's times or task list
+  const hook = !event.hook_event_name.startsWith('Revview');
+  if (!hook && (r === b || !finiteAt(at))) return r;
+  return stampBoard(b, r, event, at);
+}
+
+function reduceBoardCore(b, event) {
   let next = reduceInner(b, event);
   // a button gesture clears the board note; so does the answer that a "Too early: press again" note asked for
   if ((event.hook_event_name === 'RevviewNav' || event.hook_event_name === 'RevviewAnswered') && next.note !== null) next = { ...next, note: null };
@@ -897,6 +1006,7 @@ function navView(b) {
         state,
         target: id === b.selected,
         voice: b.owned === null ? null : b.owned.includes(id),
+        quiet: classOf(s) === 'working' && (s.quietAt ?? null) !== null,
       };
     });
   } else if (kind === 'menu') {
@@ -944,6 +1054,13 @@ function extrasOf(b, shownKey) {
   };
 }
 
+// {done, total} of the session's task list, or null (no list, or one seen only in part)
+function tasksOf(s) {
+  if (!isObj(s.tasks) || s.tasks.partial) return null;
+  const vals = Object.values(s.tasks.ids);
+  return vals.length === 0 ? null : { done: vals.filter((v) => v === 'completed').length, total: vals.length };
+}
+
 export function boardView(board) {
   const b = isValidBoard(board) ? board : initialBoard();
   const buttons = buttonsView(b);
@@ -973,6 +1090,9 @@ export function boardView(board) {
       buttons,
       hot: b.hot === true,
       lowPower: b.lowPower === true,
+      since: null,
+      quietSince: null,
+      tasks: null,
       ...extrasOf(b, shownKey),
     };
   }
@@ -1012,6 +1132,9 @@ export function boardView(board) {
     buttons,
     hot: b.hot === true,
     lowPower: b.lowPower === true,
+    since: shown.since ?? null,
+    quietSince: activity === 'working' && classOf(shown) === 'working' ? shown.quietAt ?? null : null,
+    tasks: tasksOf(shown),
     ...extrasOf(b, shownKey),
   };
 }

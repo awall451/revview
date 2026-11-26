@@ -102,6 +102,25 @@ test('a waiting selected cue is never replaced by other; other is replaced by an
   await player.idle();
 });
 
+test('a waiting quiet cue is not replaced by other, but is by needs', async () => {
+  const { player, calls } = make();
+  player.play('other');
+  player.play('quiet');
+  assert.equal(player.play('other').played, false);
+  await flush();
+  calls[0].child.emit('exit', 0, null);
+  await flush();
+  assert.match(calls[1].args.at(-1), /quiet\.wav$/);
+  player.play('other');
+  player.play('quiet');
+  player.play('needs');
+  calls[1].child.emit('exit', 0, null);
+  await flush();
+  assert.match(calls[2].args.at(-1), /needs\.wav$/);
+  calls[2].child.emit('exit', 0, null);
+  await player.idle();
+});
+
 test('spawn error (ENOENT): one log line, then no more spawns', async () => {
   const { player, calls, logs } = make();
   player.play('needs');

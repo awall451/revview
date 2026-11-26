@@ -2,10 +2,11 @@
 //   needs  - Claude needs you (a permission prompt or a question): two rising pairs, 660 Hz then 880 Hz.
 //   done   - a turn finished: one 880 Hz bell-like tone with a decay.
 //   failed - a turn failed: a falling pair, 523 Hz then 330 Hz.
+//   quiet  - a working session went quiet (no hook event for a while): three short even taps at 440 Hz.
 //   other  - a change in a session that is NOT the selected one: one short, quiet 600 Hz tone.
 // The numbers (pitches, lengths, levels) were chosen on the VM and never heard: there is no audio device here.
 
-export const CUE_NAMES = Object.freeze(['needs', 'done', 'failed', 'other']);
+export const CUE_NAMES = Object.freeze(['needs', 'done', 'failed', 'other', 'quiet']);
 export const CUE_FORMAT = { sampleRate: 22050, channels: 1, bitsPerSample: 16 };
 
 const RATE = CUE_FORMAT.sampleRate;
@@ -21,6 +22,7 @@ const PATTERNS = {
   done: [tone(880, 200, 0.5, 60)],
   failed: [tone(523, 180, 0.6), gap(30), tone(330, 180, 0.6)],
   other: [tone(600, 80, 0.2)],
+  quiet: [tone(440, 70, 0.4), gap(70), tone(440, 70, 0.4), gap(70), tone(440, 70, 0.4)],
 };
 
 function samplesFor(parts) {

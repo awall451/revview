@@ -13,7 +13,7 @@ Pure logic that turns Claude Code hook events into the view state (no DOM, no I/
 - `countDiff(event)`, `lineCount(s)` (diff.js); `LIMITS`, `stripAnsi`, `lastOutputLine`, `shortenCommand`,
   `shortenPath` (format.js); `STATES`, `isState` (states.js).
 
-- `initialBoard()`, `reduceBoard(board, event)`, `boardView(board)`, `replayView(events, board)`,
+- `initialBoard()`, `reduceBoard(board, event, at?)`, `boardView(board)`, `replayView(events, board)`,
   `pendingPrompts(board)`, `shownPrompt(board)`, `MAX_SESSIONS` (board.js): the per-session layer, see "Board" below. `PAGE_ONLY_VIEWS`, `VIEWS` (states.js).
 
 `STATES` are the views the state core emits: `working`, `waiting`, `permission`, `asking`, `done`, `starting`, `offline`,
@@ -205,6 +205,40 @@ Claude asks the driver a question (`AskUserQuestion`) or for approval of a plan 
 - Note kind `ask` (posted by the server, e.g. "Not sent: the question changed"): goes when the shown ask (session, agent, since) changes or none is shown, like `too-early`.
 - `sessions/actions.js`: a press or deny tap does nothing (reason `question shown`) while the bar shows `asking`; the buttons cannot answer a question yet.
 - `PostToolBatch` (new in 2.1.331) is ignored.
+
+## Time, the quiet mark and the task list
+
+Time only enters as data: `reduceBoard(board, event, at)` takes an optional `at` (server clock, ms since the epoch). Only a finite
+`at >= 0` stores times; without it (replays, recordings) the time fields stay absent and the old behaviour holds. It is a post-pass
+after the ordinary reduction, so every existing path is untouched. `replayView` does not take `at`.
+
+Session fields (all optional, absent = null; `isValidBoard` accepts boards without them):
+`since` (the `at` when the session's EFFECTIVE class began: `asking` / `permission` while pending, a failed turn = `failed`, else
+`state.activity`; ignores offline/locked, notes, nav, selection and compaction marks; set at creation and on every class change in a
+step with `at`), `lastAt` (the `at` of the last Claude hook event applied to the session; updated only when the session
+changes or a quiet mark is cleared: an ignored event that touches nothing does not move it), `quietAt` (null, or when the silence began
+= the event's `since` (the server's time of the last event it saw for the session, also ones the board ignores) or else the `lastAt` at the moment of `RevviewQuiet`; named `quietAt` because `quiet: true` already marks a placeholder), `tasks`
+(`{ids: {<id>: 'pending'|'in_progress'|'completed'}, partial: bool}`).
+
+`RevviewQuiet {session_id, since?}` (internal, for the server's silence timer; the server must refuse it over HTTP): sets
+`quietAt` = a finite `since` of the event, else `lastAt`, when the session exists, its effective class is `working` and it is not quiet yet
+(neither known: nothing). Any other case (unknown or missing id, not working, already quiet) returns the same board.
+Clearing: ANY later Claude hook event (any `hook_event_name` not starting with `Revview`) routed to that session (same id rule as other
+events) clears `quietAt`, EVEN IF the reducer ignores the event (`SubagentStop`, `PostToolBatch`, unknown): the one deliberate exception
+to "ignored events return the same reference" (it needs an `at`). A change of effective class away from `working` clears it too (`Stop`).
+
+`boardView` has three more keys, always present: `since` (the shown session's `since` or null), `quietSince` (its `quietAt`, only while
+its view activity is `working`, else null), `tasks` (`{done, total}` or null). The list's session rows (`nav.rows`) carry `quiet: bool`
+(`quietAt` set and class `working`).
+
+Tasks (Claude Code 2.1.332, `fixtures/sessions/task-list.jsonl`: tools `TaskCreate` / `TaskUpdate`, not TodoWrite), from `PostToolUse` only:
+`TaskCreate` adds `tool_response.task.id` (string or number, kept as a string, at most 64 chars) as `pending`; `TaskUpdate` sets the status of
+`tool_input.taskId` from `tool_response.statusChange.to` (a string), else `tool_input.status`; `deleted` removes the id; only `pending` /
+`in_progress` / `completed` are stored, anything else is ignored. An update (or delete) for an id never created marks the list `partial`
+(creation missed, e.g. revview restarted mid-task): `boardView.tasks` is then null until the list resets. Events with a non-empty `agent_id`
+are ignored. A `TaskCreate` for a list of >= 1 tasks that are all completed starts a new list; `SessionStart` with `source` other than
+`compact` clears it; at most 200 ids per session (beyond: partial). A create of a known id changes nothing. `tasks` shows when the list
+has >= 1 id and is not partial. Task events do everything else they did before (tool row etc.). Needs no `at`.
 
 ## Diff counting
 

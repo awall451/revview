@@ -18,6 +18,7 @@ screenshots should use them too. There were no placeholder fixtures before these
 | `ask-bypass` | the same under `bypassPermissions`: the PermissionRequest still fires; question answered, Stop, SessionEnd |
 | `plan-approve` | plan mode: `ExitPlanMode` (PreToolUse, PermissionRequest, Notification `permission_prompt`) rejected with Esc (nothing fires, the driver's next prompt follows), a second plan approved (PostToolUse with `tool_input {}`), Write, Bash, Stop, `idle_prompt` |
 | `plan-feedback` | plan mode: "Tell Claude what to change" with text arrives as a plain `UserPromptSubmit` with the text; the revised plan is then dismissed with Esc (nothing fires), SessionEnd |
+| `task-list` | the task tools of Claude Code 2.1.332 in acceptEdits mode: ToolSearch, four `TaskCreate` (each with a `TaskCreated` event), then per task `TaskUpdate` `in_progress` and `completed` (the latter with `TaskCompleted`) between Bash commands, Stop, SessionEnd. Also `PostToolBatch` and `MessageDisplay` |
 
 The four ask/plan recordings (`ask-question`, `ask-bypass`, `plan-approve`, `plan-feedback`) were recorded on 2026-11-25 with Claude Code 2.1.331 (model haiku) in `/tmp/rec/repo` with its own `CLAUDE_CONFIG_DIR`, driven by a pexpect script through a pty; nothing was changed in them. They also contain `PostToolBatch` (new, ignored by the state core).
 
@@ -39,3 +40,4 @@ on the default subagent model), in `/tmp/rec/repo` with its own `CLAUDE_CONFIG_D
 pexpect script that sent keystrokes (Enter to approve, Esc to reject) and waited for hook events in the file.
 Nothing was changed in them (the paths are already under `/tmp`); nothing is hand-written.
 
+`task-list` was recorded on 2026-11-26 with Claude Code 2.1.332 (model haiku), interactive in a pty (pexpect) in `/tmp/rec-tasks/repo` with its own `CLAUDE_CONFIG_DIR`, with `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` (without it haiku found no task tool); a hook on every hook event name known to the binary; nothing was changed in it.

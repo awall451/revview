@@ -60,7 +60,7 @@ function freq(s, [a, b]) {
 const peak = (s) => s.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
 
 test('format and names', () => {
-  assert.deepEqual([...CUE_NAMES], ['needs', 'done', 'failed', 'other']);
+  assert.deepEqual([...CUE_NAMES], ['needs', 'done', 'failed', 'other', 'quiet']);
   assert.deepEqual({ ...CUE_FORMAT }, { sampleRate: 22050, channels: 1, bitsPerSample: 16 });
   assert.throws(() => cueWav('nope'));
 });
@@ -97,11 +97,28 @@ test('each cue is a valid, short, small WAV and the four differ', () => {
 test('other is the softest cue', () => {
   const p = Object.fromEntries(CUE_NAMES.map((n) => [n, peak(parseWav(cueWav(n)))]));
   assert.ok(p.other < 0.3 * 32767);
-  for (const n of ['needs', 'done', 'failed']) assert.ok(p.other < p[n], n);
+  for (const n of ['needs', 'done', 'failed', 'quiet']) assert.ok(p.other < p[n], n);
+});
+
+test('quiet is gentler than needs and failed, louder than other', () => {
+  const p = Object.fromEntries(CUE_NAMES.map((n) => [n, peak(parseWav(cueWav(n)))]));
+  assert.ok(p.other < p.quiet && p.quiet < p.needs && p.quiet < p.failed);
+  assert.ok(p.quiet > 0.25 * 32767);
+});
+
+test('quiet is three even taps at 440 Hz', () => {
+  const s = parseWav(cueWav('quiet'));
+  const b = bursts(s);
+  assert.equal(b.length, 3);
+  const len = b.map(([a, z]) => z - a);
+  const gaps = [b[1][0] - b[0][1], b[2][0] - b[1][1]];
+  for (const l of len) assert.ok(Math.abs(l - len[0]) < 0.01 * RATE);
+  assert.ok(Math.abs(gaps[0] - gaps[1]) < 0.01 * RATE);
+  for (const x of b) assert.ok(Math.abs(freq(s, x) - 440) < 25, String(freq(s, x)));
 });
 
 test('patterns: burst counts and direction', () => {
-  const want = { needs: 4, done: 1, failed: 2, other: 1 };
+  const want = { needs: 4, done: 1, failed: 2, other: 1, quiet: 3 };
   for (const n of CUE_NAMES) {
     const s = parseWav(cueWav(n));
     const b = bursts(s);
