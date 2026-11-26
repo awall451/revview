@@ -38,6 +38,7 @@ export function apply(ctx, event, onlyIfChanged = false) {
   if (next !== prev) { // the one place every event source passes through: cues follow the board change
     try { ctx.sounds?.observe(prev, next); } catch (e) { console.error('sounds failed:', e instanceof Error ? e.message : e); }
   }
+  if (next !== prev) ctx.quietEnter?.(prev, next);
   // permission requests: drop those whose prompt is gone, then note what the bar shows now
   ctx.registry.sweep(pendingPrompts(ctx.board));
   ctx.registry.observe(shownPrompt(ctx.board) ?? shownAsk(ctx.board));

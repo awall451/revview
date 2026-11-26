@@ -70,8 +70,9 @@ One clock (`startLiveServer`'s `clock` option, default `steadyNow`: epoch ms at 
 is the time of the event), and every SSE message and `GET /state` carries `now`. Every POSTed `/event` (and `/permission`) with a string `session_id`
 (not a `Revview*` event) records the time and (re)arms that session's timer of `quietMs` (option of `startLiveServer`, with the injected `timers`;
 default 300000; 0 or null = off). When it fires the server applies the internal `RevviewQuiet {session_id, since}` (403 over HTTP); the core marks
-the session only if it is working, and any later event of the session clears the mark. A `SessionEnd` drops the timer; at most 64 timers (the oldest
-dropped); `close()` clears them. CLI: `--quiet-minutes N` (a number, decimals allowed, 0 = off, at most 120; anything else: message on stderr, exit 2).
+the session only if it is working. The timer is also (re)armed after ANY applied event (internal ones too) that moves a session into the working class (`ctx.quietEnter` in `apply`): a held permission or question that ends with no hook event of its own (a wheel answer, Esc, our 540 s wait) starts the silence at that moment, not at the request.
+Any later event of the session clears the mark. A `SessionEnd` drops the timer; at most 64 timers (the oldest
+dropped, with a line on stderr); `close()` clears them. CLI: `--quiet-minutes N` (a number, decimals allowed, 0 = off, at most 120; anything else: message on stderr, exit 2).
 
 ## Heat and weak supply: `--thermal`
 

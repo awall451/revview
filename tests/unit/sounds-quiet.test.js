@@ -36,6 +36,8 @@ test('cueFor: quiet appearing gives quiet for the selected session, other for an
 test('cueFor: clearing, an unchanged mark and a changed value give nothing', () => {
   const q = withQuiet(base(), A, 1000);
   assert.equal(cueFor(q, withQuiet(q, A, null)), null);
+  assert.equal(cueFor(q, base()), null, 'quiet back to plain working: no cue');
+  assert.equal(cueFor(q, { ...q, sessions: { ...q.sessions, [A]: { ...q.sessions[A], quietAt: undefined } } }), null);
   assert.equal(cueFor(q, withQuiet(q, A, 1000)), null);
   assert.equal(cueFor(q, withQuiet(q, A, 2000)), null);
 });

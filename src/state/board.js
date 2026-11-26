@@ -242,7 +242,7 @@ const finiteAt = (at) => typeof at === 'number' && Number.isFinite(at) && at >= 
 const finiteNum = (x) => typeof x === 'number' && Number.isFinite(x);
 // The class a session is in, for "time in this state": what boardView shows ignoring the offline/locked overlays;
 // a failed turn counts as its own class.
-const classOf = (s) => (s.pending.length > 0 ? (askIn(s.pending[0]) !== null ? 'asking' : 'permission') : s.state.failed ? 'failed' : s.state.activity);
+export const classOf = (s) => (s.pending.length > 0 ? (askIn(s.pending[0]) !== null ? 'asking' : 'permission') : s.state.failed ? 'failed' : s.state.activity);
 const MAX_TASKS = 200;
 const MAX_TASK_ID = 64;
 const TASK_STATES = ['pending', 'in_progress', 'completed'];

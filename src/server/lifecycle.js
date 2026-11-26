@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { classOf } from '../state/index.js';
 
 export const LAUNCH_LIMIT_MS = 30000;
 // a compaction took 5-7 s in the recordings and 1-2 min in long sessions; this bounds a lost end event
@@ -10,7 +11,7 @@ const MAX_QUIET_TIMERS = 64;
 // The server's lifecycle: the project marks and the owned-sessions poll, the launch and compaction timers,
 // the runner the actions get. Per-server state is in the closure and on ctx (launchTimers, compactTimers, clearT:
 // close() reads them there); nothing at module level.
-// Sets ctx.compactSync, ctx.quietSeen, ctx.quietClose, ctx.launchTimers, ctx.compactTimers, ctx.clearT.
+// Sets ctx.compactSync, ctx.quietSeen, ctx.quietEnter, ctx.quietClose, ctx.launchTimers, ctx.compactTimers, ctx.clearT.
 export function createLifecycle(ctx, { projects, timers, launchLimitMs, compactLimitMs, quietMs = QUIET_MS }) {
   const { sessions, dataLock } = ctx;
   // owned = the sessions revview itself started (the runner's windows); null without a runner (the old look)
@@ -114,10 +115,8 @@ export function createLifecycle(ctx, { projects, timers, launchLimitMs, compactL
     clearT(q.t);
     quietTimers.delete(id);
   }
-  function quietSeen(id, name) {
-    if (quietOff || ctx.closed || typeof id !== 'string' || typeof name !== 'string' || name.startsWith('Revview')) return;
+  function quietArm(id) {
     quietDrop(id);
-    if (name === 'SessionEnd') return;
     const seen = ctx.clock();
     const t = setT(() => {
       quietTimers.delete(id);
@@ -125,7 +124,27 @@ export function createLifecycle(ctx, { projects, timers, launchLimitMs, compactL
     }, quietMs);
     t?.unref?.();
     quietTimers.set(id, { t, seen });
-    while (quietTimers.size > MAX_QUIET_TIMERS) quietDrop(quietTimers.keys().next().value);
+    while (quietTimers.size > MAX_QUIET_TIMERS) {
+      const oldest = quietTimers.keys().next().value;
+      console.error(`quiet: more than ${MAX_QUIET_TIMERS} sessions with a timer; dropped the oldest (${String(oldest).slice(0, 8)}): it gets no QUIET mark`);
+      quietDrop(oldest);
+    }
+  }
+  function quietSeen(id, name) {
+    if (quietOff || ctx.closed || typeof id !== 'string' || typeof name !== 'string' || name.startsWith('Revview')) return;
+    if (name === 'SessionEnd') quietDrop(id);
+    else quietArm(id);
+  }
+  // after EVERY applied event (internal ones too: a wheel answer, a gone question): a session that has just moved into the
+  // working class starts its silence now. Without this a session that returns to working with no hook event (the command
+  // of an approved permission runs on) would never get the mark, or would get it counted from the permission request.
+  function quietEnter(prev, next) {
+    if (quietOff || ctx.closed) return;
+    for (const id of Object.keys(next.sessions ?? {})) {
+      if (classOf(next.sessions[id]) !== 'working') continue;
+      const p = prev.sessions?.[id];
+      if (p === undefined || classOf(p) !== 'working') quietArm(id);
+    }
   }
   function quietClose() {
     for (const id of [...quietTimers.keys()]) quietDrop(id);
@@ -140,6 +159,7 @@ export function createLifecycle(ctx, { projects, timers, launchLimitMs, compactL
   } : guarded;
   ctx.compactSync = compactSync;
   ctx.quietSeen = quietSeen;
+  ctx.quietEnter = quietEnter;
   ctx.quietClose = quietClose;
   ctx.quietTimers = quietTimers;
   ctx.launchTimers = launchTimers;

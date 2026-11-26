@@ -199,3 +199,59 @@ test('sounds off: no quiet cue', async (t) => {
   await new Promise((r) => setTimeout(r, 300));
   assert.deepEqual(played(), []);
 });
+
+// a held question: the session is "asking", not working; when it ends with no hook event of its own (Esc: the connection
+// closes) the session is working again and its silence counts from that moment
+const ask = (id) => ({ hook_event_name: 'PermissionRequest', session_id: id, cwd: '/w/x', tool_name: 'AskUserQuestion', tool_input: { questions: [{ question: 'Which?', header: 'h', multiSelect: false, options: [{ label: 'a', description: '' }, { label: 'b', description: '' }] }] } });
+async function until(f) {
+  for (let i = 0; i < 200 && !f(); i++) await new Promise((r) => setTimeout(r, 10));
+  assert.ok(f(), 'condition not reached');
+}
+// a runner with no windows: its presence makes /permission hold the request for the wheel
+const RUNNER = { target: async () => null, send: async () => ({ sent: false }), list: async () => [] };
+const heldAsk = (live, id) => {
+  const ac = new AbortController();
+  fetch(`${live.url}/permission`, { method: 'POST', body: JSON.stringify(ask(id)), signal: ac.signal }).catch(() => null);
+  return ac;
+};
+
+test('a held question ends with no hook event (internal RevviewAskGone): the quiet timer is re-armed from that moment', async (t) => {
+  const { c, timers, opts } = setup({ sessions: RUNNER });
+  const { post, live } = await boot(t, opts);
+  c.t = 1000;
+  await post(prompt(A));
+  c.t = 2000;
+  const ac = heldAsk(live, A);
+  await until(() => live.permissionsWaiting() === 1);
+  assert.equal(timers.live().length, 1);
+  // the timer fires while the question is held: ignored (not working)
+  c.t = 2000 + QUIET;
+  timers.live()[0].fn();
+  assert.equal(view(live).quietSince, null);
+  assert.equal(timers.live().length, 0);
+  // the driver is away; the question goes (Esc, or our own wait): no hook event follows
+  c.t = 800000;
+  ac.abort();
+  await until(() => live.permissionsWaiting() === 0 && timers.live().length === 1);
+  assert.equal(view(live).view, 'working');
+  c.t = 800000 + QUIET;
+  timers.live()[0].fn();
+  assert.equal(view(live).quietSince, 800000, 'silence counted from the end of the wait, not from the request');
+});
+
+test('a question that ends within quietMs: the mark comes quietMs after it ended, not after the request', async (t) => {
+  const { c, timers, opts } = setup({ sessions: RUNNER });
+  const { post, live } = await boot(t, opts);
+  c.t = 1000;
+  await post(prompt(A));
+  c.t = 2000;
+  const ac = heldAsk(live, A);
+  await until(() => live.permissionsWaiting() === 1);
+  const asked = timers.live()[0];
+  c.t = 62000;
+  ac.abort();
+  await until(() => live.permissionsWaiting() === 0 && timers.live().length === 1 && timers.live()[0] !== asked);
+  c.t = 62000 + QUIET;
+  timers.live()[0].fn();
+  assert.equal(view(live).quietSince, 62000);
+});
