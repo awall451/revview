@@ -234,9 +234,10 @@ its view activity is `working`, else null), `tasks` (`{done, total}` or null). T
 Tasks (Claude Code 2.1.332, `fixtures/sessions/task-list.jsonl`: tools `TaskCreate` / `TaskUpdate`, not TodoWrite), from `PostToolUse` only:
 `TaskCreate` adds `tool_response.task.id` (string or number, kept as a string, at most 64 chars) as `pending`; `TaskUpdate` sets the status of
 `tool_input.taskId` from `tool_response.statusChange.to` (a string), else `tool_input.status`; `deleted` removes the id; only `pending` /
-`in_progress` / `completed` are stored, anything else is ignored. An update (or delete) for an id never created marks the list `partial`
-(creation missed, e.g. revview restarted mid-task): `boardView.tasks` is then null until the list resets. Events with a non-empty `agent_id`
-are ignored. A `TaskCreate` for a list of >= 1 tasks that are all completed starts a new list; `SessionStart` with `source` other than
+`in_progress` / `completed` are stored, anything else is ignored. An update (any status, also none, or a delete) for an id never created marks the list `partial`
+(creation missed, e.g. revview restarted mid-task): `boardView.tasks` is then null until `SessionStart`. So does a `TaskCreate` whose
+id is not the next number (recorded ids are "1", "2", ...: the first create seen must be "1", then highest id seen + 1; a deleted id stays used). Events with a non-empty `agent_id`
+are ignored. There is no "new list after all completed" rule (nothing recorded backs it): a create after completed tasks continues the list (2/3). `SessionStart` with `source` other than
 `compact` clears it; at most 200 ids per session (beyond: partial). A create of a known id changes nothing. `tasks` shows when the list
 has >= 1 id and is not partial. Task events do everything else they did before (tool row etc.). Needs no `at`.
 

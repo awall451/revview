@@ -39,22 +39,46 @@ test('status comes from statusChange.to, else tool_input.status; deleted removes
   assert.deepEqual(tasks(b), { done: 2, total: 2 });
 });
 
-test('an update for an id never created marks the list partial: tasks null until it resets', () => {
+test('an update for an id never created marks the list partial: tasks null, also with no valid status', () => {
   let b = run([update('7', 'in_progress')]);
   assert.equal(tasks(b), null);
   b = run([create('8')], b);
   assert.equal(tasks(b), null);
   b = run([update('7', 'completed'), update('8', 'completed'), create('9')], b);
-  assert.deepEqual(tasks(b), { done: 0, total: 1 });
+  assert.equal(tasks(b), null); // partial stays until SessionStart
+  for (const st of ['weird', undefined, 'deleted']) {
+    const x = run([create('1'), update('5', st)]);
+    assert.equal(tasks(x), null, String(st));
+  }
+  assert.deepEqual(tasks(run([create('1'), update('1', 'weird')])), { done: 0, total: 1 });
 });
 
-test('a TaskCreate after an all-completed list starts a new list', () => {
-  let b = run([create('1'), update('1', 'completed')]);
-  assert.deepEqual(tasks(b), { done: 1, total: 1 });
-  b = run([create('2')], b);
-  assert.deepEqual(tasks(b), { done: 0, total: 1 });
-  b = run([create('3'), update('2', 'completed')], b);
-  assert.deepEqual(tasks(b), { done: 1, total: 2 });
+test('a server restart mid-list: the first create seen is not "1", so nothing is shown (not 0/1)', () => {
+  let b = run([create('4')]);
+  assert.equal(tasks(b), null);
+  b = run([create('5'), update('4', 'completed')], b);
+  assert.equal(tasks(b), null);
+  assert.equal(tasks(run([create(4)])), null);
+  assert.equal(tasks(run([create('abc')])), null);
+});
+
+test('ids must be sequential: a gap or a jump makes the list partial; a deleted id still counts as used', () => {
+  assert.equal(tasks(run([create('1'), create('3')])), null);
+  assert.equal(tasks(run([create('1'), create('2'), create('2'), create('3')])).total, 3);
+  const b = run([create('1'), create('2'), create('3'), update('3', 'deleted'), create('4')]);
+  assert.deepEqual(tasks(b), { done: 0, total: 3 });
+});
+
+test('a TaskCreate after an all-completed list continues the list (no recording backs a "new list" reset)', () => {
+  let b = run([create('1'), create('2'), update('1', 'completed'), update('2', 'completed')]);
+  assert.deepEqual(tasks(b), { done: 2, total: 2 });
+  b = run([create('3')], b);
+  assert.deepEqual(tasks(b), { done: 2, total: 3 });
+  b = run([update('3', 'completed')], b);
+  assert.deepEqual(tasks(b), { done: 3, total: 3 });
+  // a create that starts over at "1" is a duplicate id: ignored, the list is not guessed
+  assert.deepEqual(tasks(run([create('4')], b)), { done: 3, total: 4 });
+  assert.deepEqual(tasks(run([create('1')], b)), { done: 3, total: 3 });
 });
 
 test('subagent events (agent_id) are ignored for tasks', () => {
@@ -80,7 +104,7 @@ test('a duplicate create does not double count; the cap marks the list partial',
 });
 
 test('ids: numbers become strings, long ids are refused', () => {
-  const b = run([create(5), update('5', 'completed')]);
+  const b = run([create(1), update('1', 'completed')]);
   assert.deepEqual(tasks(b), { done: 1, total: 1 });
   assert.equal(tasks(run([create('x'.repeat(65))])), null);
 });

@@ -258,17 +258,22 @@ function nextTasks(t, event) {
   if (name !== 'PostToolUse' || isStr(event.agent_id)) return t;
   const input = isObj(event.tool_input) ? event.tool_input : {};
   const resp = isObj(event.tool_response) ? event.tool_response : {};
-  const empty = { ids: {}, partial: false };
+  const empty = { ids: {}, max: 0, partial: false };
   if (event.tool_name === 'TaskCreate') {
     const id = taskId(isObj(resp.task) ? resp.task.id : undefined);
     if (id === '') return t;
-    let cur = t ?? empty;
+    const cur = t ?? empty;
     if (has(cur.ids, id)) return t;
-    const vals = Object.values(cur.ids);
-    if (vals.length >= 1 && vals.every((v) => v === 'completed')) cur = empty; // a new list
-    if (cur.partial === false && Object.keys(cur.ids).length >= MAX_TASKS) return { ids: cur.ids, partial: true };
-    if (Object.keys(cur.ids).length >= MAX_TASKS) return t;
-    return { ids: { ...cur.ids, [id]: 'pending' }, partial: cur.partial };
+    // The recording shows ids "1", "2", ... in order. A create that is not the next number (a restart in the middle of a
+    // list, a non-numeric id) means part of the list was never seen: nothing is shown rather than a wrong number. There is
+    // no "all completed, so a new list" rule (no recording backs it): a create after completed tasks continues the list.
+    const n = /^\d+$/.test(id) ? Number(id) : NaN;
+    const max = typeof cur.max === 'number' ? cur.max : 0;
+    const partial = cur.partial || n !== max + 1;
+    const nextMax = Number.isFinite(n) && n > max ? n : max;
+    if (partial === false && Object.keys(cur.ids).length >= MAX_TASKS) return { ids: cur.ids, max: nextMax, partial: true };
+    if (Object.keys(cur.ids).length >= MAX_TASKS) return cur.max === nextMax ? t : { ids: cur.ids, max: nextMax, partial };
+    return { ids: { ...cur.ids, [id]: 'pending' }, max: nextMax, partial };
   }
   if (event.tool_name === 'TaskUpdate') {
     const id = taskId(input.taskId);
@@ -276,15 +281,18 @@ function nextTasks(t, event) {
     const status = isObj(resp.statusChange) && typeof resp.statusChange.to === 'string' ? resp.statusChange.to : input.status;
     const cur = t ?? empty;
     if (status === 'deleted') {
-      if (!has(cur.ids, id)) return cur.partial && t !== null ? t : { ids: cur.ids, partial: true };
+      if (!has(cur.ids, id)) return cur.partial && t !== null ? t : { ...cur, partial: true };
       const ids = {};
       for (const k of Object.keys(cur.ids)) if (k !== id) Object.defineProperty(ids, k, { value: cur.ids[k], enumerable: true, writable: true, configurable: true });
-      return { ids, partial: cur.partial };
+      return { ...cur, ids };
     }
-    if (!TASK_STATES.includes(status)) return t;
-    if (has(cur.ids, id)) return cur.ids[id] === status ? t : { ids: { ...cur.ids, [id]: status }, partial: cur.partial };
-    // an update for a task we never saw created: the total is unknown
-    return { ids: Object.keys(cur.ids).length >= MAX_TASKS ? cur.ids : { ...cur.ids, [id]: status }, partial: true };
+    if (has(cur.ids, id)) {
+      if (!TASK_STATES.includes(status)) return t;
+      return cur.ids[id] === status ? t : { ...cur, ids: { ...cur.ids, [id]: status } };
+    }
+    // an update for a task we never saw created (any status): the total is unknown
+    if (!TASK_STATES.includes(status)) return cur.partial && t !== null ? t : { ...cur, partial: true };
+    return { ...cur, ids: Object.keys(cur.ids).length >= MAX_TASKS ? cur.ids : { ...cur.ids, [id]: status }, partial: true };
   }
   return t;
 }

@@ -2192,9 +2192,15 @@ Code: `src/sounds/` (README there), `config/speech.json`, `src/server/feed.js` (
   `CLAUDE_CODE_ENABLE_TODO_TOOLS=1`** in the recorder's fresh config: without it haiku had no task tool and no list was
   kept. Whether the owner's Claude Code has them by default is not known here; nothing in revview sets that variable
   (it changes Claude's behaviour: the owner's choice).
-- **done/total** = completed ids / all ids of the session's list (`deleted` removes an id). An update for an id we never saw
-  created makes the list partial and nothing is shown (an honest total is unknown, e.g. after a server restart mid-list). A
-  TaskCreate after all tasks are completed starts a new list; a SessionStart other than `compact` clears it; subagent task
+- **done/total** = completed ids / all ids of the session's list (`deleted` removes an id). An update (any status) for an id we never
+  saw created makes the list partial and nothing is shown (an honest total is unknown, e.g. after a server restart mid-list);
+  so does a TaskCreate whose numeric id is not the next one (the recording shows "1", "2", ...: the first create seen must be
+  "1", then highest id seen + 1, a deleted id stays used). Fix round: the first version restarted the count after "all completed,
+  so a new list"; no recording backs that, and it showed 0/1 for a list that was 2/3. Now there is no reset: a create after
+  completed tasks continues the list (2 of 3), which is right if Claude numbers on and nothing is shown (a duplicate "1" is
+  ignored, a jump is partial) if it does not. This continuing rule is NOT backed by a recording either (the recording has one
+  list of four); it is the one that cannot show a wrong number for a list we saw whole. A long session with several finished
+  lists therefore shows the running total until the next SessionStart. A SessionStart other than `compact` clears it; subagent task
   events (`agent_id`) are ignored; at most 200 ids. Shown as `tasks 3/7` (the word, so it is not read as the session
   position `2/3`) at the right of row A before the diff, in the views that show the tool row; the file gives way.
 - **Room.** Band order: shape, word, clock, quiet tag, hint (+N / position), repo, tags. When it does not fit, the repo gives way
