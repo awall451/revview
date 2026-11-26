@@ -2,7 +2,7 @@
 // The glance view: renders a reducer state (see src/state/README.md) as a state band, a row for tool and file, a command area and an output area.
 import { mmToPx } from './panel.js';
 import { TYPE_MM, RANGE_MM, askFontPx } from './type.js';
-import { middleEllipsis, fitWhere, fitPrefix, formatCount } from './fit.js';
+import { middleEllipsis, fitWhere, fitPrefix, formatCount, formatElapsed, elapsedWords, quietMinutes } from './fit.js';
 
 const LABELS = {
   working: 'WORKING',
@@ -85,7 +85,7 @@ const CHIP = { working: '#5eb1ff', waiting: '#c8a2ff', permission: '#ffb020', as
 
 const $ = (id) => document.getElementById(id);
 const str = (v) => (typeof v === 'string' ? v : '');
-const ids = ['band', 'shape', 'state-word', 'others', 'where', 'tags', 'hot-tag', 'power-tag', 'buttons-tag', 'tool', 'file', 'note1', 'note2', 'diff', 'diff-approx', 'diff-added',
+const ids = ['band', 'shape', 'state-word', 'clock', 'quiet-tag', 'tasks', 'tasks-count', 'others', 'where', 'tags', 'hot-tag', 'power-tag', 'buttons-tag', 'tool', 'file', 'note1', 'note2', 'diff', 'diff-approx', 'diff-added',
   'diff-removed', 'session', 'cmdbox', 'command', 'out1', 'out2', 'out3', 'offline-note', 'voice', 'voice-mark', 'position', 'voice-note',
   'lower', 'nav', 'ask', 'ask-question', 'ask-options', 'ask-steps', 'ask-hint', 'ask-meta', 'ask-multi', 'ask-count', 'ask-more'];
 const el = Object.fromEntries(ids.map((id) => [id, $(id)]));
@@ -112,6 +112,58 @@ function applyTypeSizes() {
 function set(node, text) {
   node.textContent = text;
   node.dataset.full = text;
+}
+
+// ---- time: the clock and the quiet mark in the band ----
+// What the shown state says about time, plus the clock it is read against. Live: the server's clock is the page's clock plus
+// `liveOffset` (set on every message from msg.now; 0 when the message has none). Static (?fixture, ?state, revviewRender): the state's own `now`.
+// A tick (once a second) only repaints the clock and the quiet text, it never renders again.
+const TIME_VIEWS = new Set(['working', 'permission', 'asking']);
+const finite = (v) => typeof v === 'number' && Number.isFinite(v);
+let liveOffset = null;
+const timeState = { view: '', since: NaN, quietSince: NaN, staticNow: NaN, clockRoom: true };
+
+function serverNow() {
+  return liveOffset !== null ? Date.now() + liveOffset : timeState.staticNow;
+}
+
+function paintTime() {
+  const t = timeState;
+  const now = serverNow();
+  const known = Number.isFinite(now);
+  const clockOn = TIME_VIEWS.has(t.view) && Number.isFinite(t.since) && known;
+  if (clockOn) {
+    set(el.clock, formatElapsed(now - t.since));
+    el.clock.dataset.full = elapsedWords(now - t.since);
+  } else {
+    set(el.clock, '');
+    el.clock.dataset.full = '';
+  }
+  el.clock.hidden = !clockOn || !t.clockRoom;
+  if (clockOn && !t.clockRoom) el.clock.dataset.room = 'hidden';
+  else delete el.clock.dataset.room;
+  const quietOn = t.view === 'working' && Number.isFinite(t.quietSince) && known;
+  el['quiet-tag'].hidden = !quietOn;
+  if (quietOn) {
+    const mins = quietMinutes(now - t.quietSince);
+    set(el['quiet-tag'], `QUIET ${mins} MIN`);
+    el['quiet-tag'].dataset.full = `No event from Claude for ${mins === '99+' ? 'over 99' : mins} min: a long command, or stuck`;
+  } else {
+    set(el['quiet-tag'], '');
+    el['quiet-tag'].dataset.full = '';
+  }
+}
+
+// The widest text the clock can show (the digits are the same width, the colon and the h differ): the room check uses it,
+// so a clock that grows by a tick never pushes the marks out.
+function widestClock() {
+  let best = '59:59';
+  let w = 0;
+  for (const t of ['59:59', '23h59', '99h+']) {
+    el.clock.textContent = t;
+    if (el.clock.offsetWidth > w) { w = el.clock.offsetWidth; best = t; }
+  }
+  return best;
 }
 
 function fitFile(full) {
@@ -191,6 +243,8 @@ export function render(input) {
   el.shape.dataset.shape = view;
   set(el['state-word'], LABELS[view]);
   document.body.dataset.view = view;
+  Object.assign(timeState, { view, since: finite(s.since) ? s.since : NaN, quietSince: finite(s.quietSince) ? s.quietSince : NaN, staticNow: finite(s.now) ? s.now : NaN, clockRoom: true });
+  paintTime();
 
   // everything below starts empty; only what applies is filled in
   for (const k of ['tool', 'file', 'note1', 'note2', 'command', 'out1', 'out2', 'out3', 'offline-note', 'voice-note']) set(el[k], '');
@@ -316,6 +370,13 @@ export function render(input) {
     el.diff.dataset.full = '';
   }
 
+  // task progress "tasks 3/7" before the diff: where row A shows the tool, when the session has a task list
+  const tk = s.tasks;
+  const tasksOn = !note && tk && typeof tk === 'object' && Number.isInteger(tk.total) && Number.isInteger(tk.done) && tk.total >= 1 && tk.done >= 0 && tk.done <= tk.total;
+  el.tasks.hidden = !tasksOn;
+  set(el['tasks-count'], tasksOn ? `${tk.done}/${tk.total}` : '');
+  el.tasks.dataset.full = tasksOn ? `${tk.done} of ${tk.total} tasks done` : '';
+
   // the "more sessions" hint never shrinks; it is placed before #where, which gives way first
   // two digits do not fit next to NEEDS PERMISSION: from 10 on it reads "9+" (data-full has the real number)
   // With the position ("2/3") shown, "+N" would say the same twice: the hint is then only the NUMBER of other
@@ -364,21 +425,47 @@ export function render(input) {
   showTag(el['hot-tag'], s.hot === true && view !== 'no-link', HOT_FULL);
   showTag(el['power-tag'], s.lowPower === true && view !== 'no-link', POWER_FULL);
   el.tags.hidden = el['hot-tag'].hidden && el['power-tag'].hidden && el['buttons-tag'].hidden;
-  el.band.classList.remove('tight');
-  const tagPx = el.tags.hidden ? 0 : el.tags.offsetWidth + 24;
-  const lastFixed = voice !== null ? el.voice : el.others;
-  if ((others || voice !== null) && lastFixed.getBoundingClientRect().right > el.band.clientWidth - 24 - tagPx) el.band.classList.add('tight');
   // The group must end inside the band's padding. At the detail size HOT, LOW POWER and NO BUTTONS beside the longest
-  // word and the hint do not all fit (the type size is not negotiable): the padding tightens first, then the heat and
-  // supply marks give way, LOW POWER before HOT, never the state, the hint, the voice mark or NO BUTTONS.
+  // word and the hint do not all fit (the type size is not negotiable): the padding tightens first, then the clock goes
+  // (its data-full stays), then the heat and supply marks give way, LOW POWER before HOT, never the state, the quiet mark,
+  // the hint, the voice mark or NO BUTTONS.
   const tagsEnd = () => el.tags.getBoundingClientRect().right;
   const limit = () => el.band.clientWidth - (el.band.classList.contains('tight') ? 10 : 24) + 0.5;
-  if (!el.tags.hidden && tagsEnd() > limit()) el.band.classList.add('tight');
+  const shown = (n) => n.getClientRects().length > 0;
+  const lastFixed = () => [el.voice, el.others, el['quiet-tag'], el.clock].find(shown);
+  const layoutBand = () => {
+    el.band.classList.remove('tight');
+    const tagPx = el.tags.hidden ? 0 : el.tags.offsetWidth + 24;
+    const last = lastFixed();
+    if (last && last.getBoundingClientRect().right > el.band.clientWidth - 24 - tagPx) el.band.classList.add('tight');
+    if (!el.tags.hidden && tagsEnd() > limit()) el.band.classList.add('tight');
+  };
+  // the time marks are measured at their widest text (a tick must never push anything out), then put back
+  const timeMarks = [[el.clock, null], [el['quiet-tag'], 'QUIET 99+ MIN']].filter(([n]) => !n.hidden);
+  const timeText = timeMarks.map(([n]) => n.textContent);
+  for (const [n, wide] of timeMarks) n.textContent = wide ?? widestClock();
+  layoutBand();
+  if (!el.clock.hidden) {
+    // #where's own margin and gap count once it has text; it may be empty or hidden from the last render
+    const [whereText, whereHidden] = [el.where.textContent, el.where.hidden];
+    el.where.hidden = false;
+    el.where.textContent = 'x';
+    const over = () => (el.tags.hidden ? lastFixed().getBoundingClientRect().right : tagsEnd()) > limit();
+    if (over()) {
+      el.clock.hidden = true;
+      timeState.clockRoom = false;
+      layoutBand();
+    }
+    el.where.textContent = whereText;
+    el.where.hidden = whereHidden;
+  }
   for (const tag of [el['power-tag'], el['hot-tag']]) {
     if (el.tags.hidden || tagsEnd() <= limit()) break;
     showTag(tag, false, '');
     el.tags.hidden = el['hot-tag'].hidden && el['power-tag'].hidden && el['buttons-tag'].hidden;
   }
+  timeMarks.forEach(([n], i) => { n.textContent = timeText[i]; });
+  paintTime();
 
   // fitting needs layout, so it comes after the fields are in place
   if (view === 'asking') renderAsk(s.ask, askRows);
@@ -534,7 +621,7 @@ function navRow(r, i, nav, isEmpty) {
     chip.className = 'chip';
     chip.dataset.state = str(r.state);
     chip.style.background = CHIP[r.state] ?? CHIP.unknown;
-    body.append(chip, text(`row${i}-label`, 'label', label), text(`row${i}-word`, 'word', str(r.word)));
+    body.append(chip, text(`row${i}-label`, 'label', label), text(`row${i}-word`, 'word', r.quiet === true ? 'QUIET' : str(r.word)));
     if (r.target === true || r.voice === false) {
       // a session the buttons cannot drive shows the crossed mic (as the band does), never a plain one
       const off = r.voice === false;
@@ -656,7 +743,7 @@ async function loadStatic(q) {
 
 const root = document.documentElement;
 
-// Live: the server pushes {seq, state} on /events. A dead link shows "no link", never a stale state.
+// Live: the server pushes {seq, now, state} on /events. A dead link shows "no link", never a stale state.
 function live() {
   const down = () => {
     root.dataset.link = 'down';
@@ -678,6 +765,8 @@ function live() {
       let msg;
       try { msg = JSON.parse(ev.data); } catch { return; }
       if (!msg || typeof msg !== 'object') return;
+      // the server's clock is the page's clock plus this offset; a message without `now` leaves the page's own clock (offset 0)
+      liveOffset = finite(msg.now) ? msg.now - Date.now() : 0;
       render(msg.state);
       if (Number.isInteger(msg.seq)) root.dataset.seq = String(msg.seq);
     };
@@ -691,6 +780,8 @@ function live() {
     };
   };
   root.dataset.link = 'connecting';
+  // the clock and the quiet text move once a second, with no new render
+  setInterval(paintTime, 1000);
   // nothing is known until the first message: NO LINK, never STARTING (only RevviewStarting makes that)
   render({ view: 'no-link' });
   connect();

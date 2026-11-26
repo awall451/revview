@@ -318,7 +318,9 @@ if [ "$mode" = live ]; then
   server_args+=(--tmux-socket "$sock" --claude-settings "$work/claude-settings.json" --start "$live_dir")
   REVVIEW_PORT=$port node "$root/src/server/index.js" "$port" "${server_args[@]}" > "$log" 2>&1 &
 else
-  server_args+=(--dev-demo)
+  # the quiet mark after 24 s (the real default is 5 min): only the last scene holds longer than that, up to 1x speed (see emulator/demo/scenes.js);
+  # a paused demo (P) shows QUIET on a working scene after 24 s, as the product would
+  server_args+=(--dev-demo --quiet-minutes 0.4)
   node "$root/src/server/index.js" "${port:-0}" "${server_args[@]}" > "$log" 2>&1 &
 fi
 spid=$!

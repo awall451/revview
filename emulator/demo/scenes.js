@@ -11,10 +11,17 @@
 // on the compacting state (the player's hold shows it); the next scene (or the loop's restart) shows its end.
 //
 // Scene 10: Claude asks (AskUserQuestion), from fixtures/sessions/ask-question.jsonl, in the compaction session (it is the only one
-// left, and the compaction ended with scene 9): CLAUDE ASKS with the question and its options. It ends on the asking state; the loop's
-// restart moves on. After the question the scene taps Down, Down, Up (steps `DemoKey`, which the player sends as laptop keys through
+// left, and the compaction ended with scene 9): CLAUDE ASKS with the question and its options. It ends on the asking state; scene 11 (or
+// the loop's restart, after a jump) moves on. After the question the scene taps Down, Down, Up (steps `DemoKey`, which the player sends as laptop keys through
 // POST /dev/key, the way a typed key goes): the highlighted option moves 1 -> 2 -> 3 -> 2 so the owner sees it; a jump (key 0) skips them
 // and shows option 1. The demo keys are 1-9 and 0 (= 10).
+//
+// Scene 11: a task list and the time marks, from fixtures/sessions/task-list.jsonl (Claude Code 2.1.332: TaskCreate / TaskUpdate), in a session of
+// its own (repo revview, id ...-tasks) that replaces the asking one (its SessionEnd comes first). Real events of the recording, the tool
+// rows left out: the prompt, four TaskCreate, then Bash and TaskUpdate calls up to 2 of 4 done: WORKING with the clock running ("0:07"...) and "tasks 2/4"
+// in row A. The scene holds long (`hold`), so the server's quiet timer (run.sh passes --quiet-minutes 0.4 = 24 s to the demo server) fires inside the
+// hold: the QUIET mark appears at the end, and the next event (the loop's restart) clears it. At speeds above 1x the hold is shorter than
+// the timer and no QUIET shows. No demo key reaches it (the keys are 1-9 and 0 = 10): it follows the asking scene in the loop.
 import fs from 'node:fs';
 
 function recording(name) {
@@ -34,6 +41,7 @@ const permissionPrompt = recording('permission-prompt');
 const idlePrompt = recording('idle-prompt');
 const compaction = recording('compaction');
 const askQuestion = recording('ask-question');
+const taskList = recording('task-list');
 const start = is('SessionStart');
 const lastBash = workingTurn.findLastIndex(is('PostToolUse', { tool_name: 'Bash' }));
 
@@ -53,6 +61,8 @@ const PARTS = {
   compactManual: compaction.slice(9, 21),
   // the user prompt up to the first permission_prompt notification: AskUserQuestion waits for the driver
   ask: between(askQuestion, is('UserPromptSubmit'), is('Notification', { notification_type: 'permission_prompt' })),
+  // the prompt, the four creates, the first Bash step and the first two tasks done: events 1, 7, 10, 13, 16, 19, 21, 25, 27, 33, 35, 37 of the recording
+  tasks: [1, 7, 10, 13, 16, 19, 21, 25, 27, 33, 35, 37].map((i) => taskList[i]),
   waiting: between(idlePrompt, is('UserPromptSubmit'), is('Notification', { notification_type: 'idle_prompt' })),
 };
 if (!start(PARTS.starts.revview[0]) || !start(PARTS.starts.garden[0]) || !start(PARTS.starts.notes[0])) throw new Error('demo: recording does not start with SessionStart');
@@ -62,6 +72,8 @@ export const REPOS = Object.freeze(['revview', 'garden', 'notes']);
 export const sessionId = (loop, repo) => `demo${loop}-${repo}`;
 
 const COMPACTION = 'compaction';
+const TASKS = 'tasks';
+const TASKS_HOLD = 36000; // ms at 1x: the quiet timer of the demo server is 24 s
 const readdress = (events, id, repo) => events.map((ev) => {
   const { cwd, ...rest } = ev;
   return {
@@ -82,7 +94,7 @@ export const clearOverlays = () => [net(true), lock(false)];
 
 // The loop's last events: every demo session still on the board ends (an id the board never saw is harmless).
 export function endLoop(loop) {
-  return [...REPOS, COMPACTION].map((repo) => ({ hook_event_name: 'SessionEnd', session_id: sessionId(loop, repo) }));
+  return [...REPOS, COMPACTION, TASKS].map((repo) => ({ hook_event_name: 'SessionEnd', session_id: sessionId(loop, repo) }));
 }
 
 // The scenes of loop number `loop` (session ids derive from it, so every loop's ids are fresh).
@@ -91,6 +103,7 @@ export function buildLoop(loop) {
   const as = (s, events) => readdress(events, s.id, s.repo);
   const ctx = (s) => ({ hook_event_name: 'RevviewContext', session_id: s.id, cwd: `/home/user/${s.repo}`, branch: 'main' });
   const d = { repo: 'revview', id: sessionId(loop, COMPACTION) };
+  const e = { repo: 'revview', id: sessionId(loop, TASKS) };
   const starts = [a, b, c].flatMap((s) => [...as(s, PARTS.starts[s.repo]), ctx(s)]);
   return [
     { name: 'working', steps: [...steps(starts, 0), ...steps(as(a, PARTS.working))], expect: { view: 'working', sessions: 3 } },
@@ -108,5 +121,16 @@ export function buildLoop(loop) {
     // Claude asks a question in the same session
     // then the highlight moves like the driver's own taps would: down, down, up (the scene ends on option 2)
     { name: 'asking', steps: [...steps(as(d, PARTS.ask)), ...['ArrowDown', 'ArrowDown', 'ArrowUp'].map((code) => ({ event: { hook_event_name: 'DemoKey', code } }))], expect: { view: 'asking', sessions: 1 } },
+    // the asking session ends and a task list is worked: the clock, "tasks N/M", and (after the hold's first 24 s) QUIET
+    {
+      name: 'tasks',
+      steps: [
+        ...steps([{ hook_event_name: 'SessionEnd', session_id: d.id }, ...as(e, [taskList[0]]), ctx(e)], 0),
+        // the four creates come quickly, the rest at the player's pace
+        ...as(e, PARTS.tasks).map((event, i) => (i >= 1 && i <= 4 ? { event, gap: 700 } : { event })),
+      ],
+      hold: TASKS_HOLD,
+      expect: { view: 'working', sessions: 1 },
+    },
   ];
 }

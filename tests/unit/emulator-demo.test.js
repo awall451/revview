@@ -90,7 +90,7 @@ test('playing through: every scene reaches the state the bar shows, then the loo
     }
     const s1 = await shown(url);
     assert.deepEqual({ view: s1.view, sessions: s1.sessions, offline: s1.offline, locked: s1.locked, compacting: s1.compacting }, { view: 'working', sessions: 3, offline: false, locked: false, compacting: false });
-    const names = ['working', 'permission', 'done', 'waiting', 'offline', 'insert-key', 'ended', 'compaction', 'compact-cmd', 'asking'];
+    const names = ['working', 'permission', 'done', 'waiting', 'offline', 'insert-key', 'ended', 'compaction', 'compact-cmd', 'asking', 'tasks'];
     assert.deepEqual(lines.slice(0, names.length + 1), [...names, 'working'].map((n, i) => `demo: ${(i % names.length) + 1} ${n}`));
   } finally {
     player.stop();
@@ -114,7 +114,7 @@ test('jump(n) reaches scene n for every n, from any state, and leaves no overlay
       assert.equal(s.locked, n === 6, `locked after jump ${n}`);
     }
     await player.jump(0);
-    await player.jump(11);
+    await player.jump(12);
     await player.jump(1.5);
     assert.equal((await shown(url)).view, 'asking', 'jumps outside 1..10 do nothing (scene 10 stays)');
   } finally {
@@ -313,7 +313,7 @@ test('DEMO_CODES: Digit1-9 and Digit0, P, [ and ], none of them bound in the lap
 test('scenes: ids are fresh per loop, overlays are cleared by the loop end, Claude events come from the recordings', () => {
   const ids = (loop) => new Set(buildLoop(loop).flatMap((s) => s.steps.map((x) => x.event.session_id)).filter(Boolean));
   const [one, two] = [ids(1), ids(2)];
-  assert.equal(one.size, 4, 'three sessions and the compaction one');
+  assert.equal(one.size, 5, 'three sessions, the compaction one and the task list one');
   for (const id of one) assert.ok(!two.has(id));
   assert.deepEqual(clearOverlays().map((e) => e.hook_event_name), ['RevviewNetwork', 'RevviewDataLock']);
   const names = new Set(buildLoop(1).flatMap((s) => s.steps.map((x) => x.event.hook_event_name)));
@@ -361,7 +361,7 @@ test('asking scenes: the real ask-question recording, events 1-4, in the compact
   const rec = fs.readFileSync(new URL('../../fixtures/sessions/ask-question.jsonl', import.meta.url), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
   const [asking, ...more] = buildLoop(1).slice(9);
   assert.equal(asking.name, 'asking');
-  assert.equal(more.length, 0, 'asking is the last scene');
+  assert.deepEqual(more.map((s) => s.name), ['tasks'], 'asking is the last scene a key reaches; the task list follows');
   const claude = (scene) => scene.steps.map((x) => x.event).filter((e) => !e.hook_event_name.startsWith('Revview') && e.hook_event_name !== 'DemoKey');
   const key = (e) => [e.hook_event_name, e.tool_name, e.notification_type].join('/');
   assert.deepEqual(claude(asking).map(key), rec.slice(1, 5).map(key));
@@ -419,6 +419,34 @@ test('asking scene played: Down, Down, Up as laptop keys move the highlighted op
       if (state.ask?.choice !== undefined && choices.at(-1) !== state.ask.choice) choices.push(state.ask.choice);
     }
     assert.deepEqual(choices, [0, 1, 2, 1]);
+  } finally {
+    player.stop();
+    await live.close();
+  }
+});
+
+test('tasks scene: real task-list recording events in a session of its own; the bar shows the clock data, tasks 2/4, and the quiet mark after the hold', async () => {
+  const rec = fs.readFileSync(new URL('../../fixtures/sessions/task-list.jsonl', import.meta.url), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  const scene = buildLoop(1).at(-1);
+  assert.equal(scene.name, 'tasks');
+  assert.ok(scene.hold > HOLD, 'it holds longer than the others (the quiet timer must fire inside the hold)');
+  const claude = scene.steps.map((x) => x.event).filter((e) => !e.hook_event_name.startsWith('Revview') && e.hook_event_name !== 'SessionEnd');
+  const key = (e) => [e.hook_event_name, e.tool_name].join('/');
+  const want = [0, 1, 7, 10, 13, 16, 19, 21, 25, 27, 33, 35, 37].map((i) => rec[i]);
+  assert.deepEqual(claude.map(key), want.map(key));
+  for (const e of claude) assert.equal(e.session_id, 'demo1-tasks');
+  const { live, url } = await demoServer({ quietMs: 150 });
+  const { player } = newPlayer(url);
+  try {
+    player.start();
+    await player.idle();
+    await player.jump(11);
+    const { state } = await get(url, '/state');
+    assert.equal(state.view, 'working');
+    assert.deepEqual(state.tasks, { done: 2, total: 4 });
+    assert.ok(Number.isFinite(state.since));
+    await until(async () => (await get(url, '/state')).state.quietSince !== null, 'the quiet mark');
+    assert.ok(Number.isFinite((await get(url, '/state')).now));
   } finally {
     player.stop();
     await live.close();

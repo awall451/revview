@@ -111,7 +111,7 @@ export function createPlayer({ url, clock = { setTimeout, clearTimeout }, post =
     if (ti < scene.steps.length) return schedule(g, scene.steps[ti].gap ?? gapMs, playStep);
     si++;
     ti = 0;
-    schedule(g, holdMs, si < scenes.length ? playStep : nextLoop, true);
+    schedule(g, scene.hold ?? holdMs, si < scenes.length ? playStep : nextLoop, true);
   }
 
   async function playStep(g) {

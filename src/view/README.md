@@ -80,6 +80,37 @@ Colour is never the only cue; each state has its own shape:
 | ended | CLAUDE EXITED | power-off symbol | sand `#d8c28a` |
 | no-link | NO LINK | broken chain link | inverted: black band, white word, shape and 0.6 mm outline |
 
+## Time marks: the clock, QUIET and the task progress
+
+Inputs (always in the state, see `src/state/README.md`): `since` (ms epoch on the SERVER clock: when the shown session's
+current state began, or null), `quietSince` (ms epoch of the last hook event while the session works and is marked quiet,
+else null), `tasks` (`{done, total}` or null). Nav session rows have `quiet: bool`.
+
+- **Clock** `#clock`, in the band right after the state word (before QUIET and the `+N` / position hint): detail size, bold, the
+  band's text colour. Only for the views working, permission and asking, and only with a finite `since` and a known time. Format
+  (`formatElapsed`, `fit.js`): under 1 h `m:ss` (0:07, 12:34, 59:59), 1 h to under 100 h `1h05`, from 100 h `99h+`; negative (clock skew)
+  `0:00`. `data-full` "In this state for 12 min 34 s" (`elapsedWords`).
+- **QUIET** `#quiet-tag`, right after the clock, looks like the HOT tag (2 px outline, transparent, detail size, bold):
+  `QUIET 7 MIN` (whole minutes since `quietSince`, at least 1, from 100 `99+ MIN`), only while working with a finite `quietSince`.
+  `data-full` "No event from Claude for 7 min: a long command, or stuck".
+- **Tasks** `#tasks` (`#tasks-word` "tasks" grey regular, `#tasks-count` "3/7" white bold) at the right end of row A, before the diff
+  (and before the CLAUDE ASKS counts), where row A shows the tool (working, waiting, done, permission, asking; not in note views or
+  under the list/menu) when `tasks.total >= 1` and `0 <= done <= total`. It never shrinks: the file (and the tool) give way.
+  `data-full` "3 of 7 tasks done". The word is there so it is not read as the session position "2/3".
+- **List rows**: a session row with `quiet: true` reads `QUIET` instead of its state word (the chip keeps its colour).
+- **Time source.** Live: every message sets `offset = msg.now - Date.now()` (0 when `now` is missing or not finite); the server's time is
+  `Date.now() + offset`, so a wrong page clock changes nothing. A timer once a second repaints only the clock and the QUIET text
+  (never a full render). Static (`?fixture`, `?state`, `revviewRender`): the state's own `now` key (static only, a finite number; not
+  part of the reducer's state) is the time and nothing ticks; without `now` there is no clock and no QUIET. Gallery screenshots use a fixed
+  `now` and `since`.
+- **Room.** Band order: shape, word, clock, QUIET, hint (`+N` / position / triangle), `#where`, tags. `#where` gives way first (as before).
+  If the band is still too tight (after the narrower `tight` padding), the clock is hidden (`hidden`, `data-room="hidden"`, `data-full`
+  kept). The room check measures the widest clock (`59:59`, `23h59`, `99h+` whichever is widest) and `QUIET 99+ MIN`, so a tick never pushes
+  anything out. QUIET, the hint, the mic mark and NO BUTTONS never hide for the clock; the heat and supply tags still give way as before,
+  after the clock. Measured in the emulator's fonts (px, 1280 wide): clock `12:34` 104 wide, `QUIET 99+ MIN` about 295. NEEDS PERMISSION +
+  clock + `+9` fits (ends at 904); WORKING + QUIET 99+ + `9+` + HOT + NO BUTTONS (LOW POWER already dropped) fits only without the clock; with
+  the mic and 12/13 the clock is hidden too. A very busy row A (tasks 200/200, a long repo in `#session`, a big diff) squeezes the file to a stub.
+
 ## Type sizes
 
 Sizes are cap heights (ink height of a capital H) in panel mm, set in `type.js`. Design (`TYPE_MM`): state word
@@ -97,7 +128,7 @@ height holds whatever font the browser picks. Mm are converted at the panel's 12
   `html[data-link]` is `static`. Needs an HTTP server (ES modules and `fetch` do not work from `file://`):
   `node emulator/serve.js`, then `http://127.0.0.1:8137/src/view/?fixture=working`.
 - Live: with neither `?fixture` nor `?state`, the page opens an `EventSource` on `/events` of the server
-  that served it (`src/server/README.md`) and renders every `{seq, state}` message. `index.html` already contains the
+  that served it (`src/server/README.md`) and renders every `{seq, now, state}` message (`now` = the server's clock, see Time marks). `index.html` already contains the
   NO LINK look (data-view, shape, word, notes), so the very first paint is never an empty grey band. Before the
   first message and whenever the link is down it shows `no-link` (never the stale state, never `starting`;
   only a `RevviewStarting` event makes `starting`) and reconnects (re-created after 1 s if the browser gave up); the next message
@@ -137,6 +168,7 @@ A page loaded from the cache keeps its old scripts until the next reload after t
 | `html[data-rendered]` | set after each render, to the view id |
 | `html[data-link]` | `static`, `connecting` (live, nothing yet), `up`, `down` |
 | `html[data-seq]` | `seq` of the last message rendered; removed when the link goes down |
+| `#clock[data-room]` | `hidden` when the clock was left out for lack of room |
 | `[data-full]` on each field | the full text before any shortening |
 
 ## Fitting

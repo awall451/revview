@@ -4,7 +4,7 @@
 // over a fixture state.
 import fs from 'node:fs';
 
-export const WORST_CASE_IDS = ['over-limits', 'no-spaces', 'cjk-wide', 'at-limits', 'big-diff', 'band-marks'];
+export const WORST_CASE_IDS = ['over-limits', 'no-spaces', 'cjk-wide', 'at-limits', 'big-diff', 'band-marks', 'time-marks', 'time-mic'];
 
 export const WORST_CASE_DIR = new URL('./worst-case/', import.meta.url);
 

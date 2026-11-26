@@ -489,8 +489,9 @@ test('--keys lists the demo keys, every scene name and the no-Claude note', asyn
     assert.equal((await run.exit()).code, 0);
     assert.match(run.out, /^Demo keys \(demo mode only; the demo player takes them, not the bar\):$/m);
     const { buildLoop } = await import('../../emulator/demo/scenes.js');
-    const names = buildLoop(1).map((s) => s.name);
-    assert.equal(names.length, 10);
+    const all = buildLoop(1).map((s) => s.name);
+    assert.equal(all.length, 11, 'the eleventh scene (tasks) has no key');
+    const names = all.slice(0, 10);
     for (const n of names) assert.ok(run.out.includes(n), `scene ${n}`);
     assert.match(run.out, /^ {2}1-9 and 0 .*jump/m);
     assert.match(run.out, /^ {2}P +pause/m);

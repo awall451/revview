@@ -1,0 +1,17 @@
+{
+  "repo": "a-very-long-repository-name-for-the-worst-case-of-the-time-marks",
+  "branch": "feature/very-long-branch-name-for-refund-flow-fix-with-many-more-words-to-be-sure-it-overflows-the-band-2026",
+  "tool": "NotebookEdit",
+  "file": "src/components/checkout/refund/RefundFlowSummaryPanel.component.spec.tsx",
+  "others": 12,
+  "buttons": "missing",
+  "hot": true,
+  "lowPower": true,
+  "now": 1800000000000,
+  "since": 1799640000000,
+  "quietSince": 1799988000000,
+  "tasks": {
+    "done": 200,
+    "total": 200
+  }
+}

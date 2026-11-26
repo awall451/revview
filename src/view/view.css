@@ -59,6 +59,19 @@ body[data-view="no-link"] #band {
   white-space: nowrap;
   text-transform: uppercase;
 }
+/* time in the current state (m:ss, 1h05, 99h+): detail size, bold, the band's text colour. view.js hides it (data-room) when the
+   band has no room for it. */
+#clock {
+  flex: none;
+  margin-left: 0.5em;
+  font-size: var(--detail-font);
+  font-weight: 700;
+  white-space: nowrap;
+}
+#band.tight #clock { margin-left: 2px; }
+/* the quiet mark: the same look as the HOT tag (rules below); never hides */
+#quiet-tag { margin-left: 0.4em; }
+#band.tight #quiet-tag { margin-left: 10px; } /* never closer than 16 px to the state word */
 /* "+N more Claude sessions": never squeezed; #where shrinks or hides first */
 #others {
   flex: none;
@@ -104,7 +117,7 @@ body[data-view="no-link"] #band {
 }
 #tags[hidden] { display: none; }
 #band.tight #tags { gap: 4px; }
-#hot-tag, #power-tag, #buttons-tag {
+#hot-tag, #power-tag, #buttons-tag, #quiet-tag {
   flex: none;
   box-sizing: border-box;
   padding: 0 10px;
@@ -116,7 +129,7 @@ body[data-view="no-link"] #band {
   line-height: 1.2;
   white-space: nowrap;
 }
-#band.tight #hot-tag, #band.tight #power-tag, #band.tight #buttons-tag { padding: 0 6px; }
+#band.tight #hot-tag, #band.tight #power-tag, #band.tight #buttons-tag, #band.tight #quiet-tag { padding: 0 6px; }
 
 /* Below the band: a flow of 40 px rows without gaps: row A (tool, file, diff), then the notes or the command
    (wrapped), then the output lines. At most 7 rows: 84 + 8 + 7 x 40 + 8 = 380 of 400 px. */
@@ -152,6 +165,12 @@ span:empty { display: none; }
 #note1 { flex: 1 1 0; }
 /* the repo at the right end of row A, when the band had no room for it (QA 03) */
 #session { flex: 0 1 auto; max-width: 30%; margin-left: auto; font-weight: 700; }
+/* task progress "tasks 3/7" at the right end of row A, before the diff: never shrinks, the file gives way */
+#line2 > #tasks { flex: none; overflow: visible; margin-left: auto; display: flex; gap: 0.3em; }
+#tasks-word { color: var(--grey); }
+#tasks-count { font-weight: 700; color: #fff; }
+#session:not([hidden]) + #tasks { margin-left: 0.8em; }
+#tasks:not([hidden]) ~ #ask-meta, #tasks:not([hidden]) ~ #diff { margin-left: 0.8em; }
 #diff {
   flex: none;
   margin-left: auto;

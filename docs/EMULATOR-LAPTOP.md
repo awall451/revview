@@ -67,10 +67,10 @@ server did not start) or the server stopped while running; 2 for a bad option.
 ## What you see
 
 By default you see the **demo**. A small player (`emulator/demo/player.js`) feeds the server the recorded Claude Code
-sessions from `fixtures/sessions/`, shown as three sessions called revview, garden and notes. It loops through ten
+sessions from `fixtures/sessions/`, shown as three sessions called revview, garden and notes. It loops through eleven
 scenes, and the terminal prints a `demo: N scene` line for each:
 
-1. working  2. permission  3. done  4. waiting  5. offline  6. insert-key  7. ended  8. compaction  9. compact-cmd  10. asking (key 0)
+1. working  2. permission  3. done  4. waiting  5. offline  6. insert-key  7. ended  8. compaction  9. compact-cmd  10. asking (key 0)  11. tasks (no key: it follows asking)
 
 What each scene puts on the screen (the big state word of the bar):
 
@@ -86,6 +86,7 @@ What each scene puts on the screen (the big state word of the bar):
 | compaction | WORKING, the tool line reads "Compacting context" (Claude compacts in the middle of a turn) |
 | compact-cmd | DONE, the tool line reads "Compacting context" (a `/compact` typed at the prompt); scene 8 and 9 are one session, revview |
 | asking | CLAUDE ASKS: a question with options (key 0; see "CLAUDE ASKS" below) |
+| tasks | WORKING with a clock beside the word (0:07, counting up) and `tasks 2/4` in the top line (a real task-list recording); it holds 36 s and after 24 s of silence the QUIET 1 MIN mark appears (the demo server runs with `--quiet-minutes 0.4`, the real default is 5 min); at 2x or 4x speed the hold is too short for it |
 
 The digit keys jump to a scene; P pauses; `[` and `]` slow down and speed up (the cheatsheet lists them).
 

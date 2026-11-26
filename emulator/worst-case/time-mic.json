@@ -1,0 +1,27 @@
+{
+  "repo": "revview",
+  "branch": "main",
+  "tool": "Edit",
+  "file": "src/components/checkout/refund/RefundFlowSummaryPanel.component.spec.tsx",
+  "diff": {
+    "added": 1234,
+    "removed": 567
+  },
+  "others": 12,
+  "elsewhere": 3,
+  "voice": "here",
+  "position": {
+    "index": 12,
+    "count": 13
+  },
+  "buttons": "missing",
+  "hot": true,
+  "lowPower": true,
+  "now": 1800000000000,
+  "since": 1799913601000,
+  "quietSince": 1799988000000,
+  "tasks": {
+    "done": 99,
+    "total": 100
+  }
+}

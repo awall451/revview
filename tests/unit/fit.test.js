@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { middleEllipsis, fitPrefix, formatCount } from '../../src/view/fit.js';
+import { middleEllipsis, fitPrefix, formatCount, formatElapsed, elapsedWords, quietMinutes } from '../../src/view/fit.js';
 
 const maxLen = (n) => (s) => Array.from(s).length <= n;
 const lone = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
@@ -141,4 +141,40 @@ test('fitPrefix: never splits a grapheme (emoji ZWJ sequence, flag, combining ma
   const accent = 'e\u0301e\u0301e\u0301e\u0301';
   const out = fitPrefix(accent, (s) => Array.from(s).length <= 4);
   assert.equal(out, 'e\u0301…');
+});
+
+test('formatElapsed: m:ss under an hour, 1h05 under 100 h, 99h+ from 100 h, 0:00 for negative, empty when unknown', () => {
+  const s = 1000;
+  const m = 60 * s;
+  const h = 60 * m;
+  assert.equal(formatElapsed(0), '0:00');
+  assert.equal(formatElapsed(7 * s), '0:07');
+  assert.equal(formatElapsed(7999), '0:07');
+  assert.equal(formatElapsed(12 * m + 34 * s), '12:34');
+  assert.equal(formatElapsed(59 * m + 59 * s + 999), '59:59');
+  assert.equal(formatElapsed(h), '1h00');
+  assert.equal(formatElapsed(h + 5 * m), '1h05');
+  assert.equal(formatElapsed(23 * h + 59 * m + 59 * s), '23h59');
+  assert.equal(formatElapsed(99 * h + 59 * m + 59 * s), '99h59');
+  assert.equal(formatElapsed(100 * h), '99h+');
+  assert.equal(formatElapsed(1e12), '99h+');
+  assert.equal(formatElapsed(-5 * s), '0:00');
+  assert.equal(formatElapsed(-1e12), '0:00');
+  for (const bad of [NaN, Infinity, null, undefined, '5', {}]) assert.equal(formatElapsed(bad), '');
+});
+
+test('elapsedWords and quietMinutes', () => {
+  assert.equal(elapsedWords(754000), 'In this state for 12 min 34 s');
+  assert.equal(elapsedWords(7000), 'In this state for 7 s');
+  assert.equal(elapsedWords(3900000), 'In this state for 1 h 5 min');
+  assert.equal(elapsedWords(100 * 3600000), 'In this state for 100 h or more');
+  assert.equal(elapsedWords(-1), 'In this state for 0 s');
+  assert.equal(elapsedWords(NaN), '');
+  assert.equal(quietMinutes(0), '1');
+  assert.equal(quietMinutes(59999), '1');
+  assert.equal(quietMinutes(7 * 60000 + 5000), '7');
+  assert.equal(quietMinutes(99 * 60000), '99');
+  assert.equal(quietMinutes(100 * 60000), '99+');
+  assert.equal(quietMinutes(-5), '1');
+  assert.equal(quietMinutes(undefined), '');
 });

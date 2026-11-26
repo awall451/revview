@@ -141,3 +141,42 @@ test('screenshot permission-offline (needs the driver, no network) is 1280x400',
   await page.screenshot({ path: file });
   expectPng1280x400(file);
 });
+
+// The time marks, with a FIXED since and now (the gallery is deterministic): the clock, the quiet mark and the task progress.
+const SHOT_NOW = 1_800_000_000_000;
+const timed = (ms, extra = {}) => ({ now: SHOT_NOW, since: SHOT_NOW - ms, ...extra });
+for (const [id, base, extra, check] of [
+  ['clock-working', 'working', { tasks: { done: 3, total: 7 } }, async (page) => {
+    await expect(page.locator('#clock')).toHaveText('12:34');
+    await expect(page.locator('#tasks-count')).toHaveText('3/7');
+    await expect(page.locator('#diff')).toBeVisible();
+  }],
+  ['clock-permission', 'permission', {}, async (page) => {
+    await expect(page.locator('#state-word')).toHaveText('NEEDS PERMISSION');
+    await expect(page.locator('#clock')).toHaveText('12:34');
+  }],
+  ['clock-asking', 'asking-choice', { tasks: { done: 3, total: 7 } }, async (page) => {
+    await expect(page.locator('#clock')).toHaveText('12:34');
+    await expect(page.locator('#tasks-count')).toHaveText('3/7');
+  }],
+]) {
+  test(`screenshot ${id} (the clock) is 1280x400`, async ({ openView, page }) => {
+    const file = path.join(shotsDir(), `${id}.png`);
+    await openView({ ...loadFixture(base), ...timed(754000), ...extra });
+    await check(page);
+    await expectFits(page);
+    await page.screenshot({ path: file });
+    expectPng1280x400(file);
+  });
+}
+
+test('screenshot quiet (WORKING 1h05, QUIET 7 MIN, tasks) is 1280x400', async ({ openView, page }) => {
+  const file = path.join(shotsDir(), 'quiet.png');
+  await openView({ ...loadFixture('working'), ...timed(3900000), quietSince: SHOT_NOW - 7 * 60000 - 20000, tasks: { done: 3, total: 7 } });
+  await expect(page.locator('#clock')).toHaveText('1h05');
+  await expect(page.locator('#quiet-tag')).toHaveText('QUIET 7 MIN');
+  await expect(page.locator('#tasks-count')).toHaveText('3/7');
+  await expectFits(page);
+  await page.screenshot({ path: file });
+  expectPng1280x400(file);
+});

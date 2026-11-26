@@ -83,3 +83,31 @@ export function formatCount(n) {
   if (n < 1e9) return `${Math.floor(n / 1e6)}M`;
   return `${Math.floor(n / 1e9)}G`;
 }
+
+// Time in the current state, for the band's clock. `ms` is the elapsed time; unknown (not a finite number) gives ''.
+// Under 1 h `m:ss` (0:07, 12:34, 59:59), from 1 h `1h05` (hours, two-digit minutes), from 100 h `99h+`. Negative (clock skew): 0:00.
+export function formatElapsed(ms) {
+  if (typeof ms !== 'number' || !Number.isFinite(ms)) return '';
+  const s = Math.floor(Math.max(0, ms) / 1000);
+  if (s < 3600) return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  const h = Math.floor(s / 3600);
+  if (h >= 100) return '99h+';
+  return `${h}h${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}`;
+}
+
+// The same time in words, for data-full: "In this state for 12 min 34 s".
+export function elapsedWords(ms) {
+  if (typeof ms !== 'number' || !Number.isFinite(ms)) return '';
+  const s = Math.floor(Math.max(0, ms) / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const rest = h >= 100 ? '100 h or more' : h >= 1 ? `${h} h ${m} min` : m >= 1 ? `${m} min ${s % 60} s` : `${s} s`;
+  return `In this state for ${rest}`;
+}
+
+// Whole minutes of silence for the QUIET mark: at least 1, from 100 it reads 99+. Unknown: ''.
+export function quietMinutes(ms) {
+  if (typeof ms !== 'number' || !Number.isFinite(ms)) return '';
+  const n = Math.max(1, Math.floor(ms / 60000));
+  return n >= 100 ? '99+' : String(n);
+}

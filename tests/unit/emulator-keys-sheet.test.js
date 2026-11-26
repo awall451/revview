@@ -65,11 +65,13 @@ test('the labels for the gestures that do something special match the real code'
 test('the demo keys come from scenes.js: every scene name and the range', async () => {
   const out = await sheet();
   const { buildLoop } = await import('../../emulator/demo/scenes.js');
-  const names = buildLoop(1).map((s) => s.name);
+  const all = buildLoop(1).map((s) => s.name);
+  // keys 1-9 and 0 (= 10) reach the first ten scenes; the eleventh (tasks, the clock and the quiet mark) only follows asking in the loop
+  assert.equal(all.length, 11);
+  assert.equal(all[10], 'tasks');
+  const names = all.slice(0, 10);
   for (const n of names) assert.ok(out.includes(n), n);
-  // keys 1-9 and 0 (= 10) reach every scene
   assert.match(out, /1-9 and 0/);
-  assert.equal(names.length, 10);
   assert.ok(names.includes('compaction') && names.includes('compact-cmd') && names.includes('asking'), 'keys 8, 9 and 0 are on the sheet');
   assert.match(out, /nothing is sent to a Claude/i);
   assert.match(out, /--live/);
