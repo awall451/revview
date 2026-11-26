@@ -11,7 +11,7 @@ import { postEvent } from './routes-event.js';
 import { postPermission } from './routes-permission.js';
 import { devKey, demoStream, bridgeCodes } from './routes-dev.js';
 import { acceptGesture, setupInput, buttonsHandler } from './gestures.js';
-import { createLifecycle, LAUNCH_LIMIT_MS, COMPACT_LIMIT_MS } from './lifecycle.js';
+import { createLifecycle, LAUNCH_LIMIT_MS, COMPACT_LIMIT_MS, QUIET_MS } from './lifecycle.js';
 import { startMonitors } from './monitors.js';
 
 export const DEFAULT_PORT = 8138;
@@ -22,15 +22,15 @@ const DEFAULT_VIEW_DIR = path.resolve(HERE, '..', 'view');
 export async function startLiveServer({
   port = 0, viewDir = DEFAULT_VIEW_DIR, reduce: reduceEvent = reduceBoard,
   input = null, devBridge = false, devKeys = null, devDemo = false, inputDeps, inputRetryMs, onGesture,
-  sessions = null, clock, permissionWaitMs, minShownMs, projects = [], timers, navTimeoutMs, ownedPollMs = 5000, speech = null, launchLimitMs = LAUNCH_LIMIT_MS, compactLimitMs = COMPACT_LIMIT_MS,
+  sessions = null, clock = Date.now, quietMs = QUIET_MS, permissionWaitMs, minShownMs, projects = [], timers, navTimeoutMs, ownedPollMs = 5000, speech = null, launchLimitMs = LAUNCH_LIMIT_MS, compactLimitMs = COMPACT_LIMIT_MS,
   boot = false, netmon = null, thermal = null, dataLock = null,
 } = {}) {
   const root = path.resolve(viewDir);
   // Everything the modules share, per server (no module-level state: tests start many servers in one process).
   // Set later in this function: readAloud, sounds (with speech), actions, inputHandle, bridge, lastSource (setupInput), monitor, thermalMonitor,
-  // dataMonitor (startMonitors), compactSync, launchTimers, compactTimers, clearT (createLifecycle), ownedTimer (the owned poll below).
+  // dataMonitor (startMonitors), compactSync, quietSeen, quietClose, launchTimers, compactTimers, clearT (createLifecycle), ownedTimer (the owned poll below).
   const ctx = {
-    root, reduceEvent, input, devBridge, devKeys, devDemo, onGesture, sessions, dataLock,
+    root, reduceEvent, clock, input, devBridge, devKeys, devDemo, onGesture, sessions, dataLock,
     board: initialBoard(),
     seq: 0,
     clients: new Set(),
@@ -67,7 +67,7 @@ export async function startLiveServer({
     });
     ctx.readAloud = createReadAloud({ speaker, memo: createClosingMemo(), speakOnStop: () => ctx.board.sounds === 'speech', beforeSpeak: () => ctx.sounds.idle(), log });
   }
-  const { applyProjects, refreshOwned, launched, runner: marked } = createLifecycle(ctx, { projects, timers, launchLimitMs, compactLimitMs });
+  const { applyProjects, refreshOwned, launched, runner: marked } = createLifecycle(ctx, { projects, timers, launchLimitMs, compactLimitMs, quietMs });
   ctx.actions = createActions({
     readAloud: ctx.readAloud, runner: marked, registry: ctx.registry, getBoard: () => ctx.board, apply: ctx.apply, projects, clock, timers, navTimeoutMs,
     log: (m) => console.error(m), onOwnedChanged: refreshOwned,
@@ -169,6 +169,7 @@ export async function startLiveServer({
         ctx.launchTimers.clear();
         for (const t of ctx.compactTimers.values()) ctx.clearT(t);
         ctx.compactTimers.clear();
+        ctx.quietClose();
         if (ctx.ownedTimer !== null) clearInterval(ctx.ownedTimer);
         ctx.registry.close(); // leaves the tmux server alone: sessions outlive a server restart
         clearInterval(timer);

@@ -3,12 +3,15 @@ import fs from 'node:fs';
 export const LAUNCH_LIMIT_MS = 30000;
 // a compaction took 5-7 s in the recordings and 1-2 min in long sessions; this bounds a lost end event
 export const COMPACT_LIMIT_MS = 180000;
+// a working session with no hook event for this long gets the quiet mark (RevviewQuiet); 0 or null: never
+export const QUIET_MS = 300000;
+const MAX_QUIET_TIMERS = 64;
 
 // The server's lifecycle: the project marks and the owned-sessions poll, the launch and compaction timers,
 // the runner the actions get. Per-server state is in the closure and on ctx (launchTimers, compactTimers, clearT:
 // close() reads them there); nothing at module level.
-// Sets ctx.compactSync, ctx.launchTimers, ctx.compactTimers, ctx.clearT.
-export function createLifecycle(ctx, { projects, timers, launchLimitMs, compactLimitMs }) {
+// Sets ctx.compactSync, ctx.quietSeen, ctx.quietClose, ctx.launchTimers, ctx.compactTimers, ctx.clearT.
+export function createLifecycle(ctx, { projects, timers, launchLimitMs, compactLimitMs, quietMs = QUIET_MS }) {
   const { sessions, dataLock } = ctx;
   // owned = the sessions revview itself started (the runner's windows); null without a runner (the old look)
   // project folders that do not exist are marked in the New session rows; re-checked on the owned poll (no timer of its own)
@@ -101,6 +104,32 @@ export function createLifecycle(ctx, { projects, timers, launchLimitMs, compactL
       compactTimers.delete(id);
     }
   }
+  // quiet: every hook event of a session (re)arms its timer; when it fires the board marks the session if it is still
+  // working (the reducer ignores RevviewQuiet otherwise). A SessionEnd drops it. At most MAX_QUIET_TIMERS, the oldest dropped.
+  const quietTimers = new Map(); // id -> { t, seen }
+  const quietOff = !(Number.isFinite(quietMs) && quietMs > 0);
+  function quietDrop(id) {
+    const q = quietTimers.get(id);
+    if (q === undefined) return;
+    clearT(q.t);
+    quietTimers.delete(id);
+  }
+  function quietSeen(id, name) {
+    if (quietOff || ctx.closed || typeof id !== 'string' || typeof name !== 'string' || name.startsWith('Revview')) return;
+    quietDrop(id);
+    if (name === 'SessionEnd') return;
+    const seen = ctx.clock();
+    const t = setT(() => {
+      quietTimers.delete(id);
+      if (!ctx.closed) ctx.apply({ hook_event_name: 'RevviewQuiet', session_id: id, since: seen }, true);
+    }, quietMs);
+    t?.unref?.();
+    quietTimers.set(id, { t, seen });
+    while (quietTimers.size > MAX_QUIET_TIMERS) quietDrop(quietTimers.keys().next().value);
+  }
+  function quietClose() {
+    for (const id of [...quietTimers.keys()]) quietDrop(id);
+  }
   const marked = sessions ? {
     ...guarded,
     start: async (...a) => {
@@ -110,6 +139,9 @@ export function createLifecycle(ctx, { projects, timers, launchLimitMs, compactL
     },
   } : guarded;
   ctx.compactSync = compactSync;
+  ctx.quietSeen = quietSeen;
+  ctx.quietClose = quietClose;
+  ctx.quietTimers = quietTimers;
   ctx.launchTimers = launchTimers;
   ctx.compactTimers = compactTimers;
   ctx.clearT = clearT;

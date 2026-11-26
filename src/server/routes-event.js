@@ -11,7 +11,7 @@ const DIFF_TOOLS = ['Edit', 'Write', 'MultiEdit']; // the only tools whose PostT
 const BUTTON_RE = /^[a-z][a-z0-9-]{0,31}$/;
 const GESTURES = ['tap', 'hold', 'long-hold'];
 // made only by revview itself (the actions, the boot path): no POST may forge them, not even under --dev-bridge
-const INTERNAL_EVENTS = ['RevviewInterrupted', 'RevviewAnswered', 'RevviewAskGone', 'RevviewSelect', 'RevviewNav', 'RevviewOwned', 'RevviewProjects', 'RevviewNote', 'RevviewBootBegin', 'RevviewBootDone', 'RevviewLaunching', 'RevviewLaunchExpired', 'RevviewNoSessionPress', 'RevviewCompactExpired', 'RevviewEndReason', 'RevviewThermal', 'RevviewSounds'];
+const INTERNAL_EVENTS = ['RevviewInterrupted', 'RevviewAnswered', 'RevviewAskGone', 'RevviewSelect', 'RevviewNav', 'RevviewOwned', 'RevviewProjects', 'RevviewNote', 'RevviewBootBegin', 'RevviewBootDone', 'RevviewLaunching', 'RevviewLaunchExpired', 'RevviewNoSessionPress', 'RevviewCompactExpired', 'RevviewEndReason', 'RevviewThermal', 'RevviewSounds', 'RevviewQuiet'];
 
 // A body over the limit that still looks like a hook event means an event was lost (QA issue 11).
 export function noteDropped(ctx, prefix) {
@@ -115,6 +115,7 @@ export function postEvent(ctx, req, res) {
       return text(res, 403, `${event.hook_event_name} is not accepted over HTTP (dev bridge only)`);
     }
     if (!ctx.apply(event)) return text(res, 500, 'state core failed; event ignored');
+    ctx.quietSeen?.(event.session_id, event.hook_event_name);
     if (typeof event.session_id === 'string') ctx.compactSync(event.session_id, event.hook_event_name === 'PreCompact');
     try {
       ctx.readAloud?.onEvent(event, ctx.board, selectedKey(ctx.board));

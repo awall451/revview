@@ -33,7 +33,7 @@ async function setup(t, opts = {}) {
   const s = await startLiveServer({ port: 0, ...opts });
   t.after(() => s.close());
   const post = (p, body) => fetch(`${s.url}${p}`, { method: 'POST', body: JSON.stringify(body) });
-  const state = async () => (await (await fetch(`${s.url}/state`)).json());
+  const state = async () => ({ ...(await (await fetch(`${s.url}/state`)).json()), now: 0 }); // now (the server clock) is not part of the comparisons
   const key = async (code) => {
     const n = s.gestures().length;
     await post('/dev/key', { code, type: 'down' });

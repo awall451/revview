@@ -172,7 +172,7 @@ test('POST /event RevviewButton / RevviewInput without the dev bridge: 403, no g
     const r2 = await postEvent(s, { hook_event_name: 'RevviewInput', present: false });
     assert.equal(r2.status, 403);
     assert.match(await r2.text(), /RevviewInput is not accepted over HTTP/);
-    assert.deepEqual(await get(s, '/state'), before);
+    assert.deepEqual({ ...(await get(s, "/state")), now: before.now }, before); // the server clock moves on: only seq and state must be unchanged
     assert.deepEqual((await buttons(s)).gestures, []);
     assert.equal(seen.length, 0);
     assert.equal(s.gestures().length, 0);

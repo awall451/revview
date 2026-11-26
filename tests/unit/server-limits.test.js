@@ -30,7 +30,7 @@ test('a throwing state core answers 500 and leaves seq and state alone', async (
     } finally {
       console.error = origError;
     }
-    assert.deepEqual(await (await fetch(`${srv.url}/state`)).json(), before);
+    assert.deepEqual({ ...(await (await fetch(`${srv.url}/state`)).json()), now: before.now }, before); // the server clock moves on: only seq and state must be unchanged
     boom = false;
     assert.equal((await post({ a: 3 })).status, 204);
     assert.equal((await (await fetch(`${srv.url}/state`)).json()).seq, before.seq + 1);

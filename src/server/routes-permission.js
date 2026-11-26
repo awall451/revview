@@ -19,6 +19,7 @@ export function postPermission(ctx, req, res) {
     }
     const before = ctx.board;
     if (!ctx.apply(ev)) return text(res, 500, 'state core failed; event ignored');
+    ctx.quietSeen?.(ev.session_id, ev.hook_event_name);
     try { // a new question or plan is read out as on /event; a speech failure never breaks this route
       ctx.readAloud?.onEvent(ev, ctx.board, selectedKey(ctx.board));
     } catch (e) {

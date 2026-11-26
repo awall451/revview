@@ -7,7 +7,7 @@ session, see `src/state/README.md`), reduces every event with `reduceBoard` and 
 No persistence: a fresh or restarted server shows `unknown` (a restored state could not be trusted, and hooks
 posted while the server was down are lost).
 
-Run: `npm start` or `node src/server/index.js [port] [--input [path]] [--dev-bridge [--dev-keys file] [--dev-demo]] [--sessions] [--start dir]... [--projects file] [--speech file] [--boot] [--netmon] [--thermal] [--data-lock [dir]]` (port default **8138**, or env `REVVIEW_PORT`).
+Run: `npm start` or `node src/server/index.js [port] [--input [path]] [--dev-bridge [--dev-keys file] [--dev-demo]] [--sessions] [--start dir]... [--projects file] [--speech file] [--boot] [--netmon] [--thermal] [--data-lock [dir]] [--quiet-minutes N]` (port default **8138**, or env `REVVIEW_PORT`).
 `--input` reads the wheel buttons in this process (config `config/buttons.json`, or the path given); a bad config or
 unknown flag prints the message to stderr and exits with code 2 before listening. `--dev-bridge` (or `npm run start:dev`) turns on `POST /dev/key`. SIGTERM and SIGINT close the server (stopping the grab helper) and exit 0.
 It binds to **127.0.0.1 only**; there is deliberately no way to change the host from the CLI.
@@ -63,6 +63,15 @@ phone hotspot over Wi-Fi counts) plus a TCP connect to the Claude API host (`api
 `REVVIEW_NETMON_HOST` = `host` or `host:port` changes it; a bad value is logged (`REVVIEW_NETMON_HOST must be host or host:port, got <v>; using api.anthropic.com:443`) and the default is used, the server still starts; `netmonTarget` parses it). It checks every 10 s
 (every 5 s while offline). Two failures in a row make the bar show OFFLINE; one success brings it back. Without
 a default route nothing is sent at all. Nothing depends on Ethernet. Code: `src/server/netmon.js`.
+
+## Time and the quiet mark: `--quiet-minutes N`
+
+One clock (`startLiveServer`'s `clock` option, default `Date.now`) is used everywhere: the reducer gets it as `reduceBoard(board, event, at)` (so `state.since`
+is the time of the event), and every SSE message and `GET /state` carries `now`. Every POSTed `/event` (and `/permission`) with a string `session_id`
+(not a `Revview*` event) records the time and (re)arms that session's timer of `quietMs` (option of `startLiveServer`, with the injected `timers`;
+default 300000; 0 or null = off). When it fires the server applies the internal `RevviewQuiet {session_id, since}` (403 over HTTP); the core marks
+the session only if it is working, and any later event of the session clears the mark. A `SessionEnd` drops the timer; at most 64 timers (the oldest
+dropped); `close()` clears them. CLI: `--quiet-minutes N` (a number, decimals allowed, 0 = off, at most 120; anything else: message on stderr, exit 2).
 
 ## Heat and weak supply: `--thermal`
 
@@ -141,14 +150,14 @@ Headers: `content-type: text/event-stream`, `cache-control: no-store`. The strea
 
     retry: 1000
 
-    data: {"seq":3,"state":{...}}
+    data: {"seq":3,"now":1767000000000,"state":{...}}
 
 A comment `: ping` is sent every 15 s to detect dead sockets. `seq` counts accepted events since the
-server started.
+server started; `now` is the server's clock (ms, the injected `clock`, default `Date.now`) when the message was built: the page corrects its own clock by it.
 
 ## Other paths
 
-- `GET /state`: `{"seq":n,"state":{...}}` (debugging, tests); `state` is `boardView(board)`, the same object as in SSE.
+- `GET /state`: `{"seq":n,"now":ms,"state":{...}}` (debugging, tests); `state` is `boardView(board)`, the same object as in SSE.
 - `GET /sw.js`: the view's service worker (a static file, scope `/`). It only answers page and script requests from its cache when the server does not answer (see `src/view/README.md`); `/event`, `/events` and `/state` are never touched.
 - `GET`/`HEAD` of any other path: static file from the view dir (`/` is `index.html`), `cache-control: no-store`,
   404 if missing, path traversal refused (403/404).

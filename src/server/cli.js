@@ -1,10 +1,11 @@
 // Live server: hook scripts POST raw Claude Code hook JSON to /event, the state core
 // (src/state) reduces it, and the new state is pushed to the page over Server-Sent Events.
 // It also serves the view. Binds to 127.0.0.1 only; see src/server/README.md.
-//   node src/server/index.js [port] [--input [path]] [--dev-bridge [--dev-keys file] [--dev-demo]] [--sessions] [--start dir]... [--projects file] [--speech file] [--boot] [--netmon] [--thermal] [--data-lock [dir]]   (port default 8138, or REVVIEW_PORT)
+//   node src/server/index.js [port] [--input [path]] [--dev-bridge [--dev-keys file] [--dev-demo]] [--sessions] [--start dir]... [--projects file] [--speech file] [--boot] [--netmon] [--thermal] [--data-lock [dir]] [--quiet-minutes N]   (port default 8138, or REVVIEW_PORT)
 //   --boot: key-on start: show STARTING until the first session is on the board; with no tmux windows, start one session in $REVVIEW_START (or each --start dir)
 //   --data-lock [dir]: the data is locked until the topmost mount on dir (default /srv/revview-data, or $REVVIEW_DATA_MOUNT) is ext4 from /dev/mapper/revview-data;
 //     locked shows INSERT KEY, no session starts (key-on and New session wait); a posted RevviewDataLock is only a poke to re-read the mount table
+//   --quiet-minutes N: a working session with no hook event for N minutes (default 5; decimals allowed, at most 120) gets the quiet mark; 0 = off
 //   --netmon: watch the network (default route + TCP connect to $REVVIEW_NETMON_HOST, default api.anthropic.com:443); offline after 2 failures, online after 1 success; a posted RevviewNetwork is only a poke to probe again
 //   --thermal: watch temperature and the Pi throttle flags: HOT and LOW POWER marks (sources: $REVVIEW_THERMAL_TEMP file, default /sys/class/thermal/thermal_zone0/temp;
 //     `vcgencmd get_throttled`, command path $REVVIEW_THERMAL_VCGENCMD, or a file $REVVIEW_THERMAL_THROTTLED instead of the command); a missing source is logged once
@@ -28,6 +29,13 @@ export function parseArgs(argv) {
     else if (a === '--boot') out.boot = true;
     else if (a === '--netmon') out.netmon = true;
     else if (a === '--thermal') out.thermal = true;
+    else if (a === '--quiet-minutes') {
+      const next = argv[i + 1];
+      const n = next !== undefined && /^\d+(\.\d+)?$/.test(next) ? Number(next) : NaN;
+      if (!(n >= 0 && n <= 120)) throw new Error(`--quiet-minutes needs a number from 0 (off) to 120, got ${next ?? 'nothing'}`);
+      out.quietMinutes = n;
+      i++;
+    }
     else if (a === '--data-lock') {
       const next = argv[i + 1];
       if (next !== undefined && next.startsWith('/')) { out.dataLock = next; i++; } else out.dataLock = DEFAULT_DATA_MOUNT;
@@ -154,7 +162,7 @@ export async function main(argv = process.argv.slice(2)) {
     console.error(e.message);
     speechLine = 'speech: off (bad speech config, see the log)';
   }
-  const live = await startLiveServer({ port: args.port, input, devBridge: args.devBridge, devKeys, devDemo: args.devDemo === true, sessions: runner, projects, speech, boot: args.boot, netmon, thermal, dataLock: args.dataLock ? { mountPoint: args.dataLock } : null });
+  const live = await startLiveServer({ port: args.port, input, devBridge: args.devBridge, devKeys, devDemo: args.devDemo === true, sessions: runner, projects, speech, boot: args.boot, netmon, thermal, dataLock: args.dataLock ? { mountPoint: args.dataLock } : null, ...(args.quietMinutes !== undefined ? { quietMs: args.quietMinutes * 60000 } : {}) });
   if (args.boot && runner && args.dataLock) {
     const log = (m) => console.error(m);
     bootAfterUnlock({ live, runner, dirs: args.start, log }).then(() => log('boot: key-on session step done'));

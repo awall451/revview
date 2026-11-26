@@ -305,10 +305,10 @@ test('end to end, working-turn: every line through the real hook matches the boa
         assert.ok(mid.diff.added + mid.diff.removed > 0, 'diff shows after the Edit');
         assert.deepEqual(mid.diff, boardView(board).diff);
       }
-      // the served state equals the replay after every line (the board is not time dependent here)
+      // the served state equals the replay after every line (the server stamps since from its clock: not compared)
       const live = await getState(srv);
       const want = boardView(board);
-      assert.deepEqual({ ...live, voice: null }, { ...want, voice: null }, `after line ${i} (${e.hook_event_name})`);
+      assert.deepEqual({ ...live, voice: null, since: null }, { ...want, voice: null, since: null }, `after line ${i} (${e.hook_event_name})`);
     }
     const last = await getState(srv);
     assert.equal(last.repo, path.basename(gitContext(JSON.parse(all[0]).cwd).cwd));
@@ -339,7 +339,7 @@ test('end to end, permission-prompt: the hook skips PermissionRequest, the Notif
         withDup = reduceBoard(withDup, ctx);
       }
       const live = await getState(srv);
-      assert.deepEqual({ ...live, voice: null }, { ...boardView(board), voice: null }, e.hook_event_name);
+      assert.deepEqual({ ...live, voice: null, since: null }, { ...boardView(board), voice: null, since: null }, e.hook_event_name);
       if (e.hook_event_name === 'PermissionRequest') {
         // skipped: the board is still at the PreToolUse (working) and carries no pending entry
         assert.equal(live.view, 'working');

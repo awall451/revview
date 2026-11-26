@@ -5,7 +5,9 @@ export const PING_MS = 15000;
 export const MAX_SSE_CLIENTS = 8;
 export const MAX_CLIENT_BACKLOG_BYTES = 256 * 1024; // unread bytes after which a stalled SSE client is dropped
 
-export const message = (ctx) => `data: ${JSON.stringify({ seq: ctx.seq, state: boardView(ctx.board) })}\n\n`;
+// the page and GET /state get the server's clock with every board: the page corrects its own clock by it
+export const snapshot = (ctx) => ({ seq: ctx.seq, now: ctx.clock(), state: boardView(ctx.board) });
+export const message = (ctx) => `data: ${JSON.stringify(snapshot(ctx))}\n\n`;
 export const broadcast = (ctx) => {
   const m = message(ctx);
   for (const c of ctx.clients) {
@@ -24,7 +26,7 @@ export const broadcast = (ctx) => {
 export function apply(ctx, event, onlyIfChanged = false) {
   let next;
   try {
-    next = ctx.reduceEvent(ctx.board, event);
+    next = ctx.reduceEvent(ctx.board, event, ctx.clock());
   } catch (e) {
     console.error('reduce failed:', e);
     return false;
@@ -59,7 +61,7 @@ export function events(ctx, req, res) {
 }
 
 export const stateHandler = (ctx, req, res) =>
-  res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify({ seq: ctx.seq, state: boardView(ctx.board) }));
+  res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(snapshot(ctx)));
 
 export function startPing(ctx) {
   const timer = setInterval(() => {

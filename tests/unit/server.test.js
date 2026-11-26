@@ -116,7 +116,10 @@ for (const f of fs.readdirSync(FIX).filter((n) => n.endsWith('.jsonl'))) {
         assert.equal((await post(srv, lines[i])).status, 204);
         const s = await getState(srv);
         assert.equal(s.seq, i + 1);
-        assert.deepEqual(s.state, expected[i].state, `${f} line ${i + 1}`);
+        assert.equal(typeof s.now, 'number');
+        assert.ok(s.state.since === null || typeof s.state.since === 'number');
+        // the recorded expectations predate the clock: compare everything else
+        assert.deepEqual({ ...s.state, since: null }, { ...expected[i].state, since: null }, `${f} line ${i + 1}`);
       }
     });
   });
