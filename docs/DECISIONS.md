@@ -2319,7 +2319,7 @@ wire, data on SPI0 MOSI, GPIO10 (header pin 19). One LED per session, in the bar
   (...)`, the LEDs stay off until the server restarts, the bar goes on, no respawn.
 - **Stop and crash.** Clean stop (SIGTERM, `close()`): a dark frame, stdin closed, the helper writes dark and exits
   (SIGKILL after 1 s). Server crash or SIGKILL: the helper sees EOF on stdin and writes dark (as long as it still
-  runs). systemd stop also sends the helper SIGTERM, on which it writes dark. Not covered: the helper itself killed
+  runs). The service has `KillMode=process`, so systemd's stop signals only node: the dark comes from node's `close()`; the helper's own SIGTERM handler (dark, exit) is for a signal sent to it directly. Not covered: the helper itself killed
   with SIGKILL, or the Pi losing power mid-frame: WS2812B keep their last colour while they have power, so after a
   hard helper kill the LEDs can stay lit until the next frame or power-off. Restart: the new server's first frame
   sets them right.

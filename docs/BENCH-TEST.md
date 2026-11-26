@@ -508,7 +508,7 @@ installer's reboot (`dtparam=spi=on`, group `spi`).
 | LT6 | A session whose run fails (FAILED) | That LED flashes fast, about 2 Hz (twice a second) | untested |
 | LT7 | End a session (close its tmux window) | Its LED goes off within a second; the later ones move up if the bar's order changes | untested |
 | LT8 | Look `night` (hold Menu, or the Look row) then `day` | At night the LEDs are visibly dimmer (cap 12 against 48 of 255 per channel, never above 64); nothing glares in a dark cab | untested |
-| LT9 | `systemctl --user stop revview` while LEDs are lit | All LEDs go dark at once (the helper writes dark on SIGTERM / EOF) | untested |
+| LT9 | `systemctl --user stop revview` while LEDs are lit | All LEDs go dark at once (the server's close sends a dark frame and closes the helper's stdin; `KillMode=process` signals only node) | untested |
 | LT10 | `kill -9` the node server with LEDs lit | The LEDs go dark shortly (the helper sees EOF on its stdin); the service restarts and lights again | untested |
 | LT11 | Lights `on` with SPI off (remove `dtparam=spi=on` from `config.txt`, reboot) or `python3-spidev` removed | One log line (`journalctl --user-unit=revview`) saying why, no repeat every second; the bar and everything else keep working | untested |
 | LT12 | Eight sessions, all LEDs lit white-ish blue at once; check the supply (`vcgencmd get_throttled`, the LOW POWER mark) | No LOW POWER; no brownout; about 120 mA extra at most | untested |
