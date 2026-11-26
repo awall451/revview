@@ -224,3 +224,51 @@ test('close() kills a cue that is playing', T, () => withServer({ cueMs: 20000 }
     try { return /^\d+ \(.*\) Z/.test(fs.readFileSync(`/proc/${pid}/stat`, 'utf8')); } catch { return true; }
   }, 'the stand-in to be dead');
 }));
+
+// ---- CLAUDE ASKS (a question): one needs cue per question, whatever the wheel does with it
+const ASKQ = fs.readFileSync(fileURLToPath(new URL('../../fixtures/sessions/ask-question.jsonl', import.meta.url)), 'utf8')
+  .split('\n').filter(Boolean).map((l) => JSON.parse(l));
+const asking = (id) => ASKQ.map((e) => ({ ...e, session_id: id }));
+
+// a stand-in session runner (one live window, session A) and a clock the test moves: the wheel's answer reaches the held request
+const clock = { now: 0 };
+const runner = {
+  target: async (id) => (id === A ? { id: A, window: '@1' } : null),
+  send: async (k, id) => ({ sent: true, id, window: '@1' }),
+  list: async () => [{ id: A, window: '@1' }],
+};
+
+test('a question: moving the choice, a refused answer and the answer give no second needs cue; the next question gives one', T, () => withServer({ server: { sessions: runner, clock: () => clock.now } }, async (c) => {
+  const q = asking(A);
+  await c.ev(q[1]);
+  await c.ev(q[2]);
+  const r1 = fetch(`${c.s.url}/permission`, { method: 'POST', body: JSON.stringify(q[3]) }).then((r) => r.text().then((body) => ({ status: r.status, body })));
+  await until(() => c.s.state().view === 'asking', 'the asking view');
+  await until(() => cues(c.cueDir).length === 1, 'the needs cue');
+  await c.ev(q[4]); // the Notification for the same question
+  await c.key(CODES.down); // moves the highlighted choice
+  await c.key(CODES.down);
+  assert.equal(c.s.state().ask.choice, 2);
+  await c.key(CODES.press); // shown for less than 1500 ms: refused with a note
+  assert.equal(c.s.state().note, 'Too early: press again');
+  assert.equal(c.s.state().view, 'asking');
+  await sleep(400);
+  assert.deepEqual(cues(c.cueDir), ['needs']);
+  clock.now = 1600; // the question has been shown long enough
+  await c.key(CODES.press); // answers it
+  const got = await r1;
+  assert.equal(got.status, 200);
+  assert.equal(JSON.parse(got.body).behavior, 'allow');
+  await until(() => c.s.state().view !== 'asking', 'the answered view');
+  await sleep(400);
+  assert.deepEqual(cues(c.cueDir), ['needs']);
+  // a new question after the answered one: one more needs cue, and only one
+  const second = { ...q[3], tool_use_id: 'toolu_second', tool_input: { questions: [{ ...q[3].tool_input.questions[0], question: 'Which size?' }] } };
+  await c.ev(q[1]);
+  const r2 = fetch(`${c.s.url}/permission`, { method: 'POST', body: JSON.stringify(second) });
+  await until(() => cues(c.cueDir).length === 2, 'the second needs cue');
+  await c.key(CODES.down);
+  await sleep(400);
+  assert.deepEqual(cues(c.cueDir), ['needs', 'needs']);
+  r2.catch(() => {});
+}));
