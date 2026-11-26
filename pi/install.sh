@@ -20,13 +20,14 @@
 #   fix it and re-run; 3 (or any other code, 1 included when setup.mjs itself could not load) setup.mjs failed part way:
 #   nothing after that point was done, the hooks were not installed, no "done" line. (setup.mjs alone uses 4 for
 #   "a file was refused", 2 bad arguments, 3 a crash; install.sh maps 4 to its own 1 and 2 to its own 2.)
-# What it changes (see pi/setup.mjs): /boot/firmware/cmdline.txt and config.txt (quiet boot, rotated console),
+# What it changes (see pi/setup.mjs): /boot/firmware/cmdline.txt and config.txt (quiet boot, rotated console, dtparam=spi=on for the lights unless an active
+#   spi line exists; it takes a reboot),
 #   /etc/lightdm/lightdm.conf (autologin), udev rules (dongle, touch rotation), /etc/systemd/user/revview.service
 #   and its enable symlink, /var/lib/systemd/linger/<user>, /etc/revview/server.env and /etc/revview/buttons.json
 #   (the owner's files, the USB ids and key map, are edited there; server.env is only written if missing, buttons.json
 #   is created if missing and merged on an update, see below;
 #   the udev dongle rule is regenerated from the ids in /etc/revview/buttons.json on every run),
-#   ~/.config/labwc/autostart (kiosk, no desktop), the user's Claude Code hooks, packages, groups input, audio and video.
+#   ~/.config/labwc/autostart (kiosk, no desktop), the user's Claude Code hooks, packages, groups input, audio, video and spi.
 #   A changed file that existed gets a copy once: <file>.revview-backup.
 # Key map on update: setup.mjs merges three versions of buttons.json per key (an array is one value): the shipped
 #   one it recorded at its last run (/var/lib/revview/buttons.shipped.json, root-owned 0644), the new config/buttons.json,
@@ -114,8 +115,9 @@ case "$home" in /*) ;; *) die "home of $user is not absolute: $home" ;; esac
 echo "user $user ($uid:$gid), home $home, repo $dir, rotate $rotate, output $output, root $root"
 
 # Packages.
+# python3-spidev: src/lights/spi-helper.py (WS2812B lights on SPI MOSI; only used when config/lights.json says on).
 # overlayroot: raspi-config's overlay would otherwise apt-get it at `readonly.sh enable` time (needs a network).
-pkgs="chromium tmux python3 espeak-ng wlr-randr sox overlayroot"
+pkgs="chromium tmux python3 espeak-ng wlr-randr sox overlayroot python3-spidev"
 if [ "$real" -eq 1 ] && [ "$apt" -eq 1 ]; then
   missing=()
   for p in $pkgs; do
@@ -149,12 +151,15 @@ for need in python3 tmux; do
   command -v "$need" > /dev/null || echo "warning: $need not found" >&2
 done
 
-# Groups: input (buttons), audio, and video (vcgencmd, package raspi-utils-core, talks to /dev/vcio_gencmd, which raspberrypi-sys-mods' 10-vc.rules gives group video).
+# Groups: input (buttons), audio, and video (vcgencmd, package raspi-utils-core, talks to /dev/vcio_gencmd, which raspberrypi-sys-mods' 10-vc.rules gives group video),
+# and spi (/dev/spidev*: raspberrypi-sys-mods' 99-com.rules gives it group spi; the lights helper opens it). The group
+# is created here when missing (Debian's base-passwd has no spi; the Pi OS images create it, a package does not).
 if [ "$real" -eq 1 ] && [ "$dry" -eq 0 ]; then
-  usermod --append --groups input,audio,video "$user"
-  echo "added $user to groups input,audio,video"
+  getent group spi > /dev/null || groupadd --system spi
+  usermod --append --groups input,audio,video,spi "$user"
+  echo "added $user to groups input,audio,video,spi"
 else
-  echo "would add $user to groups input,audio,video"
+  echo "would add $user to groups input,audio,video,spi"
 fi
 
 # Leftover of the old set-up: a system unit run as the user "revview".
@@ -228,7 +233,7 @@ fi
 
 cat << EOF
 done. Next:
-  - reboot to start everything (kiosk, server, boot screen);
+  - reboot to start everything (kiosk, server, boot screen; also needed for dtparam=spi=on, the lights' SPI);
   - sign in to Claude Code as $user if not done: run \`claude\` once in a terminal;
   - logs: sudo journalctl --user-unit=revview  (Pi OS keeps the journal in memory only, so journalctl --user shows nothing)
   - dongle ids and keys: edit /etc/revview/buttons.json with sudo (sudoedit; the file is root-owned, mode 0644; USB ids and keys; kept by every re-run; an update merges it with the new default per key), then run

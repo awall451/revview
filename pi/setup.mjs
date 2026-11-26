@@ -60,13 +60,17 @@ export function editCmdline(text, { output = 'HDMI-A-1', rotate = 90 } = {}) {
 export function editConfigTxt(text) {
   const lines = String(text).split(/\r?\n/).filter((l) => !/^\s*disable_splash\s*=/.test(l));
   const head = lines.indexOf(BLOCK_HEAD);
+  // Our own dtparam=spi=on (in the block, after the head) is dropped with the block and added again below.
+  if (head >= 0) for (let i = lines.length - 1; i > head; i--) if (lines[i].trim() === 'dtparam=spi=on') lines.splice(i, 1);
   if (head >= 0) lines.splice(head, lines[head + 1]?.trim() === '[all]' ? 2 : 1);
   while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
   const warnings = [];
   if (!lines.some((l) => /^\s*dtoverlay\s*=\s*vc4-f?kms-v3d\b/.test(l))) {
     warnings.push('no active dtoverlay=vc4-kms-v3d line in config.txt: the video= mode on the kernel command line needs KMS');
   }
-  const out = [...lines, ...(lines.length ? [''] : []), BLOCK_HEAD, '[all]', 'disable_splash=1'];
+  // SPI for the lights (WS2812B on MOSI): same test as raspi-config's get_spi; if none is active, ours goes in the block.
+  const spiOn = lines.some((l) => /^(device_tree_param|dtparam)=([^,]*,)*spi(=(on|true|yes|1))?(,.*)?$/.test(l));
+  const out = [...lines, ...(lines.length ? [''] : []), BLOCK_HEAD, '[all]', 'disable_splash=1', ...(spiOn ? [] : ['dtparam=spi=on'])];
   return { text: `${out.join('\n')}\n`, warnings };
 }
 

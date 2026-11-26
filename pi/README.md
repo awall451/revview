@@ -84,7 +84,8 @@ settings and hooks and your repositories are in that user's home. The user is pu
    Options: `--rotate 270` if the panel is mounted the other way up (180 degrees), `--output HDMI-A-2` if the panel is
    on the other port, `--no-apt` to skip packages. It prints one line per thing it did. What it does:
    - packages (only the missing ones): `chromium tmux python3 espeak-ng wlr-randr sox overlayroot` *(names checked against the Trixie package lists, 2026-11-24, `docs/PI-FACTS.md`; that they work on the Pi is untested; `sox` records the microphone for `/voice`; `overlayroot` is what the read-only step needs: raspi-config would otherwise `apt-get install` it at `enable` time, so it is installed now while the Pi is online)*;
-   - groups `input`, `audio` and `video` for the user (`video`: `vcgencmd` for `--thermal`);
+   - groups `input`, `audio`, `video` and `spi` for the user (`video`: `vcgencmd` for `--thermal`; `spi`: `/dev/spidev0.0` for the lights, the group is created when missing);
+   - `dtparam=spi=on` in `/boot/firmware/config.txt` (inside the installer's own block, only when no active spi line exists; it takes a reboot);
    - quiet boot: `/boot/firmware/config.txt` gets `disable_splash=1`; `/boot/firmware/cmdline.txt` loses `splash` and
      gets `quiet loglevel=0 logo.nologo vt.global_cursor_default=0` (kept on ONE line, CRLF becomes LF). It also
      drops `fbcon=rotate:N` and any earlier `video=<connector>:...` token that has `rotate=` (what an earlier run
@@ -343,6 +344,40 @@ need changing. The paths in that file are the ones above.
 - **Buttons**: `src/input` finds the dongle by the USB ids in `/etc/revview/buttons.json` (the unit's `--input`; `config/buttons.json` is only the default it is created from); the user's `input` group lets the
   server read and grab it; a missing dongle shows NO BUTTONS and is retried.
 - **Read aloud**: `espeak-ng` is installed; Piper is optional (section Piper). The user unit runs inside the user's audio session.
+
+## Lights (LEDs per session)
+
+**Untested on hardware** (bench group LT in `docs/BENCH-TEST.md`). One WS2812B addressable RGB LED per Claude session
+(up to 8, in bar order) on a single data wire from the Pi's SPI0 MOSI. The server runs `src/lights/spi-helper.py`
+(`python3-spidev`) when started with `--lights-config`; the unit passes `/opt/revview/config/lights.json` (the repo's
+path). That file says `"lights": "off"` by default, so nothing is driven until you turn it on.
+
+**Wiring** (header pin numbers; GPIO10 = SPI0 MOSI = pin 19; nothing else in revview uses the 40-pin header, and
+SPI0 is GPIO 7-11, so no collision with the other revview parts):
+
+| Strip | Pi header |
+|---|---|
+| 5 V | pin 2 or 4 (5 V) |
+| GND | pin 6 (or any ground pin) |
+| DIN | pin 19 (GPIO10, MOSI), through a 330-470 ohm resistor close to the first LED |
+
+- **Level.** The Pi's data pin is 3.3 V; a WS2812B at 5 V wants at least 0.7 x VDD = 3.5 V. It often works without a
+  level shifter, not guaranteed. Safer: a 74AHCT125 (or similar) level shifter on the data line, or feed the first LED
+  a diode drop lower (about 4.3 V) and keep the first data wire short. Join the grounds first.
+- **Capacitor.** 100-1000 uF across 5 V and GND at the strip, and connect GND before 5 V.
+- **Current.** About 20 mA per colour channel at full drive. At the brightness cap (64 of 255, config `brightness`)
+  that is at most about 15 mA per LED, so 8 LEDs are about 120 mA, plus about 1 mA idle each. The 5 V header pin is fed
+  straight from the Pi's supply, so this comes out of the supply's budget after the Pi and the panel.
+- **PoE HAT.** The one on the bench covers the header (`docs/DESIGN.md`): fit the strip in the car, or wire to the HAT's
+  own pins; the lights are not a bench-with-PoE feature.
+- **Enable.** Set `"lights": "on"` in `config/lights.json` (the install keeps it, restart the service), or use the
+  Settings row "Lights" (not kept over a restart). `"leds"` is how many are chained; `"driver": "none"` turns the
+  feature off for good.
+- **SPI.** `install.sh` adds `dtparam=spi=on` and the user to group `spi`: reboot once. `/dev/spidev0.0` should exist
+  afterwards. No SPI or no helper: one log line, the bar keeps working.
+- **Pi 4 clock** *(from memory, not checked)*: the SPI0 clock is derived from the core clock, so a core clock that
+  changes (power saving) would change the bit timing; pinning `core_freq=250` in `config.txt` may be needed if the
+  LEDs flicker or show wrong colours. Not done by the installer.
 
 ## Not done here
 

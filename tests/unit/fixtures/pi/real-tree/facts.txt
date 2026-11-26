@@ -20,6 +20,7 @@
 # package d passwd 1:4.17.4-2
 # package d python3 3.13.5-1
 # package d python3-minimal 3.13.5-1
+# package d python3-spidev 3.6-1+b6
 # package d sed 4.9-2+deb13u1
 # package d sox 14.4.2+git20190427-5+b3
 # package d systemd 257.13-1~deb13u1

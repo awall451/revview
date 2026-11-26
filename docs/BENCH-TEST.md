@@ -492,3 +492,24 @@ Emulator only (the gallery has `night-<name>.png` for every shot); never seen on
 | N9 | The time zone: `timedatectl` on the Pi, then `auto` with hours a few minutes ahead | The night hours follow the driver's local time (the service's zone), not UTC | untested |
 | N10 | Cold boot at night (`pi/kiosk.sh` passes no `?look=`) | KNOWN LIMIT: `boot.html` shows the day look (a glare) for the first seconds until the bar page loads in night; note how long and how bad. Not fixed | untested |
 
+## Lights per project (LT)
+
+WS2812B LEDs on SPI MOSI (GPIO10, pin 19), one per Claude session, driven by `src/lights/spi-helper.py`. Wiring and
+power: `pi/README.md`, "Lights (LEDs per session)". All untested; none of it has touched real LEDs. Do LT1 after the
+installer's reboot (`dtparam=spi=on`, group `spi`).
+
+| # | Do | Expect | Result |
+|---|---|---|---|
+| LT1 | Wire the strip (5 V pin 2/4, GND pin 6, DIN pin 19 through 330-470 ohm, capacitor across the strip's supply), reboot after `install.sh`, `ls -l /dev/spidev0.0`, `id`, start the service | `/dev/spidev0.0` exists, group `spi`, you are in `spi`; every LED stays dark at power-up and while the service starts (no random colours). Note whether the 3.3 V data works without a level shifter | untested |
+| LT2 | `"lights": "off"` (the default) in `config/lights.json`, three sessions working | Nothing is lit; `pgrep -f spi-helper` finds no helper | untested |
+| LT3 | Settings, the Lights row, press to `on` | The LEDs start at once without a restart; the row says on; after a service restart it is back to what `config/lights.json` says | untested |
+| LT4 | Three sessions open (the bar shows three) | LED 1, 2, 3 are the sessions in the bar's order, the rest dark; a session that is working shows steady blue | untested |
+| LT5 | One session each in NEEDS PERMISSION, CLAUDE ASKS, WAITING | That LED flashes slowly, 1 s on and 1 s off, in all three; DONE and idle do not flash | untested |
+| LT6 | A session whose run fails (FAILED) | That LED flashes fast, about 2 Hz (twice a second) | untested |
+| LT7 | End a session (close its tmux window) | Its LED goes off within a second; the later ones move up if the bar's order changes | untested |
+| LT8 | Look `night` (hold Menu, or the Look row) then `day` | At night the LEDs are visibly dimmer (cap 12 against 48 of 255 per channel, never above 64); nothing glares in a dark cab | untested |
+| LT9 | `systemctl --user stop revview` while LEDs are lit | All LEDs go dark at once (the helper writes dark on SIGTERM / EOF) | untested |
+| LT10 | `kill -9` the node server with LEDs lit | The LEDs go dark shortly (the helper sees EOF on its stdin); the service restarts and lights again | untested |
+| LT11 | Lights `on` with SPI off (remove `dtparam=spi=on` from `config.txt`, reboot) or `python3-spidev` removed | One log line (`journalctl --user-unit=revview`) saying why, no repeat every second; the bar and everything else keep working | untested |
+| LT12 | Eight sessions, all LEDs lit white-ish blue at once; check the supply (`vcgencmd get_throttled`, the LOW POWER mark) | No LOW POWER; no brownout; about 120 mA extra at most | untested |
+

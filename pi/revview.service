@@ -5,12 +5,14 @@
 # the microphone work for Claude's /voice and for read aloud). The user's Claude sign-in and hooks live there too.
 #
 # ConditionUser: /etc/systemd/user is read by every user's manager; only the kiosk user runs it.
-# No User= and no SupplementaryGroups= (not allowed in user units): the user is in groups input, audio and video.
+# No User= and no SupplementaryGroups= (not allowed in user units): the user is in groups input, audio, video and spi.
 #
 # Flags: --input (the wheel-button reader runs inside the server; its file is /etc/revview/buttons.json, the owner's
 # copy of config/buttons.json, written once by install.sh and never overwritten), --sessions (revview's own tmux sessions),
 # --boot (STARTING at key-on, then the REVVIEW_START session), --netmon (RevviewNetwork events) and --thermal (HOT / LOW POWER
 # marks from vcgencmd get_throttled and the CPU temperature; quiet when they cannot be read; from memory, untested).
+# --lights-config (WS2812B LEDs, one per session; off while config/lights.json says "lights": "off", the default;
+# needs dtparam=spi=on, group spi and python3-spidev, all set by pi/install.sh; untested on a Pi).
 # NEVER add --dev-bridge: it opens POST /dev/key and is for the emulator only.
 #
 # Ordering: there is deliberately no Requires=, Wants= or After= on the kiosk, the network or the dongle.
@@ -35,7 +37,7 @@ EnvironmentFile=-/etc/revview/data.env
 # Under the read-only root an update would land in RAM and vanish. Claude Code is updated with the overlay off
 # (pi/README.md, Updating). The variable name is in Claude Code 2.1.330; its effect is from memory.
 Environment=DISABLE_AUTOUPDATER=1
-ExecStart=@NODE@ @REVVIEW_DIR@/src/server/index.js --input /etc/revview/buttons.json --sessions --boot --netmon --thermal --clock-sync
+ExecStart=@NODE@ @REVVIEW_DIR@/src/server/index.js --input /etc/revview/buttons.json --sessions --boot --netmon --thermal --clock-sync --lights-config @REVVIEW_DIR@/config/lights.json
 Restart=always
 RestartSec=2
 # Do not kill the private tmux server (revview's sessions) when the service restarts: only the node

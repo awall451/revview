@@ -47,14 +47,32 @@ test('editCmdline: bad input throws', () => {
 test('editConfigTxt: disable_splash=1 in a final [all] block, idempotent, warnings', () => {
   const { text, warnings } = editConfigTxt(fix('config.txt'));
   assert.deepEqual(warnings, []);
-  assert.ok(text.endsWith('\n# revview: quiet boot (pi/install.sh)\n[all]\ndisable_splash=1\n'));
+  assert.ok(text.endsWith('\n# revview: quiet boot (pi/install.sh)\n[all]\ndisable_splash=1\ndtparam=spi=on\n'));
   assert.ok(text.startsWith(fix('config.txt').trimEnd()));
   assert.equal(text.match(/disable_splash/g).length, 1);
   assert.doesNotMatch(text, /hdmi_group|hdmi_timings/);
   assert.equal(editConfigTxt(text).text, text);
   const messy = editConfigTxt(`${fix('config.txt')}\n[cm4]\n  disable_splash = 0\n`).text;
   assert.equal(messy.match(/disable_splash/g).length, 1);
-  assert.ok(messy.endsWith('disable_splash=1\n'));
+  assert.ok(messy.endsWith('disable_splash=1\ndtparam=spi=on\n'));
+});
+
+test('editConfigTxt: dtparam=spi=on once, only when no active spi line; our own line is replaced, never doubled', () => {
+  const fx = fix('config.txt'); // has only the commented #dtparam=spi=on
+  const once = editConfigTxt(fx).text;
+  assert.equal(once.match(/^dtparam=spi=on$/gm).length, 1);
+  assert.equal(editConfigTxt(once).text, once);
+  assert.equal(editConfigTxt(editConfigTxt(once).text).text, once);
+  // the user's own line (also with other params) is respected: nothing added
+  for (const own of ['dtparam=spi=on', 'dtparam=spi', 'dtparam=audio=on,spi=on', 'dtparam=spi=1']) {
+    const t = editConfigTxt(`${fx}\n${own}\n`).text;
+    assert.equal(t.includes('dtparam=spi=on\n', t.indexOf('[all]\ndisable_splash')), false, own);
+    assert.equal(editConfigTxt(t).text, t);
+  }
+  // an earlier run's block is still there but the user later added their own line: ours goes away with the block
+  const later = editConfigTxt(`${once}\ndtparam=spi=on\n`).text;
+  assert.equal(later.match(/^dtparam=spi=on$/gm).length, 1);
+  assert.equal(editConfigTxt('').text, '# revview: quiet boot (pi/install.sh)\n[all]\ndisable_splash=1\ndtparam=spi=on\n');
 });
 
 test('editConfigTxt: warns without an active vc4 KMS overlay', () => {
@@ -62,7 +80,7 @@ test('editConfigTxt: warns without an active vc4 KMS overlay', () => {
   const { warnings } = editConfigTxt(noKms);
   assert.equal(warnings.length, 1);
   assert.match(warnings[0], /vc4-kms-v3d/);
-  assert.equal(editConfigTxt('').text, '# revview: quiet boot (pi/install.sh)\n[all]\ndisable_splash=1\n');
+  assert.equal(editConfigTxt(noKms).text.endsWith('dtparam=spi=on\n'), true);
 });
 
 test('editLightdm: sets autologin-user in [Seat:*], idempotent, leaves the rest', () => {
@@ -183,7 +201,7 @@ test('CLI: writes every file, with backups, in order', withRoot((r) => {
   for (const l of res.lines) assert.match(l, /^(wrote|backup|warning) /);
   assert.equal(fs.readFileSync(p('boot/firmware/cmdline.txt.revview-backup'), 'utf8'), fix('cmdline.txt'));
   assert.match(fs.readFileSync(p('boot/firmware/cmdline.txt'), 'utf8'), /rotate=90\n$/);
-  assert.match(fs.readFileSync(p('boot/firmware/config.txt'), 'utf8'), /disable_splash=1\n$/);
+  assert.match(fs.readFileSync(p('boot/firmware/config.txt'), 'utf8'), /disable_splash=1\ndtparam=spi=on\n$/);
   assert.match(fs.readFileSync(p('etc/lightdm/lightdm.conf'), 'utf8'), /^autologin-user=alice$/m);
   // the rule is the template with the ids of config/buttons.json (1d50 / 615e) filled in
   assert.equal(fs.readFileSync(p('etc/udev/rules.d/70-revview-dongle.rules'), 'utf8'),

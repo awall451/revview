@@ -56,13 +56,14 @@ test('install.sh: fake root gets every file, the hooks, and the old unit goes', 
   assert.match(res.out, /removed the old system unit/);
   assert.match(res.out, /userdel revview/);
   assert.match(res.out, /skipped packages/);
-  assert.match(res.out, /would add alice to groups input,audio,video/);
+  assert.match(res.out, /would add alice to groups input,audio,video,spi/);
   assert.match(res.out, /sudo journalctl --user-unit=revview/);
   const settings = fs.readFileSync(p('home/alice/.claude/settings.json'), 'utf8');
   assert.match(settings, /# revview-hook/);
   const unit = fs.readFileSync(p('etc/systemd/user/revview.service'), 'utf8');
   assert.ok(unit.includes(`${ROOT.replace(/\/$/, '')}/src/server/index.js`));
   assert.match(unit, /--boot/);
+  assert.ok(unit.includes(` --lights-config ${ROOT.replace(/\/$/, '')}/config/lights.json\n`), 'the unit passes --lights-config with the repo path');
 }));
 
 test('install.sh: a second run changes nothing', withRoot((r) => {
@@ -501,4 +502,27 @@ test('install.sh: buttons.json three-way merge: conflict exits 1 with the diff c
   assert.equal(run([...base(r), '--adopt-buttons-base']).code, 0);
   assert.equal(JSON.parse(fs.readFileSync(baseF, 'utf8')).timing.holdMs, shipped.timing.holdMs);
   assert.equal(fs.readFileSync(f, 'utf8'), mineText);
+}));
+
+test('install.sh: SPI for the lights: python3-spidev is needed, dtparam=spi=on once, group spi, a second run changes nothing', withRoot((r) => {
+  const res = run(base(r));
+  assert.equal(res.code, 0, res.out + res.err);
+  const line = res.out.split('\n').find((l) => l.startsWith('skipped packages'));
+  assert.match(line, /\bpython3-spidev\b/);
+  const cfg = () => fs.readFileSync(path.join(r, 'boot/firmware/config.txt'), 'utf8');
+  assert.equal(cfg().match(/^dtparam=spi=on$/gm).length, 1);
+  assert.match(res.out, /would add alice to groups input,audio,video,spi/);
+  assert.match(res.out, /reboot/);
+  const before = snapshot(r);
+  assert.equal(run(base(r)).code, 0);
+  assert.deepEqual(snapshot(r), before);
+  assert.equal(cfg().match(/^dtparam=spi=on$/gm).length, 1);
+}));
+
+test('install.sh: a config.txt that already enables spi is not given a second line', withRoot((r) => {
+  const f = path.join(r, 'boot/firmware/config.txt');
+  fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace('#dtparam=spi=on', 'dtparam=spi=on'));
+  assert.equal(run(base(r)).code, 0);
+  assert.equal(fs.readFileSync(f, 'utf8').match(/^dtparam=spi=on$/gm).length, 1);
+  assert.doesNotMatch(fs.readFileSync(f, 'utf8'), /disable_splash=1\ndtparam=spi/);
 }));

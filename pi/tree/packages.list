@@ -11,6 +11,7 @@ espeak-ng-data      voice en-us
 wlr-randr           rotation in the labwc autostart
 sox                 rec for Claude Code's /voice
 overlayroot         read-only root (initramfs script readonly.sh checks for)
+python3-spidev      src/lights/spi-helper.py (WS2812B lights on SPI); installs spidev.cpython-313-*.so in /usr/lib/python3/dist-packages
 # Login and desktop:
 labwc               compositor, labwc-config(5), /etc/xdg/labwc
 lightdm             /etc/lightdm/lightdm.conf

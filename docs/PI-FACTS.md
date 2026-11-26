@@ -292,3 +292,22 @@ list of backlight drivers is not visible either.
   `TZ`) must be the driver's, or night starts at the wrong hour. A Pi's default zone is often UTC: set it on the Pi.
 - On a read-only root (overlay) the saved clock file is not written, so it may stay stale: from memory, unverified.
 
+## 11. Lights: WS2812B on SPI (python3-spidev, spi group, dtparam=spi)
+
+For the "lights per project" feature (`src/lights/spi-helper.py`, `pi/install.sh`, `pi/README.md` Lights). Checked on
+2026-11-26 by unpacking the `.deb` files under `/tmp` only; nothing was installed or run. Bench group LT.
+
+| # | Fact | Where used | Status |
+|---|---|---|---|
+| L1 | `python3-spidev` exists for trixie arm64 in Debian (D): 3.6-1+b6, `Depends: python3 (>= 3.13~), python3 (<< 3.14), libc6`; it is in no R index entry | install.sh pkgs; `pi/tree/packages.lock` | checked 2026-11-26 against python3-spidev 3.6-1+b6 (D) |
+| L2 | It installs `/usr/lib/python3/dist-packages/spidev.cpython-313-aarch64-linux-gnu.so` (and the egg-info), so `import spidev` works for the system `python3` (3.13) only, not for a venv | spi-helper.py | checked 2026-11-26 against python3-spidev 3.6-1+b6 |
+| L3 | `99-com.rules` has `SUBSYSTEM=="spidev", GROUP="spi", MODE="0660"` | install.sh (user in group spi) | checked 2026-11-26 against raspberrypi-sys-mods 1:20260914 (R), `usr/lib/udev/rules.d/99-com.rules` |
+| L4 | A group `spi` exists on a Pi: **not found in any package** (`base-passwd` 3.6.7, raspberrypi-sys-mods' maintainer scripts and files do not create it); the Pi OS images create it when they are built, from memory. install.sh therefore runs `groupadd --system spi` when `getent group spi` finds none | install.sh | package side checked 2026-11-26 (no creator found); image side from memory, not checked |
+| L5 | `raspi-config nonint do_spi 0` enables SPI: it runs `set_config_var dtparam=spi on /boot/firmware/config.txt`, un-blacklists `spi-bcm2708` and runs `dtparam spi=on` (live load). `get_spi` treats `^(device_tree_param\|dtparam)=([^,]*,)*spi(=(on\|true\|yes\|1))?(,.*)?$` as on | `setup.mjs` `editConfigTxt` uses the same test and writes `dtparam=spi=on` itself (one edit with the other config.txt changes, testable in a fake root, no raspi-config call) | checked 2026-11-26 against raspi-config-core 20261026+2 (R), `usr/bin/raspi-config`; that the line works on a Pi is untested (bench LT1) |
+| L6 | The stock `config.txt` carries a commented `#dtparam=spi=on` | setup.mjs, fixture | checked against the fixture copy (made from a real image, cycle 42), not re-read on a Pi |
+| L7 | The dtparam needs a reboot to create `/dev/spidev0.0` (the live `dtparam spi=on` of raspi-config is not used here) | README | from memory, not checked |
+| L8 | GPIO10 is header pin 19 and SPI0 MOSI; SPI0 uses GPIO 7 (CE1), 8 (CE0), 9 (MISO), 10 (MOSI), 11 (SCLK). `/dev/spidev0.0` is CE0 (GPIO8), which stays unused by the strip | README | from memory, not checked (standard Pi pinout); no other pin use found in the repo (`grep` of DESIGN.md, pi/, config/) |
+| L9 | WS2812B timing at 2.4 MHz SPI (3 SPI bits per LED bit: 0 = `100`, 1 = `110`, 417 ns per bit); data high needs >= 0.7 x VDD | spi-helper.py, README | from memory, not checked |
+| L10 | On a Pi 4 the SPI0 clock follows the core clock (`core_freq`); it may need pinning | README | from memory, not checked |
+| L11 | `pi/tree/packages.lock` line for python3-spidev was added by hand (the same fields `build.sh --refresh` writes, hash from the index and from the downloaded `.deb`), not by a refresh run: `--refresh` downloads about 200 MB and re-picks every version | packages.lock | checked 2026-11-26: the `.deb` SHA256 equals the index's; `build.sh` was not re-run |
+
