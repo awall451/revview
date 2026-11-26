@@ -66,7 +66,7 @@ export function createSpiDriver({ argv, spawn = nodeSpawn, log = () => {}, timer
       const c = spawn(argv[0], argv.slice(1), { shell: false, stdio: ['pipe', 'ignore', 'pipe'] });
       child = c;
       exited = new Promise((r) => { onExit = r; });
-      c.on('error', (e) => { child = null; clearGuard(); die(`cannot start: ${e?.code ?? e?.message ?? 'error'}`); onExit(); });
+      c.on('error', (e) => { child = null; clearGuard(); die(`cannot start ${argv[0]}: ${e?.code ?? e?.message ?? 'error'}`); onExit(); });
       c.on('exit', (code, signal) => {
         child = null;
         clearGuard();
@@ -90,7 +90,7 @@ export function createSpiDriver({ argv, spawn = nodeSpawn, log = () => {}, timer
       });
     } catch (e) {
       child = null;
-      die(`cannot start: ${e?.code ?? e?.message ?? 'error'}`);
+      die(`cannot start ${argv[0]}: ${e?.code ?? e?.message ?? 'error'}`);
     }
   }
 

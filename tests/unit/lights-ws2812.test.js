@@ -108,7 +108,7 @@ test('driver: spawn error -> one log line, no respawn', () => {
   d.show(RED);
   assert.equal(made.length, 1);
   assert.equal(logs.length, 1);
-  assert.match(logs[0], /^lights: LED driver stopped \(.*ENOENT.*\); the LEDs stay off until the server restarts$/);
+  assert.match(logs[0], /^lights: LED driver stopped \(cannot start py: ENOENT\); the LEDs stay off until the server restarts$/);
 });
 
 test('driver: a throwing spawn is tolerated', () => {

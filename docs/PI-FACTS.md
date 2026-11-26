@@ -311,4 +311,6 @@ For the "lights per project" feature (`src/lights/spi-helper.py`, `pi/install.sh
 | L9 | WS2812B timing at 2.4 MHz SPI (3 SPI bits per LED bit: 0 = `100`, 1 = `110`, 417 ns per bit); data high needs >= 0.7 x VDD | spi-helper.py, README | from memory, not checked |
 | L10 | On a Pi 4 the SPI0 clock follows the core clock (`core_freq`); it may need pinning | README | from memory, not checked |
 | L11 | `pi/tree/packages.lock` line for python3-spidev was added by hand (the same fields `build.sh --refresh` writes, hash from the index and from the downloaded `.deb`), not by a refresh run: `--refresh` downloads about 200 MB and re-picks every version | packages.lock | checked 2026-11-26: the `.deb` SHA256 equals the index's; `build.sh` was not re-run |
+| L12 | WS2812B draws about 20 mA per colour channel at full drive and about 1 mA idle per LED (so 8 LEDs at cap 64 are about 120 mA) | README, `config/lights.json` comment, bench LT12 | from memory (typical WS2812B datasheet values), not checked; check against the datasheet of the LEDs you buy |
+| L13 | Series resistor 330-470 ohm in the data line and 100-1000 uF across 5 V and GND at the strip | README, bench LT1 | from memory (common practice values), not checked; check against the datasheet of the LEDs you buy |
 

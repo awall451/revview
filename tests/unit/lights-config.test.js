@@ -21,6 +21,13 @@ test('full config, _ comments ignored', () => {
   assert.deepEqual(c, { lights: 'on', leds: 4, driver: 'none', device: '/dev/spidev1.2', brightness: { day: 64, night: 1 } });
 });
 
+test('unknown keys are refused, top level and nested; the shipped config loads', () => {
+  bad({ lights: 'on', brightnes: { day: 5 } }, /unknown key "brightnes"/);
+  bad({ lights: 'on', led: 3 }, /unknown key "led"/);
+  bad({ lights: 'on', brightness: { dya: 5 } }, /unknown key "brightness\.dya"/);
+  assert.equal(loadLightsConfig(DEFAULT_LIGHTS_CONFIG_PATH).lights, 'off');
+});
+
 test('errors are clear', () => {
   bad({}, /"lights" must be/);
   bad({ lights: 'yes' }, /"lights" must be/);

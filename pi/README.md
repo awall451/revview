@@ -361,14 +361,14 @@ SPI0 is GPIO 7-11, so no collision with the other revview parts):
 |---|---|
 | 5 V | pin 2 or 4 (5 V) |
 | GND | pin 6 (or any ground pin) |
-| DIN | pin 19 (GPIO10, MOSI), through a 330-470 ohm resistor close to the first LED |
+| DIN | pin 19 (GPIO10, MOSI), through a 330-470 ohm resistor close to the first LED *(value from memory, check against the datasheet of the LEDs you buy)* |
 
 - **Level.** The Pi's data pin is 3.3 V; a WS2812B at 5 V wants at least 0.7 x VDD = 3.5 V. It often works without a
   level shifter, not guaranteed. Safer: a 74AHCT125 (or similar) level shifter on the data line, or feed the first LED
   a diode drop lower (about 4.3 V) and keep the first data wire short. Join the grounds first.
-- **Capacitor.** 100-1000 uF across 5 V and GND at the strip, and connect GND before 5 V.
-- **Current.** About 20 mA per colour channel at full drive. At the brightness cap (64 of 255, config `brightness`)
-  that is at most about 15 mA per LED, so 8 LEDs are about 120 mA, plus about 1 mA idle each. The 5 V header pin is fed
+- **Capacitor.** 100-1000 uF across 5 V and GND at the strip *(value from memory, check against the datasheet of the LEDs you buy)*, and connect GND before 5 V.
+- **Current.** About 20 mA per colour channel at full drive *(from memory, check against the datasheet of the LEDs you buy)*. At the brightness cap (64 of 255, config `brightness`)
+  that is at most about 15 mA per LED, so 8 LEDs are about 120 mA, plus about 1 mA idle each *(also from memory, same check)*. The 5 V header pin is fed
   straight from the Pi's supply, so this comes out of the supply's budget after the Pi and the panel.
 - **PoE HAT.** The one on the bench covers the header (`docs/DESIGN.md`): fit the strip in the car, or wire to the HAT's
   own pins; the lights are not a bench-with-PoE feature.
