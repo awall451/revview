@@ -6,6 +6,7 @@ import { initialBoard, reduceBoard, boardView, selectedKey } from '../state/inde
 import { createActions, createPermissionRegistry } from '../sessions/index.js';
 import { createSpeaker, createClosingMemo, createReadAloud } from '../speech/index.js';
 import { createSounds, createCuePlayer, CUE_DIR } from '../sounds/index.js';
+import { createLights } from '../lights/index.js';
 import { text, serveStatic, originOk } from './http.js';
 import { apply as applyEvent, events, stateHandler, startPing } from './feed.js';
 import { postEvent } from './routes-event.js';
@@ -28,7 +29,7 @@ export async function startLiveServer({
   port = 0, viewDir = DEFAULT_VIEW_DIR, reduce: reduceEvent = reduceBoard,
   input = null, devBridge = false, devKeys = null, devDemo = false, inputDeps, inputRetryMs, onGesture,
   sessions = null, clock = steadyNow, quietMs = QUIET_MS, permissionWaitMs, minShownMs, projects = [], timers, navTimeoutMs, ownedPollMs = 5000, speech = null, launchLimitMs = LAUNCH_LIMIT_MS, compactLimitMs = COMPACT_LIMIT_MS,
-  boot = false, netmon = null, thermal = null, dataLock = null, look = null, lookNow, clockSynced = null,
+  boot = false, netmon = null, thermal = null, dataLock = null, look = null, lights = null, lookNow, clockSynced = null,
 } = {}) {
   const root = path.resolve(viewDir);
   // Everything the modules share, per server (no module-level state: tests start many servers in one process).
@@ -47,6 +48,7 @@ export async function startLiveServer({
     lastSource: 'device',
     readAloud: null,
     sounds: null,
+    lights: null,
     actions: null,
     inputHandle: null,
     bridge: null,
@@ -76,6 +78,13 @@ export async function startLiveServer({
   // look = { mode: 'day' | 'night' | 'auto', night: { from, to } } or null (day, no clock monitor). The mode lives on the
   // board (the Settings row and the menu hold change it); the clock monitor runs always when look is given, and only says "night now".
   if (look) ctx.board = reduceBoard(ctx.board, { hook_event_name: 'RevviewLook', mode: look.mode }); // set at creation: no seq, no broadcast
+  // lights = { config: { lights, leds, brightness, ... }, driver } or null (no lights feature: board.lights stays null).
+  // The mode lives on the board (the Settings row changes it); the first frame is computed once, now.
+  if (lights) {
+    ctx.board = reduceBoard(ctx.board, { hook_event_name: 'RevviewLights', mode: lights.config.lights }); // set at creation: no seq, no broadcast
+    ctx.lights = createLights({ driver: lights.driver, leds: lights.config.leds, brightness: lights.config.brightness, clock, timers, log: (m) => console.error(m) });
+    ctx.lights.observe(null, ctx.board);
+  }
   const { applyProjects, refreshOwned, launched, runner: marked } = createLifecycle(ctx, { projects, timers, launchLimitMs, compactLimitMs, quietMs });
   ctx.actions = createActions({
     readAloud: ctx.readAloud, runner: marked, registry: ctx.registry, getBoard: () => ctx.board, apply: ctx.apply, projects, clock, timers, navTimeoutMs,
@@ -94,6 +103,7 @@ export async function startLiveServer({
 
   if (devBridge) {
     ROUTES['/dev/key'] = { POST: (req, res) => devKey(ctx, req, res) };
+    ROUTES['/dev/lights'] = { GET: (req, res) => res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify({ lights: ctx.board.lights ?? null, frame: ctx.lights ? ctx.lights.current() : [], dayCap: lights ? lights.config.brightness.day : null })) };
     ROUTES['/dev/keys'] = { GET: (req, res) => res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify({ codes: bridgeCodes(ctx) })) };
   }
 
@@ -167,6 +177,11 @@ export async function startLiveServer({
         await ctx.sounds?.close(); // kills any cue player child
       } catch (e) {
         console.error('sounds close failed:', e instanceof Error ? e.message : e);
+      }
+      try {
+        await ctx.lights?.close(); // dark frame, stops the LED helper
+      } catch (e) {
+        console.error('lights close failed:', e instanceof Error ? e.message : e);
       }
       try {
         await ctx.readAloud?.close(); // kills any speech child

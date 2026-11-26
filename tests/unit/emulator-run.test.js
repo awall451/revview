@@ -144,6 +144,30 @@ test('starts on a free port, serves, gives the browser the app URL and window si
   } finally { run.finish(); }
 });
 
+test('--lights: the page gets lights=1, the window is 1280x440, the server has a lights config; without it nothing changes', async () => {
+  const run = start(['--lights']);
+  try {
+    const url = await run.url();
+    const port = portOf(url);
+    assert.equal(url, `http://127.0.0.1:${port}/?devkeys=1&lights=1`);
+    const { args } = await run.stand();
+    assert.ok(args.includes('--window-size=1280,440'), args.join(' '));
+    assert.ok(!args.includes('--window-size=1280,400'));
+    const j = await until(async () => { const r = await fetch(`${url.split('?')[0]}dev/lights`).catch(() => null); return r?.ok ? r.json() : null; }, '/dev/lights');
+    assert.equal(j.lights, 'on');
+    assert.equal(j.frame.length, 8);
+  } finally { run.finish(); }
+});
+
+test('--help lists --lights', async () => {
+  const run = start(['--help'], { browser: false });
+  try {
+    assert.equal((await run.exit()).code, 0);
+    assert.match(run.out, /\[--lights\]/);
+    assert.match(run.out, /^  --lights /m);
+  } finally { run.finish(); }
+});
+
 test('--scale 1.5 adds the device scale factor', async () => {
   const run = start(['--scale', '1.5']);
   try {

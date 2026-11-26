@@ -828,4 +828,6 @@ if (query.has('fixture') || query.has('state')) {
   live();
   // dev only: without ?devkeys=1 the page attaches no key listener at all
   if (query.get('devkeys') === '1') import('./devkeys.js').then((m) => m.startDevKeys());
+  // dev only (the laptop emulator's --lights): a strip of LEDs below the 1280x400 panel
+  if (query.get('lights') === '1') import('./devlights.js').then((m) => m.startDevLights());
 }

@@ -7,7 +7,7 @@ session, see `src/state/README.md`), reduces every event with `reduceBoard` and 
 No persistence: a fresh or restarted server shows `unknown` (a restored state could not be trusted, and hooks
 posted while the server was down are lost).
 
-Run: `npm start` or `node src/server/index.js [port] [--input [path]] [--dev-bridge [--dev-keys file] [--dev-demo]] [--sessions] [--start dir]... [--projects file] [--speech file] [--look-config file] [--clock-sync [file]] [--boot] [--netmon] [--thermal] [--data-lock [dir]] [--quiet-minutes N]` (port default **8138**, or env `REVVIEW_PORT`).
+Run: `npm start` or `node src/server/index.js [port] [--input [path]] [--dev-bridge [--dev-keys file] [--dev-demo]] [--sessions] [--start dir]... [--projects file] [--speech file] [--look-config file] [--lights-config file] [--clock-sync [file]] [--boot] [--netmon] [--thermal] [--data-lock [dir]] [--quiet-minutes N]` (port default **8138**, or env `REVVIEW_PORT`).
 `--input` reads the wheel buttons in this process (config `config/buttons.json`, or the path given); a bad config or
 unknown flag prints the message to stderr and exits with code 2 before listening. `--dev-bridge` (or `npm run start:dev`) turns on `POST /dev/key`. SIGTERM and SIGINT close the server (stopping the grab helper) and exit 0.
 It binds to **127.0.0.1 only**; there is deliberately no way to change the host from the CLI.
@@ -25,11 +25,11 @@ no module keeps state of its own.
 | `cli.js` | `parseArgs`, `main` (flags, runner, speech/netmon/thermal setup, startup lines) |
 | `boot.js` | `bootSessions`, `bootAfterUnlock`, `netmonTarget`, `installShutdown` |
 | `live.js` | `startLiveServer`: builds `ctx`, the route table, listen, the returned handle and `close()` |
-| `feed.js` | `apply` (reduce, tell `ctx.sounds.observe(prev, next)` when the board changed, broadcast), `GET /events` (SSE), `GET /state`, the SSE ping |
+| `feed.js` | `apply` (reduce, tell `ctx.sounds.observe(prev, next)` and `ctx.lights.observe(prev, next)` when the board changed, broadcast), `GET /events` (SSE), `GET /state`, the SSE ping |
 | `http.js` | `text`, static files, the Host/Origin check |
 | `routes-event.js` | `POST /event`, body reading and the oversize-body drop mark |
 | `routes-permission.js` | `POST /permission` (long poll) |
-| `routes-dev.js` | `POST /dev/key`, `GET /dev/keys`, `GET /dev/demo` |
+| `routes-dev.js` | `POST /dev/key`, `GET /dev/keys`, `GET /dev/demo` (`GET /dev/lights` is in `live.js`) |
 | `gestures.js` | gesture log, `GET /buttons`, the input reader and dev bridge setup |
 | `lifecycle.js` | project marks, owned-sessions poll, launch and compaction timers, the runner the actions get |
 | `monitors.js` | starts `netmon.js`, `thermal.js`, `datalock.js` |
@@ -232,7 +232,7 @@ else `config/speech.json`) is loaded at start. A bad config is logged and the se
 With a runner, `RevviewOwned` (the ids of `runner.list()`) is applied at start, after every session start and every `ownedPollMs`
 (default 5000; an unref'd timer; a failing `list()` is logged and the last value kept). The tmux server is never killed by the live server (sessions outlive a restart).
 
-Programmatic use (tests): `startLiveServer({ port: 0, viewDir, reduce, input, devBridge, inputDeps, inputRetryMs, onGesture, sessions, speech, clock, permissionWaitMs, minShownMs, projects, timers, navTimeoutMs, ownedPollMs, look, lookNow })`
+Programmatic use (tests): `startLiveServer({ port: 0, viewDir, reduce, input, devBridge, inputDeps, inputRetryMs, onGesture, sessions, speech, clock, permissionWaitMs, minShownMs, projects, timers, navTimeoutMs, ownedPollMs, look, lights, lookNow })`
 (`speech` is a read-aloud object from `src/speech` (default none); `sessions` is a runner (`list/target/send/start`), `clock`/`permissionWaitMs`/`minShownMs` go to the permission registry, `projects` is the
 validated path list, `timers`/`navTimeoutMs` go to the actions; `permissionsWaiting()` is a test seam)
 (`input` is a parsed config, `inputDeps`/`inputRetryMs` go to the device reader; `gestures()` returns a copy of the log) (`reduce` is a test seam for a failing state core; there is no host option) resolves to
@@ -254,3 +254,13 @@ With the `speech` option, `startLiveServer` also takes `speech.sounds` (the mode
 `speech.cuePlayer` (`{ argv, dir?, spawn? }` or null). `feed.js` `apply` is the one place every event source passes through: after a board change it calls
 `ctx.sounds.observe(prev, next)` (errors are logged, never thrown). Speech on Stop follows `board.sounds === 'speech'`, so the Settings row changes it live.
 `close()` kills a playing cue. Details: `src/sounds/README.md`.
+
+## Lights
+
+`--lights-config <file>` turns on the lights feature (`src/lights/README.md`); without it there is no feature: `board.lights` stays null, no Settings
+row, no driver. A missing or bad file prints the message to stderr and the server runs without the feature (startup line `lights: none (bad lights config, see the log)`): the Pi service restarts on exit, so an exit would loop. The option `lights = { config, driver }` of
+`startLiveServer` (the CLI builds the driver: `ws2812-spi` -> `createSpiDriver`, `none` -> the null driver; tests inject a recording one) puts
+`config.lights` on the board at creation (`RevviewLights`, no seq, no broadcast), makes `ctx.lights = createLights(...)` and computes the first frame
+at once. `feed.js` `apply` calls `ctx.lights.observe(prev, next)` after a board change (errors logged, never thrown). `close()` awaits
+`ctx.lights.close()` first (a dark frame, the LED helper stopped). Startup line: `lights: off (ws2812-spi on /dev/spidev0.0, 8 LEDs, untested on hardware)`.
+With `--dev-bridge`, `GET /dev/lights` answers `{ lights, frame, dayCap }` (the board mode, the frame last shown and the config's day brightness cap; `null`, `[]` and `null` without the feature), no-store.

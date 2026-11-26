@@ -48,6 +48,7 @@ running until you close the window or press Ctrl+C in the terminal.
 | `--scale S` | Make the window S times bigger on screen (a positive number, e.g. `1.5`). The page keeps its 1280x400 layout. |
 | `--demo` | The default. Play a looping demo of the bar's states (see below). |
 | `--live [DIR]` | No demo. Starts a real Claude Code session in DIR (default: the current directory), in a private tmux server of this run, and the keys act on it. Needs `tmux` and `claude` on your `PATH`. See "Live: a real Claude Code session" below. Not together with `--demo`. |
+| `--lights` | Also show the lights feature (below). The window becomes 1280x440. |
 | `--keys` | Print the key cheatsheet (below) and exit. |
 | `--print-aliases` | Print a block of shell aliases for your `~/.bashrc` (below) and exit. It only prints. |
 | `--stop` | Stop EVERY `run.sh` of yours that is running, from another terminal. Prints `stopped (pid N)` for each, or `not running`; exits 0 either way (1 if one did not stop within 5 seconds). |
@@ -136,6 +137,15 @@ anything you can see:
   emulator/run.sh` (run.sh passes the environment to the server). `run.sh` prints the server's `sounds:` line (for
   example `sounds: off` or `sounds: cues, no cue player found (silent)`) once the server is up; the rest of the log is
   in a temp directory that is removed at exit. None of this has been tried on a real laptop.
+
+## Lights (`--lights`)
+
+`bash emulator/run.sh --lights` turns the lights feature on (lights on, 8 LEDs, driver none) and draws a strip of 8
+round LEDs below the panel, outside its 1280x400 area (the window is 1280x440; the panel itself is unchanged). LED i
+is session i in the bar's order. The colours and flash patterns are the lights module's real frames (`src/lights/`),
+polled from `GET /dev/lights` every 100 ms. The real frames are capped (48 of 255 by day) and look dim, so the page
+draws each LED as colour x 255 / cap, to show the hue on a laptop screen; the raw frame is in each LED's `data-rgb`.
+Settings has a "Lights: on/off" row. The real LEDs are untested on hardware.
 
 ## The keys
 

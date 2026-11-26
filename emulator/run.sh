@@ -9,7 +9,7 @@ set -u
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 root=$(dirname "$here")
-usage_line='usage: bash emulator/run.sh [--port N] [--no-browser] [--scale S] [--demo | --live [DIR]] [--keys] [--print-aliases] [--stop] [--help]'
+usage_line='usage: bash emulator/run.sh [--port N] [--no-browser] [--scale S] [--demo | --live [DIR]] [--keys] [--lights] [--print-aliases] [--stop] [--help]'
 
 usage() {
   cat <<USAGE
@@ -27,6 +27,8 @@ $usage_line
                  hooks come from a settings file in the temp dir, given to that claude with --settings: nothing is
                  written to ~/.claude, ~/.claude.json or DIR/.claude. Needs tmux and claude on PATH. The attach:
                  line says how to look at the session. Not with --demo. The port is a free one unless --port is given
+  --lights       also show the lights feature: a strip of 8 LEDs drawn below the panel (the window becomes
+                 1280x440), fed by the lights module's real frames; no real LED is driven (driver none)
   --keys         print the key cheatsheet (and the demo keys) and exit
   --print-aliases  print a block of shell aliases (revview, revview-keys, revview-stop) with this
                  clone's path filled in, ready to paste into ~/.bashrc, and exit. Only prints
@@ -76,12 +78,14 @@ scale=
 mode=
 live_dir=
 want_keys=
+want_lights=
 want_aliases=
 want_stop=
 while [ $# -gt 0 ]; do
   case "$1" in
     --help | -h) usage; exit 0 ;;
     --keys) want_keys=1 ;;
+    --lights) want_lights=1 ;;
     --print-aliases) want_aliases=1 ;;
     --stop) want_stop=1 ;;
     --no-browser) no_browser=1 ;;
@@ -296,6 +300,12 @@ fail() {
 }
 
 server_args=(--dev-bridge --dev-keys "$keymap")
+if [ -n "$want_lights" ]; then
+  # the config of config/lights.json, on, with no driver: the page draws the frames, nothing is sent to hardware
+  printf '%s\n' '{"lights":"on","leds":8,"driver":"none","brightness":{"day":48,"night":12}}' > "$work/lights.json" \
+    || fail "could not write the lights config"
+  server_args+=(--lights-config "$work/lights.json")
+fi
 if [ "$mode" = live ]; then
   # the hooks must know the port before Claude starts: pick it here (they read REVVIEW_PORT, which Claude inherits)
   if [ -z "$port" ]; then
@@ -420,6 +430,8 @@ else
 fi
 
 page="http://$host:$actual/?devkeys=1"
+win_size=1280,400
+if [ -n "$want_lights" ]; then page="$page&lights=1"; win_size=1280,440; fi
 serve_on() {
   echo "Serving until Ctrl+C."
   while kill -0 "$spid" 2> /dev/null; do
@@ -447,7 +459,7 @@ if [ -n "$windows_browser" ]; then
   fi
 fi
 
-args=("--app=$page" '--window-size=1280,400' "--user-data-dir=$profile" --no-first-run --no-default-browser-check)
+args=("--app=$page" "--window-size=$win_size" "--user-data-dir=$profile" --no-first-run --no-default-browser-check)
 [ -n "$scale" ] && args+=("--force-device-scale-factor=$scale")
 
 echo "view:  $page"

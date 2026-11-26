@@ -21,6 +21,7 @@ import { loadSpeechConfig, pickEngine, describeChoice, SpeechConfigError, DEFAUL
 import { DEFAULT_PORT, startLiveServer } from './live.js';
 import { bootSessions, bootAfterUnlock, netmonTarget, installShutdown } from './boot.js';
 import { pickPlayer } from '../sounds/index.js';
+import { loadLightsConfig, LightsConfigError, createSpiDriver, createNullDriver, helperArgv } from '../lights/index.js';
 import { loadLookConfig, timesyncProbe, LookConfigError, DEFAULT_LOOK_CONFIG_PATH } from './look.js';
 
 export function parseArgs(argv) {
@@ -75,6 +76,11 @@ export function parseArgs(argv) {
       const next = argv[i + 1];
       if (next === undefined || next.startsWith('--')) throw new Error('--look-config needs a file');
       out.lookConfig = next;
+      i++;
+    } else if (a === '--lights-config') {
+      const next = argv[i + 1];
+      if (next === undefined || next.startsWith('--')) throw new Error('--lights-config needs a file');
+      out.lightsConfig = next;
       i++;
     } else if (a === '--speech') {
       const next = argv[i + 1];
@@ -185,7 +191,26 @@ export async function main(argv = process.argv.slice(2)) {
     console.error(e.message);
     lookLine = 'look: day (bad look config, see the log)';
   }
-  const live = await startLiveServer({ port: args.port, input, devBridge: args.devBridge, devKeys, devDemo: args.devDemo === true, sessions: runner, projects, speech, look, clockSynced: args.clockSync ? timesyncProbe(args.clockSync === true ? undefined : args.clockSync) : null, boot: args.boot, netmon, thermal, dataLock: args.dataLock ? { mountPoint: args.dataLock } : null, ...(args.quietMinutes !== undefined ? { quietMs: args.quietMinutes * 60000 } : {}) });
+  // lights exist only when --lights-config names a readable, valid file; a bad one: one log line, no lights feature
+  let lights = null;
+  let lightsLine = null;
+  if (args.lightsConfig !== undefined) {
+    try {
+      const config = loadLightsConfig(args.lightsConfig);
+      const driver = config.driver === 'ws2812-spi'
+        ? createSpiDriver({ argv: helperArgv(config), log: (m) => console.error(m), leds: config.leds })
+        : createNullDriver();
+      lights = { config, driver };
+      lightsLine = `lights: ${config.lights} (${config.driver === 'none' ? 'no driver' : `${config.driver} on ${config.device}`}, ${config.leds} LEDs, untested on hardware)`;
+    } catch (e) {
+      if (!(e instanceof LightsConfigError)) throw e;
+      // like a bad look config: the bar must start anyway (the Pi service restarts on exit, a loop would follow)
+      console.error(e.message);
+      lights = null;
+      lightsLine = 'lights: none (bad lights config, see the log)';
+    }
+  }
+  const live = await startLiveServer({ port: args.port, lights, input, devBridge: args.devBridge, devKeys, devDemo: args.devDemo === true, sessions: runner, projects, speech, look, clockSynced: args.clockSync ? timesyncProbe(args.clockSync === true ? undefined : args.clockSync) : null, boot: args.boot, netmon, thermal, dataLock: args.dataLock ? { mountPoint: args.dataLock } : null, ...(args.quietMinutes !== undefined ? { quietMs: args.quietMinutes * 60000 } : {}) });
   if (args.boot && runner && args.dataLock) {
     const log = (m) => console.error(m);
     bootAfterUnlock({ live, runner, dirs: args.start, log }).then(() => log('boot: key-on session step done'));
@@ -206,6 +231,7 @@ export async function main(argv = process.argv.slice(2)) {
   console.log(speechLine);
   if (soundsLine) console.log(soundsLine);
   console.log(lookLine);
+  if (lightsLine) console.log(lightsLine);
   if (netmonLine) console.log(netmonLine);
   if (thermalLine) console.log(thermalLine);
   if (args.boot) console.log('boot: STARTING until the first session is on the board');
