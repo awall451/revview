@@ -120,6 +120,7 @@ function set(node, text) {
 // A tick (once a second) only repaints the clock and the quiet text, it never renders again.
 const TIME_VIEWS = new Set(['working', 'permission', 'asking']);
 const finite = (v) => typeof v === 'number' && Number.isFinite(v);
+const { performance } = globalThis;
 let liveOffset = null; // server clock minus performance.now() (steady: a step of the page's wall clock changes nothing); 0 with no `now`: then Date.now() is read
 let liveOwn = false;
 const timeState = { view: '', since: NaN, quietSince: NaN, staticNow: NaN, clockRoom: true };
