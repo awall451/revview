@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { initialBoard, reduceBoard, boardView } from '../../src/state/index.js';
+import { createActions } from '../../src/sessions/index.js';
 
 const ev = (name, extra = {}) => ({ hook_event_name: name, ...extra });
 const run = (events, b = initialBoard()) => events.reduce((acc, e) => reduceBoard(acc, e), b);
@@ -167,3 +169,41 @@ test('other holds and long holds of menu do nothing to the look', () => {
   assert.equal(reduceBoard(b, nav('menu', 'long-hold')).look, 'day');
   assert.equal(reduceBoard(b, nav('up', 'hold')).look, 'day');
 });
+
+// ---- the menu hold through createActions: it never answers, never hides the prompt ---------------------------
+
+const SID = '7de4c978-52e0-4e1a-ad17-826801362ee2';
+const sev = (name, extra = {}) => ({ session_id: SID, hook_event_name: name, ...extra });
+const selectSid = { hook_event_name: 'RevviewSelect', session_id: SID };
+const askFixture = fs.readFileSync(new URL('../../fixtures/sessions/ask-question.jsonl', import.meta.url), 'utf8')
+  .split('\n').filter((l) => l.trim() !== '').map((l) => JSON.parse(l));
+
+function permissionBoard() {
+  const b = run([sev('UserPromptSubmit', { prompt: 'x' }), selectSid]);
+  return run([
+    sev('PreToolUse', { tool_name: 'Bash', tool_use_id: 't1', tool_input: { command: 'ls' } }),
+    sev('PermissionRequest', { tool_name: 'Bash', tool_input: { command: 'ls' } }),
+  ], b);
+}
+const askingBoard = () => run([selectSid], run(askFixture.slice(0, 4).map((e) => ({ ...e, session_id: SID }))));
+
+for (const [name, makeBoard, view] of [['a permission prompt', permissionBoard, 'permission'], ['CLAUDE ASKS', askingBoard, 'asking']]) {
+  test(`actions: a menu hold under ${name} flips the look, answers nothing and keeps the prompt shown`, async () => {
+    let board = makeBoard();
+    assert.equal(boardView(board).view, view);
+    const answers = [];
+    const sent = [];
+    const a = createActions({
+      runner: { target: async () => ({ id: SID, window: '@1' }), send: async (k) => { sent.push(k); return { sent: true, id: SID, window: '@1' }; } },
+      registry: { answer: (kind) => { answers.push(kind); return { ok: true }; }, check: () => ({ ok: true }) },
+      getBoard: () => board, apply: (e) => { board = reduceBoard(board, e); }, log: () => {}, clock: () => 0,
+    });
+    assert.equal(boardView(board).look, 'day');
+    await a.handle({ button: 'menu', gesture: 'hold', source: 'device', dropped: false });
+    assert.deepEqual(answers, []);
+    assert.deepEqual(sent, []);
+    assert.equal(boardView(board).look, 'night');
+    assert.equal(boardView(board).view, view);
+    assert.equal(boardView(board).nav, null);
+  });
+}

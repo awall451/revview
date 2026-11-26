@@ -52,9 +52,17 @@ export function isNightAt(date, { from, to }) {
 
 export const clockSet = (date) => date.getFullYear() >= CLOCK_SET_YEAR;
 
+// systemd-timesyncd creates this file when it has synced the clock (from memory, not checked: the package is not in
+// pi/tree; docs/PI-FACTS.md section 10). Without an RTC, systemd starts the clock at its build time, so the year alone
+// is not proof. On the Pi the service passes --clock-sync, which uses this probe; a laptop (macOS, chrony) has no such
+// file, so without the switch no probe is used and only the year check applies.
+export const SYNCED_FILE = '/run/systemd/timesync/synchronized';
+export const timesyncProbe = (file = SYNCED_FILE) => () => fs.existsSync(file);
+
 // Computes "night now" at start and every intervalMs; apply({hook_event_name:'RevviewLookClock', night}) once at start and
-// then only when the value changes. Before the clock is set it says day (night: false) and logs once.
-export function startLookClock({ night, now = () => new Date(), timers = { setTimeout, clearTimeout }, intervalMs = 30000, apply, log = () => {} }) {
+// then only when the value changes. Until the clock counts as set (clockSynced(), when given, says so AND the year is 2026
+// or later) it says day (night: false) and logs once; the 30 s check follows the sync once it comes.
+export function startLookClock({ night, now = () => new Date(), clockSynced = null, timers = { setTimeout, clearTimeout }, intervalMs = 30000, apply, log = () => {} }) {
   let stopped = false;
   let timer = null;
   let last = null;
@@ -63,10 +71,11 @@ export function startLookClock({ night, now = () => new Date(), timers = { setTi
     timer = null;
     if (stopped) return;
     const d = now();
-    const set = clockSet(d);
+    const synced = clockSynced ? clockSynced() : true;
+    const set = synced && clockSet(d);
     if (!set && !warned) {
       warned = true;
-      log('look: the clock is not set yet (year before 2026): auto shows day until it is');
+      log(`look: the clock is not set yet (${synced ? 'year before 2026' : 'no time sync yet'}): auto shows day until it is`);
     }
     const isNight = set && isNightAt(d, night);
     if (isNight !== last) {

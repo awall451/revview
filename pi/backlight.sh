@@ -2,7 +2,7 @@
 # UNTESTED: never run on the Pi or on the panel. Written from the package tree and from memory
 # (docs/PI-FACTS.md, "Backlight and clock"). Not wired into any service or installer.
 #
-# Usage: backlight.sh day|night|<percent 0-100>
+# Usage: backlight.sh day|night|<percent 5-100>
 #
 # Tries, in this order:
 #   1. /sys/class/backlight/*/brightness, scaled from max_brightness. Needs write access to that file
@@ -16,9 +16,10 @@
 
 DAY_PERCENT=100
 NIGHT_PERCENT=25
+MIN_PERCENT=5 # a lower value can leave the panel dark
 
 usage() {
-  echo "usage: ${0##*/} day|night|<percent 0-100>   (UNTESTED)" >&2
+  echo "usage: ${0##*/} day|night|<percent 5-100>   (UNTESTED)" >&2
 }
 
 if [ "$#" -ne 1 ]; then
@@ -39,7 +40,11 @@ case "$1" in
 esac
 
 if [ "$percent" -gt 100 ]; then
-  echo "percent must be 0-100" >&2
+  echo "percent must be $MIN_PERCENT-100" >&2
+  exit 2
+fi
+if [ "$percent" -lt "$MIN_PERCENT" ]; then
+  echo "percent $percent is too low: below $MIN_PERCENT the panel may be dark and cannot be read; use $MIN_PERCENT-100" >&2
   exit 2
 fi
 

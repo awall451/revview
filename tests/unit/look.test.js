@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { loadLookConfig, isNightAt, clockSet, startLookClock, LookConfigError, DEFAULT_LOOK_CONFIG_PATH } from '../../src/server/look.js';
+import { loadLookConfig, isNightAt, clockSet, startLookClock, timesyncProbe, SYNCED_FILE, LookConfigError, DEFAULT_LOOK_CONFIG_PATH } from '../../src/server/look.js';
 import { startLiveServer, parseArgs } from '../../src/server/index.js';
 
 const at = (h, m = 0, y = 2026) => new Date(y, 5, 15, h, m, 0);
@@ -199,6 +199,65 @@ test('POST of RevviewLook and RevviewLookClock is refused (403) and changes noth
       assert.equal(r.status, 403);
     }
     assert.equal(s.state().look, 'day');
+  } finally {
+    await s.close();
+  }
+});
+
+test('startLookClock: with a synced probe, a year-2026 clock is still "not set" until the probe says so (day, logged once)', () => {
+  let synced = false;
+  const timers = fakeTimers();
+  const got = [];
+  const logs = [];
+  startLookClock({ night: NIGHT, now: () => at(23), clockSynced: () => synced, timers, apply: (e) => got.push(e.night), log: (m) => logs.push(m) });
+  timers.fire();
+  assert.deepEqual(got, [false]);
+  assert.equal(logs.length, 1);
+  assert.match(logs[0], /clock is not set yet \(no time sync yet\)/);
+  synced = true;
+  timers.fire();
+  assert.deepEqual(got, [false, true]);
+  assert.equal(logs.length, 1);
+});
+
+test('startLookClock: synced but the year is before 2026 is still day (second guard)', () => {
+  const timers = fakeTimers();
+  const got = [];
+  startLookClock({ night: NIGHT, now: () => at(23, 0, 1970), clockSynced: () => true, timers, apply: (e) => got.push(e.night), log: () => {} });
+  assert.deepEqual(got, [false]);
+});
+
+test('startLookClock: no probe (a laptop) means the year check alone decides', () => {
+  const timers = fakeTimers();
+  const got = [];
+  startLookClock({ night: NIGHT, now: () => at(23), timers, apply: (e) => got.push(e.night) });
+  assert.deepEqual(got, [true]);
+});
+
+test('timesyncProbe: true only when the file exists', () => {
+  const f = tmpFile('');
+  assert.equal(timesyncProbe(f)(), true);
+  assert.equal(timesyncProbe(`${f}.none`)(), false);
+  assert.equal(timesyncProbe()(), fs.existsSync(SYNCED_FILE));
+  assert.equal(SYNCED_FILE, '/run/systemd/timesync/synchronized');
+});
+
+test('parseArgs: --clock-sync switches the synced probe on, optionally with a file', () => {
+  assert.equal(parseArgs([]).clockSync, undefined);
+  assert.equal(parseArgs(['--clock-sync']).clockSync, true);
+  assert.equal(parseArgs(['--clock-sync', '/x/synchronized']).clockSync, '/x/synchronized');
+  assert.equal(parseArgs(['--clock-sync', '--boot']).clockSync, true);
+});
+
+test('live server: look auto with a clockSynced probe: day until synced, then night at the 30 s check', async () => {
+  let synced = false;
+  const timers = fakeTimers();
+  const s = await startLiveServer({ port: 0, look: { mode: 'auto', night: NIGHT }, lookNow: () => at(23), clockSynced: () => synced, timers });
+  try {
+    assert.equal(s.state().look, 'day');
+    synced = true;
+    timers.fire();
+    assert.equal(s.state().look, 'night');
   } finally {
     await s.close();
   }

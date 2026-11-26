@@ -28,7 +28,7 @@ export async function startLiveServer({
   port = 0, viewDir = DEFAULT_VIEW_DIR, reduce: reduceEvent = reduceBoard,
   input = null, devBridge = false, devKeys = null, devDemo = false, inputDeps, inputRetryMs, onGesture,
   sessions = null, clock = steadyNow, quietMs = QUIET_MS, permissionWaitMs, minShownMs, projects = [], timers, navTimeoutMs, ownedPollMs = 5000, speech = null, launchLimitMs = LAUNCH_LIMIT_MS, compactLimitMs = COMPACT_LIMIT_MS,
-  boot = false, netmon = null, thermal = null, dataLock = null, look = null, lookNow,
+  boot = false, netmon = null, thermal = null, dataLock = null, look = null, lookNow, clockSynced = null,
 } = {}) {
   const root = path.resolve(viewDir);
   // Everything the modules share, per server (no module-level state: tests start many servers in one process).
@@ -135,7 +135,7 @@ export async function startLiveServer({
   if (boot) ctx.apply({ hook_event_name: 'RevviewBootBegin' }, true);
   if (look?.night) {
     ctx.lookClock = startLookClock({
-      night: look.night, now: lookNow, timers, log: (m) => console.error(m),
+      night: look.night, now: lookNow, clockSynced, timers, log: (m) => console.error(m),
       apply: (event) => { if (!ctx.closed) ctx.apply(event, true); },
     });
   }

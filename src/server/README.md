@@ -7,7 +7,7 @@ session, see `src/state/README.md`), reduces every event with `reduceBoard` and 
 No persistence: a fresh or restarted server shows `unknown` (a restored state could not be trusted, and hooks
 posted while the server was down are lost).
 
-Run: `npm start` or `node src/server/index.js [port] [--input [path]] [--dev-bridge [--dev-keys file] [--dev-demo]] [--sessions] [--start dir]... [--projects file] [--speech file] [--look-config file] [--boot] [--netmon] [--thermal] [--data-lock [dir]] [--quiet-minutes N]` (port default **8138**, or env `REVVIEW_PORT`).
+Run: `npm start` or `node src/server/index.js [port] [--input [path]] [--dev-bridge [--dev-keys file] [--dev-demo]] [--sessions] [--start dir]... [--projects file] [--speech file] [--look-config file] [--clock-sync [file]] [--boot] [--netmon] [--thermal] [--data-lock [dir]] [--quiet-minutes N]` (port default **8138**, or env `REVVIEW_PORT`).
 `--input` reads the wheel buttons in this process (config `config/buttons.json`, or the path given); a bad config or
 unknown flag prints the message to stderr and exits with code 2 before listening. `--dev-bridge` (or `npm run start:dev`) turns on `POST /dev/key`. SIGTERM and SIGINT close the server (stopping the grab helper) and exit 0.
 It binds to **127.0.0.1 only**; there is deliberately no way to change the host from the CLI.
@@ -244,7 +244,7 @@ validated path list, `timers`/`navTimeoutMs` go to the actions; `permissionsWait
 or missing file is logged and the day look is used, never no bar). The option `look = { mode, night }` of `startLiveServer` (absent = day, no clock
 monitor) puts the mode on the board at creation (`RevviewLook`, no seq, no broadcast) and starts the clock monitor (`startLookClock`): at start and every
 30 s (timer unref'd) it applies `RevviewLookClock { night }` when the value changes; night is `isNightAt` (local time, `from > to` wraps midnight,
-`from == to` never) and always false while the clock is not set (year before 2026; logged once). Both events are internal (403 over HTTP). The Settings
+`from == to` never) and always false while the clock is not set (the `clockSynced` probe says no, or the year is before 2026; logged once). `--clock-sync [file]` (the Pi service passes it) makes the probe the file `/run/systemd/timesync/synchronized` (systemd-timesyncd); without it there is no probe and only the year check applies (a laptop). The hours are the server process's local time: the service's time zone must be the driver's. Both events are internal (403 over HTTP). The Settings
 Look row and the menu hold change the mode until the server restarts. The startup line is `look: day` or `look: auto (night 21:00-07:00)`.
 `lookNow` (a `() => Date`) is a test seam.
 

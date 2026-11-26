@@ -2219,9 +2219,14 @@ Code: `src/sounds/` (README there), `config/speech.json`, `src/server/feed.js` (
   look (`look: 'day' | 'night'`) with every state. Run time: the Settings row `Look: day / night / auto, night now`
   (always the last row; press cycles day, night, auto). Not kept over a restart (accepted limit, no persistence built).
 - **Auto.** Fixed hours from the config (`night.from` / `night.to`, local wall clock, default 21:00 to 07:00, no
-  location). The Pi has no RTC: while the clock reads a year before 2026 (not set) auto shows day and the server logs it
-  once. A saved clock restored at boot (systemd-timesyncd's clock file; read-only root may keep it stale, see PI-FACTS
-  section 10, from memory) can be wrong until time sync: then auto may show the wrong look; the menu hold corrects it.
+  location). The Pi has no RTC and systemd starts its clock at its build time (2026-04), so the year alone proves nothing
+  (the first version of this rule, "year before 2026", would never have applied on the Pi). The clock counts as set only
+  when systemd-timesyncd's file `/run/systemd/timesync/synchronized` exists (an injected probe, `clockSynced`) and the
+  year is 2026 or later (second guard); until then auto shows day and the server logs it once; the 30 s check follows the
+  sync. The probe is switched on by `--clock-sync`, which `pi/revview.service` passes; a laptop has no timesyncd, so
+  without the switch only the year check applies and auto works in the emulator. A saved clock restored at boot (read-only
+  root may keep it stale, PI-FACTS section 10, from memory) can still be wrong until the sync; the menu hold corrects it.
+  The hours are the server process's local time: the service's time zone must be the driver's (PI-FACTS section 10).
 - **Long press: Menu hold (400 ms) toggles day/night.** Free holds were read aloud (taken), cancel (taken), back
   (taken), menu, press and spare. Press is allow on a permission prompt (not touched); spare may not exist on the pods.
   So menu gets `"hold": true` in both shipped key maps: a menu tap now fires on release (< 400 ms) instead of on press,
@@ -2241,7 +2246,8 @@ Code: `src/sounds/` (README there), `config/speech.json`, `src/server/feed.js` (
   greyscale check, no greyscale image was looked at by a person).
 - **Day look: unchanged on purpose.** Measured, black on every band colour is at least 7.57:1 (OFFLINE `#ff6b6b`, the
   lowest), every other text at least 8.32:1: WCAG AAA everywhere. 21:1 everywhere would mean white on black and lose the
-  band colours, so the existing 70 shots stay byte-identical (`cmp` before/after).
+  band colours, so 69 of the 70 existing shots stay byte-identical (`cmp` against the gate/main set); `wb4-settings.png`
+  differs by the new "Look: day" row (the Settings menu has a new last row).
 - **Contrast (WCAG 2, computed colours in the emulator; re-run with `emulator/tests/contrast.spec.js`, table in
   `out/contrast.md`).** Lowest ratio per element kind, day / night: state word and band text 7.57 / 5.96, tags 9.21 /
   5.96, diff 8.32 / 5.50, selected row 9.74 / 4.66, grey text 10.59 / 4.51, chosen ask option 17.21 / 4.94, primary text
@@ -2249,12 +2255,14 @@ Code: `src/sounds/` (README there), `config/speech.json`, `src/server/feed.js` (
   background over 40x40 px above luminance 0.25 (the largest is 0.206, the selected row / chosen option). Night grey and
   the selected row sit just above 4.5: a palette change must keep them there.
 - **Screenshots.** Every gallery shot also as `night-<name>.png` (flat, the gallery reads `shots/*.png`): 70 day + 70
-  night. `shootBoth()` in `emulator/tests/harness.js` flips the attribute on the rendered page (no second render; the
-  boot page is loaded again with `&look=night`). `tools/check` is unchanged (its shots step checks the day names only).
+  night. `shootBoth()` in `emulator/tests/harness.js` takes the day shot, then renders the page's last state again with `look: 'night'`
+  through `window.revviewRender` (the view keeps it for `window.revviewLastState()`), then renders the original again; a shot
+  whose state itself differs at night passes it in (`wb4-settings`: the row reads "Look: night"). The boot page is loaded
+  again with `&look=night`. `tools/check` is unchanged (its shots step checks the day names only).
   Time: the shot specs are within noise of before (screenshots.spec.js 17 s before, 15-18 s after); the whole emulator
   step measured 194 s on main and 231 s on the branch on a busy VM, while two of the slower unchanged specs measured
   faster on the branch when run alone, so the difference is load, not the look.
-- **Backlight.** `pi/backlight.sh day|night|<percent>` (UNTESTED): sysfs backlight, else `ddcutil`, else exit 3 "no
+- **Backlight.** `pi/backlight.sh day|night|<percent 5-100>` (UNTESTED; below 5 is refused, a dark panel cannot be read): sysfs backlight, else `ddcutil`, else exit 3 "no
   software backlight". The Waveshare 7.9" HDMI panel very likely has none (from memory); not wired to the look. Bench
   N1 to N8 (untested): sun, night, the switch, auto and cold boot, the backlight.
 - A pre-existing heavy test (`asking.spec.js`, worst case fit on each option: 18 page loads, about 8 s alone) hit the

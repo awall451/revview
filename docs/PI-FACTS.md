@@ -278,7 +278,17 @@ list of backlight drivers is not visible either.
 - A Pi 4B has no real-time clock. Raspberry Pi OS used `fake-hwclock` (saves the time at shutdown and every hour, restores
   it at boot) in older releases; whether Trixie still installs it, or relies on the systemd-timesyncd clock file
   (`/var/lib/systemd/timesync/clock`, which moves the clock to at least its mtime at boot): from memory, unverified.
-  Either way a stale saved clock is wrong until network time sync, and with no saved clock the year is before 2026,
-  which is what `auto` treats as "clock not set" (shows day). Bench N7.
+  Either way a stale saved clock is wrong until network time sync. Bench N7.
+- **The year is not proof the clock is set.** With no RTC, systemd starts the clock at no earlier than its own build time
+  (systemd 257.13 in `pi/tree` is built 2026-04-13; the rule "clock not earlier than the build time" is from memory), so a cold
+  boot with no network already reads 2026. `auto` therefore counts the clock as set only when systemd-timesyncd says it
+  synced: the file `/run/systemd/timesync/synchronized` exists. Checked: that exact path (and `/var/lib/systemd/timesync/clock`)
+  is in the strings of `/lib/systemd/systemd-timesyncd` on the dev VM (systemd 255.4, Ubuntu), messages "Failed to touch
+  /run/systemd/timesync/synchronized"; not checked against the Pi's 257 package (`systemd-timesyncd` is not in
+  `packages.lock`), and no sync was ever run here. `pi/revview.service` passes `--clock-sync` to switch the probe on;
+  without it (a laptop, macOS, chrony) no probe is used and only the year check (2026 or later) applies, so `auto` works
+  in the emulator. Until the probe says synced `auto` shows day; the 30 s check follows the sync once it comes.
+- **Time zone.** The `auto` hours are the local time of the revview server process: the service's time zone (`timedatectl`,
+  `TZ`) must be the driver's, or night starts at the wrong hour. A Pi's default zone is often UTC: set it on the Pi.
 - On a read-only root (overlay) the saved clock file is not written, so it may stay stale: from memory, unverified.
 

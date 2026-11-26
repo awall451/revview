@@ -13,8 +13,8 @@ test.beforeAll(() => {
   fs.mkdirSync(shotsDir(), { recursive: true });
 });
 
-async function shot(page, name) {
-  await shootBoth(page, name);
+async function shot(page, name, nightState = null) {
+  await shootBoth(page, name, nightState);
 }
 
 const rect = (page, sel) => page.locator(sel).evaluate((e) => {
@@ -439,7 +439,7 @@ for (const [id, title, file] of [
     expect(labels.every((l) => l.fits)).toBe(true);
     if (id !== 'settings') expect(labels.some((l) => l.t !== l.full && l.t.includes('…'))).toBe(true);
     await common(page, id, testInfo);
-    await shot(page, file);
+    await shot(page, file, wb4State(id, 'night')); // the night shot is a real render: the Settings row reads "Look: night"
   });
 }
 

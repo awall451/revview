@@ -161,8 +161,10 @@ export const WB4_IDS = Object.keys(RECIPES);
 const WORST_MERGE = JSON.parse(fs.readFileSync(new URL('./worst-band.json', import.meta.url), 'utf8'));
 
 // The view state of a look: the board's view after its events (the worst band has the content merged over it).
-export function wb4State(id) {
+// `look` ('night' / 'auto' / 'day'; absent = the board's own day) sets the board's look mode first, so the Settings Look row reads it.
+export function wb4State(id, look) {
   if (!Object.hasOwn(RECIPES, id)) throw new Error(`unknown wb4 look: ${id}`);
-  const state = replayView(RECIPES[id], initialBoard()).at(-1) ?? boardView(initialBoard());
+  const events = look ? [{ hook_event_name: 'RevviewLook', mode: look }, ...RECIPES[id]] : RECIPES[id];
+  const state = replayView(events, initialBoard()).at(-1) ?? boardView(initialBoard());
   return id.startsWith('worst-band') ? { ...state, ...WORST_MERGE } : state;
 }

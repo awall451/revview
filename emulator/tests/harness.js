@@ -10,17 +10,32 @@ export function shotsDir() {
   return process.env.REVVIEW_SHOTS_DIR || path.join(repoRoot, 'out', 'shots');
 }
 
-// Takes the day shot <name>.png, then the same page in the night look as night-<name>.png (the gallery is flat); both must be 1280x400.
-// The look is one attribute on <html> (view.css), so nothing is rendered again; the page goes back to day afterwards.
-export async function shootBoth(page, name) {
-  for (const [look, file] of [['day', `${name}.png`], ['night', `night-${name}.png`]]) {
-    await page.evaluate((l) => { document.documentElement.dataset.look = l; }, look);
-    const full = path.join(shotsDir(), file);
-    await page.screenshot({ path: full });
-    const b = fs.readFileSync(full);
-    expect([b.readUInt32BE(16), b.readUInt32BE(20)], file).toEqual([1280, 400]);
-  }
+// Takes the day shot <name>.png, then the night look as night-<name>.png (the gallery is flat); both must be 1280x400.
+// The day shot is the page as it is, with the look forced to day. The night shot is a real render: the last state given to the
+// view is rendered again with look 'night' (or `nightState`, when the state itself reads differently at night, e.g. the Settings
+// Look row), through window.revviewRender; then the page goes back to what it was, in the day look.
+export async function shootBoth(page, name, nightState = null) {
   await page.evaluate(() => { document.documentElement.dataset.look = 'day'; });
+  const day = `${name}.png`;
+  const night = `night-${name}.png`;
+  await shootTo(page, day);
+  const original = await page.evaluate((ns) => {
+    const last = window.revviewLastState();
+    window.revviewRender(ns ?? { ...last, look: 'night' });
+    return last;
+  }, nightState);
+  await shootTo(page, night);
+  await page.evaluate((last) => {
+    window.revviewRender(last);
+    document.documentElement.dataset.look = 'day';
+  }, original);
+}
+
+async function shootTo(page, file) {
+  const full = path.join(shotsDir(), file);
+  await page.screenshot({ path: full });
+  const b = fs.readFileSync(full);
+  expect([b.readUInt32BE(16), b.readUInt32BE(20)], file).toEqual([1280, 400]);
 }
 
 export const test = base.extend({

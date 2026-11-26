@@ -35,7 +35,7 @@ EnvironmentFile=-/etc/revview/data.env
 # Under the read-only root an update would land in RAM and vanish. Claude Code is updated with the overlay off
 # (pi/README.md, Updating). The variable name is in Claude Code 2.1.330; its effect is from memory.
 Environment=DISABLE_AUTOUPDATER=1
-ExecStart=@NODE@ @REVVIEW_DIR@/src/server/index.js --input /etc/revview/buttons.json --sessions --boot --netmon --thermal
+ExecStart=@NODE@ @REVVIEW_DIR@/src/server/index.js --input /etc/revview/buttons.json --sessions --boot --netmon --thermal --clock-sync
 Restart=always
 RestartSec=2
 # Do not kill the private tmux server (revview's sessions) when the service restarts: only the node

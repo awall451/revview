@@ -247,7 +247,9 @@ function setLook(look) {
   }
 }
 
+let lastInput = null; // the last state given to render (window.revviewLastState; the screenshot harness re-renders it in the night look)
 export function render(input) {
+  lastInput = input;
   const s = cleanState(input);
   const view = s.view;
   const note = Object.hasOwn(NOTES, view) || view === 'offline';
@@ -815,6 +817,7 @@ if (!query.has('fixture') && !query.has('state')) {
   } catch { /* storage may be unavailable */ }
 }
 window.revviewRender = render;
+window.revviewLastState = () => lastInput;
 applyTypeSizes();
 await document.fonts.ready;
 applyTypeSizes();
