@@ -70,15 +70,32 @@ export function events(ctx, req, res) {
 export const stateHandler = (ctx, req, res) =>
   res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(snapshot(ctx)));
 
-export function startPing(ctx) {
-  const timer = setInterval(() => {
-    for (const c of ctx.clients) {
-      if (c.writableLength > MAX_CLIENT_BACKLOG_BYTES) {
-        ctx.clients.delete(c);
-        c.destroy();
-      } else c.write(': ping\n\n');
-    }
-  }, PING_MS);
-  timer.unref();
-  return timer;
+// The SSE ping: a self-arming timer on the injected timers (a test steps it by hand); stop() ends it.
+export function startPing(ctx, timers) {
+  const setT = timers?.setTimeout ?? setTimeout;
+  const clearT = timers?.clearTimeout ?? clearTimeout;
+  let timer = null;
+  let stopped = false;
+  const arm = () => {
+    timer = setT(() => {
+      timer = null;
+      if (stopped) return;
+      for (const c of ctx.clients) {
+        if (c.writableLength > MAX_CLIENT_BACKLOG_BYTES) {
+          ctx.clients.delete(c);
+          c.destroy();
+        } else c.write(': ping\n\n');
+      }
+      arm();
+    }, PING_MS);
+    timer?.unref?.();
+  };
+  arm();
+  return {
+    stop() {
+      stopped = true;
+      if (timer !== null) clearT(timer);
+      timer = null;
+    },
+  };
 }

@@ -17,14 +17,13 @@ export function startMonitors(ctx, { netmon, thermal, dataLock }) {
       onChange: ({ hot, lowPower }) => { if (!ctx.closed) ctx.apply({ hook_event_name: 'RevviewThermal', hot, lowPower }, true); },
     });
   }
-  let unlocked = !dataLock;
   let resolveUnlocked = () => {};
-  const whenUnlocked = unlocked ? Promise.resolve() : new Promise((r) => { resolveUnlocked = r; });
+  const whenUnlocked = !dataLock ? Promise.resolve() : new Promise((r) => { resolveUnlocked = r; });
   if (dataLock) {
     ctx.dataMonitor = createDataLockMonitor({
       log: (m) => console.error(m), ...dataLock,
       onChange: (locked) => {
-        if (!locked) { unlocked = true; resolveUnlocked(); }
+        if (!locked) resolveUnlocked();
         if (!ctx.closed) ctx.apply({ hook_event_name: 'RevviewDataLock', locked }, true);
         if (!ctx.closed) ctx.settings?.dataChanged(locked); // kept settings: read at the unlock, no write while locked
       },

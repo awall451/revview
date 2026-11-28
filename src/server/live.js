@@ -144,7 +144,7 @@ export async function startLiveServer({
     else socket.destroy();
   });
 
-  const timer = startPing(ctx);
+  const ping = startPing(ctx, timers);
 
   await new Promise((resolve, reject) => {
     server.once('error', reject);
@@ -163,8 +163,18 @@ export async function startLiveServer({
   const whenUnlocked = startMonitors(ctx, { netmon, thermal, dataLock });
   if (sessions) {
     await refreshOwned();
-    ctx.ownedTimer = setInterval(refreshOwned, ownedPollMs);
-    ctx.ownedTimer.unref();
+    // the poll runs on the injected timers: one timer at a time, re-armed at each tick (refreshOwned never overlaps itself)
+    const pollT = timers?.setTimeout ?? setTimeout;
+    const armOwned = () => {
+      ctx.ownedTimer = pollT(() => {
+        ctx.ownedTimer = null;
+        if (ctx.closed) return;
+        refreshOwned();
+        armOwned();
+      }, ownedPollMs);
+      ctx.ownedTimer?.unref?.();
+    };
+    armOwned();
   }
 
   return {
@@ -214,13 +224,15 @@ export async function startLiveServer({
         ctx.quietClose();
         for (const t of ctx.askGoneTimers) (timers?.clearTimeout ?? clearTimeout)(t);
         ctx.askGoneTimers.clear();
-        if (ctx.ownedTimer !== null) clearInterval(ctx.ownedTimer);
+        if (ctx.ownedTimer !== null) (timers?.clearTimeout ?? clearTimeout)(ctx.ownedTimer);
+        ctx.ownedTimer = null;
         ctx.registry.close(); // leaves the tmux server alone: sessions outlive a server restart
-        clearInterval(timer);
+        ping.stop();
         server.close(() => resolve());
         for (const c of ctx.clients) c.end();
         for (const c of ctx.demoClients) c.end();
         ctx.clients.clear();
+        ctx.demoClients.clear();
         server.closeAllConnections();
       });
     },

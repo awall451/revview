@@ -12,6 +12,9 @@ const MAX_QUIET_TIMERS = 64;
 // the runner the actions get. Per-server state is in the closure and on ctx (launchTimers, compactTimers, clearT:
 // close() reads them there); nothing at module level.
 // Sets ctx.compactSync, ctx.quietSeen, ctx.quietEnter, ctx.quietClose, ctx.launchTimers, ctx.compactTimers, ctx.clearT.
+// a window name is untrusted text (it may hold escape codes): never a control character in the log
+const stripCtl = (v) => String(v).replace(/[\u0000-\u001f\u007f-\u009f]/g, '');
+
 export function createLifecycle(ctx, { projects, timers, launchLimitMs, compactLimitMs, quietMs = QUIET_MS }) {
   const { sessions, dataLock } = ctx;
   // owned = the sessions revview itself started (the runner's windows); null without a runner (the old look)
@@ -46,14 +49,14 @@ export function createLifecycle(ctx, { projects, timers, launchLimitMs, compactL
       // journal under the user unit; untrusted text, at most 20 lines) and the last non-empty one to the bar
       for (const r of (await sessions.reap?.()) ?? []) {
         lastOwned.delete(r.id); // its end is logged below: not a second "disappeared" line
-        console.error(`owned sessions: Claude of session ${r.id}${r.name ? ` (${r.name.replace(/[\u0000-\u001f\u007f-\u009f]/g, '')})` : ''} ended${r.status === null ? '' : ` with status ${r.status}`}; ${r.lines.length === 0 ? 'its screen was empty' : `last ${r.lines.length} screen line(s):`}`);
+        console.error(`owned sessions: Claude of session ${r.id}${r.name ? ` (${stripCtl(r.name)})` : ''} ended${r.status === null ? '' : ` with status ${r.status}`}; ${r.lines.length === 0 ? 'its screen was empty' : `last ${r.lines.length} screen line(s):`}`);
         for (const l of r.lines) console.error(`  | ${l}`);
         if (!ctx.closed) ctx.apply({ hook_event_name: 'RevviewEndReason', session_id: r.id, text: [...r.lines].reverse().find((l) => l.trim() !== '') ?? '' }, true);
       }
       const list = await sessions.list();
       const now = new Map(list.map((x) => [x.id, x.name]));
       for (const [id, name] of lastOwned) {
-        if (!now.has(id)) console.error(`owned sessions: window of session ${id}${typeof name === 'string' && name !== '' ? ` (${name})` : ''} disappeared (Claude exited or the window was closed)`);
+        if (!now.has(id)) console.error(`owned sessions: window of session ${id}${typeof name === 'string' && stripCtl(name) !== '' ? ` (${stripCtl(name)})` : ''} disappeared (Claude exited or the window was closed)`);
       }
       lastOwned = now;
       if (!ctx.closed) ctx.apply({ hook_event_name: 'RevviewOwned', ids: list.map((x) => x.id), names: list.map((x) => x.name) }, true);

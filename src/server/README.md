@@ -34,6 +34,10 @@ no module keeps state of its own.
 | `lifecycle.js` | project marks, owned-sessions poll, launch and compaction timers, the runner the actions get |
 | `settings.js` | the kept Settings choices: read at start, written on each change (see "Settings kept over a restart") |
 | `monitors.js` | starts `netmon.js`, `thermal.js`, `datalock.js` |
+| `netmon.js` | the online check (`--netmon`) |
+| `thermal.js` | the heat and weak-supply monitor (`--thermal`) |
+| `datalock.js` | the data-partition lock monitor (`--data-lock`) |
+| `look.js` | the look config, `isNightAt`, the clock monitor (`startLookClock`), the time-sync probe |
 
 ## Settings kept over a restart: `--settings [file]`
 
@@ -166,7 +170,7 @@ Headers: `content-type: text/event-stream`, `cache-control: no-store`. The strea
 
     data: {"seq":3,"now":1767000000000,"state":{...}}
 
-A comment `: ping` is sent every 15 s to detect dead sockets. `seq` counts accepted events since the
+A comment `: ping` is sent every 15 s to detect dead sockets (a self-arming unref'd timer on the injected `timers`; `close()` clears it). `seq` counts accepted events since the
 server started; `now` is the server's clock (ms, the injected `clock`, default `steadyNow`) when the message was built: the page corrects its own clock by it.
 
 ## Other paths
@@ -243,7 +247,7 @@ else `config/speech.json`) is loaded at start. A bad config is logged and the se
 (through `select(id)`); else exactly one existing revview session is selected (it is on the board at once as a quiet placeholder). The boot log says 'selected' only when the board did select it, else 'wanted'. `--projects <file>`
 (default env `REVVIEW_PROJECTS`) is the New session project list (`src/sessions/README.md`, applied at start as `RevviewProjects`, with `missing` = the paths that are not directories; checked again on every owned refresh, and re-applied only when that set changes).
 With a runner, `RevviewOwned` (the ids of `runner.list()`) is applied at start, after every session start and every `ownedPollMs`
-(default 5000; an unref'd timer; a failing `list()` is logged and the last value kept). The tmux server is never killed by the live server (sessions outlive a restart).
+(default 5000; one unref'd timer on the injected `timers`, re-armed at each tick, cleared by `close()`; a failing `list()` is logged and the last value kept). The tmux server is never killed by the live server (sessions outlive a restart).
 
 Programmatic use (tests): `startLiveServer({ port: 0, viewDir, reduce, input, devBridge, inputDeps, inputRetryMs, onGesture, sessions, speech, clock, permissionWaitMs, minShownMs, projects, timers, navTimeoutMs, ownedPollMs, askGoneGraceMs, look, lights, lookNow })`
 (`speech` is a read-aloud object from `src/speech` (default none); `sessions` is a runner (`list/target/send/start`), `clock`/`permissionWaitMs`/`minShownMs` go to the permission registry, `projects` is the
