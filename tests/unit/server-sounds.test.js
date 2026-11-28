@@ -43,7 +43,7 @@ async function withServer(opts, fn) {
   const speech = { engine, sounds, killWaitMs: 200, cuePlayer: player ? { argv: [PLAYER, '-q'], dir: '/cues' } : { argv: null } };
   const servers = [];
   const boot = async () => {
-    const s = await startLiveServer({ port: 0, devBridge: true, speech, ...rest.server });
+    const s = await startLiveServer({ port: 0, devBridge: true, speech, soundsSettleMs: 0, ...rest.server }); // the burst rule is in sounds-burst.test.js: here cues play at once
     servers.push(s);
     return s;
   };
@@ -185,7 +185,7 @@ test('a player that cannot start: one log line, the server goes on', T, async ()
   console.error = (...a) => { lines.push(a.join(' ')); };
   let s;
   try {
-    s = await startLiveServer({ port: 0, speech: { engine: null, sounds: 'cues', cuePlayer: { argv: ['/nonexistent/player'] } } });
+    s = await startLiveServer({ port: 0, soundsSettleMs: 0, speech: { engine: null, sounds: 'cues', cuePlayer: { argv: ['/nonexistent/player'] } } });
     for (const id of [A, B]) {
       await fetch(`${s.url}/event`, { method: 'POST', body: JSON.stringify({ hook_event_name: 'SessionStart', session_id: id, cwd: '/w' }) });
     }
@@ -282,7 +282,7 @@ test('a question that closes unanswered (Esc) leaves the bar without a cue; the 
   fetch(`${c.s.url}/permission`, { method: 'POST', body: JSON.stringify(q[3]), signal: ac.signal }).catch(() => {});
   await until(() => c.s.state().view === 'asking', 'the asking view');
   await until(() => cues(c.cueDir).length === 1, 'the needs cue');
-  ac.abort(); // Claude closes the hook connection: the question is gone
+  ac.abort(); // Claude closes the hook connection: the question is gone (the 540 s timeout case is the next test)
   await until(() => c.s.state().view !== 'asking', 'the question gone');
   await sleep(400);
   assert.deepEqual(cues(c.cueDir), ['needs']); // clearing it played nothing
@@ -294,3 +294,30 @@ test('a question that closes unanswered (Esc) leaves the bar without a cue; the 
   assert.deepEqual(cues(c.cueDir), ['needs', 'needs']);
   r2.catch(() => {});
 }));
+
+// the question's own wait (permissionWaitMs) on injected timers, fired by hand: no real wait
+const WAIT = 9999;
+test('a question whose 540 s wait ran out leaves the bar without a cue; the next question gives one cue', T, () => {
+  const waits = [];
+  const timers = { setTimeout: (fn, ms) => (ms === WAIT ? (waits.push(fn), { unref() {} }) : setTimeout(fn, ms)), clearTimeout: (h) => clearTimeout(h) };
+  return withServer({ server: { sessions: runner, clock: () => clock.now, permissionWaitMs: WAIT, timers } }, async (c) => {
+    const q = asking(A);
+    await c.ev(q[1]);
+    await c.ev(q[2]);
+    const r1 = fetch(`${c.s.url}/permission`, { method: 'POST', body: JSON.stringify(q[3]) });
+    await until(() => c.s.state().view === 'asking', 'the asking view');
+    await until(() => cues(c.cueDir).length === 1, 'the needs cue');
+    assert.equal(waits.length, 1);
+    waits[0](); // our wait ends: the terminal keeps the question
+    assert.equal((await r1).status, 204);
+    await until(() => c.s.state().view !== 'asking', 'the question left the bar');
+    assert.equal(c.s.state().note, 'Question left for the terminal');
+    assert.deepEqual(cues(c.cueDir), ['needs']); // leaving played nothing
+    const second = { ...q[3], tool_use_id: 'toolu_second', tool_input: { questions: [{ ...q[3].tool_input.questions[0], question: 'Which size?' }] } };
+    await c.ev(q[1]);
+    const r2 = fetch(`${c.s.url}/permission`, { method: 'POST', body: JSON.stringify(second) });
+    await until(() => cues(c.cueDir).length === 2, 'the second needs cue');
+    assert.deepEqual(cues(c.cueDir), ['needs', 'needs']); // nothing in between
+    r2.catch(() => {});
+  });
+});

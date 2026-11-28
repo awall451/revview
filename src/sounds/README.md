@@ -40,8 +40,12 @@ else `failed` (`state.failed`, a StopFailure), else `done` (`activity === 'done'
 The class changes to `quiet` once per appearance, so there is one cue per appearance; clearing the mark gives nothing. Working (without the mark), waiting
 (also after `idle_prompt`: the done cue already said it), starting and placeholders give no cue. `cueFor(prev, next)` looks at every session whose class changed to a non-null one. The selected session
 (else the one the bar shows, `shownKey`) gives its own cue; any other session gives `other`; the selected one wins when both change in one step. Selection,
-navigation, notes, compaction marks and a repeated identical event do not change a class, so they give nothing. `createSounds({ player, log }).observe(prev, next)`
-plays the result when `board.sounds` is `cues` or `speech`, and logs `sounds: <mode>` when the mode changes.
+navigation, notes, compaction marks and a repeated identical event do not change a class, so they give nothing. `createSounds({ player, log, timers, settleMs = 250, maxMs = 2000 }).observe(prev, next)`
+logs `sounds: <mode>` when the mode changes (per change) and notes the change; it plays nothing at once. **A burst gives one cue:** the first change of a burst keeps its
+`prev` as the start; each further change within `settleMs` of the last extends the burst (never past `maxMs` after its start); when it settles the cue is
+`cueFor(start, last)`, played when the last board's `sounds` is `cues` or `speech`. So needs -> working -> done in one burst is `done`; done -> working -> done is
+nothing (class unchanged); an emulator scene jump is one cue. `observe` returns null (nothing uses a result). `idle()` also waits for a burst that has not settled
+(automatic speech awaits it, at most 2 s, so on a Stop the done cue still comes first); `close()` clears the timers and frees waiting `idle()` calls.
 
 ## Config keys
 
