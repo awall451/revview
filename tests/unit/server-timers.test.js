@@ -70,7 +70,9 @@ test('the owned-sessions poll is on the injected timers: each fire lists once an
   assert.equal(lists, 3);
 });
 
-test('close() ends the dev demo streams too', async () => {
+// Only what a client sees: the stream ends. That `ctx.demoClients` is emptied is not reachable from here (ctx is not exposed, and
+// closeAllConnections() would end the stream anyway), so it is not asserted.
+test('close() ends an open dev demo stream (the client sees it end)', async () => {
   const live = await startLiveServer({ port: 0, devBridge: true, devDemo: true });
   const s = await openStream(live.url, '/dev/demo');
   await settle();

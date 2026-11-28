@@ -107,7 +107,7 @@ test('recorded: a list across /compact (SessionStart compact) keeps its count, t
   assert.deepEqual(seen, ['null', '0/1', '0/2', '0/3', '1/3', '2/3', '3/3', 'null']); // the session's end removes it
 });
 
-test('recorded: a deleted task leaves the total (2/2 as on Claude\'s screen); a second list after 12 s starts at 0/1', () => {
+test('recorded: a deleted task leaves the total (2/2 as on Claude\'s screen); a second list after 15 s starts at 0/1', () => {
   const { seen, afterCreate } = replay('delete-two-lists-haiku', true);
   assert.deepEqual(seen, ['null', '0/1', '0/2', '0/3', '0/2', '1/2', '2/2', '0/1', '0/2', '1/2', '2/2', 'null']);
   assert.deepEqual(afterCreate, ['0/1', '0/2', '0/3', '0/1', '0/2']);
@@ -154,6 +154,24 @@ test('the 5 s rule: a create 4.999 s after the list became all completed continu
   assert.deepEqual(tasks(reduceBoard(re, create('3'), t0 + 14_000)), { done: 0, total: 1 });
   // a jump (not the next id) is still partial, also after the 5 s
   assert.equal(tasks(reduceBoard(base, create('5'), t0 + 60_000)), null);
+});
+
+test('the 5 s mark survives a SessionStart with source compact', () => {
+  const t0 = 1_000_000;
+  const done = [[create('1'), t0], [update('1', 'completed'), t0 + 10]];
+  let b = done.reduce((x, [e, at]) => reduceBoard(x, e, at), initialBoard());
+  b = reduceBoard(b, { hook_event_name: 'SessionStart', ...A, source: 'compact' }, t0 + 1000);
+  assert.deepEqual(tasks(b), { done: 1, total: 1 });
+  assert.deepEqual(tasks(reduceBoard(b, create('2'), t0 + 10 + 5000)), { done: 0, total: 1 });
+  assert.deepEqual(tasks(reduceBoard(b, create('2'), t0 + 10 + 4999)), { done: 1, total: 2 });
+});
+
+test('a subagent event after the list is done does not move the 5 s mark', () => {
+  const t0 = 1_000_000;
+  const done = [[create('1'), t0], [update('1', 'completed'), t0 + 10]];
+  let b = done.reduce((x, [e, at]) => reduceBoard(x, e, at), initialBoard());
+  b = reduceBoard(b, update('1', 'completed', { agent_id: 'sub1' }), t0 + 4000);
+  assert.deepEqual(tasks(reduceBoard(b, create('2'), t0 + 10 + 5000)), { done: 0, total: 1 });
 });
 
 test('subagent events (agent_id) are ignored for tasks', () => {

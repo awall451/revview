@@ -60,7 +60,7 @@ test('clockSet: year 2026 or later', () => {
   assert.equal(clockSet(new Date(2031, 0, 1)), true);
 });
 
-function fakeTimers() {
+function fakeTimers(lookMs = 30000) {
   let n = 0;
   const pending = new Map();
   return {
@@ -68,7 +68,9 @@ function fakeTimers() {
     setTimeout: (fn, ms) => { const h = { id: ++n, unref: () => { h.unrefd = true; return h; } }; pending.set(h.id, { fn, ms, h }); return h; },
     clearTimeout: (h) => { pending.delete(h.id); },
     fire() {
-      const [id, p] = [...pending.entries()].find(([, e]) => e.ms !== 15000); // not the SSE ping, which runs on the injected timers too (cycle 81)
+      const hit = [...pending.entries()].find(([, e]) => e.ms === lookMs); // the look clock by its delay (the SSE ping, 15000, runs on the injected timers too)
+      assert.ok(hit, `no timer with ms ${lookMs} pending`);
+      const [id, p] = hit;
       pending.delete(id);
       p.fn();
     },

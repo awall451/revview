@@ -269,7 +269,7 @@ const taskId = (raw) => {
 
 // Claude Code 2.1.332 (interactive) clears a list whose tasks are all completed 5 s after it saw them so (its task-list
 // watcher's hide timer, then resetTaskList; ids go on from the high-water mark). Recorded: a create 0.2 s after the last
-// completion joins the list (3/3 on Claude's screen), one 12-18 s later starts a new list (1/1, 2/2).
+// completion joins the list (3/3 on Claude's screen), one 15-18 s later starts a new list (1/1, 2/2).
 const LIST_RESET_MS = 5000;
 const allCompleted = (t) => t !== null && !t.partial && Object.keys(t.ids).length > 0 && Object.values(t.ids).every((v) => v === 'completed');
 

@@ -244,7 +244,7 @@ are ignored. New list (recorded, cycle 81: Claude Code clears an all-completed l
 least 5000 ms (by `at`) after the list became all completed (`tasks.doneAt`) starts a new list (0/1); sooner, or without `at`, it
 continues the list (2/3). `SessionStart` with `source` other than
 `compact` clears it; at most 200 ids per session (beyond: partial). A create of a known id changes nothing. `tasks` shows when the list
-has >= 1 id and is not partial. Task events do everything else they did before (tool row etc.). Needs `at` only for the new-list rule.
+has >= 1 id and is not partial. Task events do everything else they did before (tool row etc.). Needs `at` only for the new-list rule. A list that became all completed without a clock (no `at`) gets its mark from the next event that changes it.
 
 ## Diff counting
 

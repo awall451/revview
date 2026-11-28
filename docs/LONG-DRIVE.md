@@ -194,7 +194,7 @@ control characters from the window name; the unused `unlocked` flag in `monitors
   The stand-ins are Node scripts: a real `aplay`, a real Python helper with `spidev`, the SPI bus and the LEDs'
   electrical behaviour were not involved, nor was the Pi's CPU, or a real audio device.
 - **Real-time timers (first run).** The replay is 30 times faster than a drive, but the server's own timers run in real time and
-  were not stretched: the 180 s compaction limit, the 30 s launch limit, the 60 s boot limit, the 15 s SSE ping, the
+  were not stretched: the 180 s compaction limit, the 30 s launch limit, the 60 s boot limit, the 15 s SSE ping (scaled in the second run), the
   5 s and 10 s polls, the permission "too early" interval. At 30x a session's events come faster than those timers
   tick. Only a real-time run (bench LD-4) exercises them.
 - **Chromium's own long-run behaviour on the Pi.** This is Playwright's Chromium on x86 in headless mode, not the
