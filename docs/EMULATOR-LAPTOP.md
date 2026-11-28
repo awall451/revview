@@ -34,7 +34,7 @@ If you have no SSH key set up for GitHub, clone with https instead:
     git clone https://github.com/awall451/revview.git
 
 A window opens, with no address bar, 1280x400 pixels, showing the bar. The terminal prints a `view:` line with
-the address (`http://127.0.0.1:<port>/?devkeys=1`); you can open that address in any browser too. The script keeps
+the address (`http://127.0.0.1:<port>/?devkeys=1`, with `&lights=1` added under `--lights`); you can open that address in any browser too. The script keeps
 running until you close the window or press Ctrl+C in the terminal.
 
 ## Options
@@ -69,7 +69,7 @@ server did not start) or the server stopped while running; 2 for a bad option.
 
 By default you see the **demo**. A small player (`emulator/demo/player.js`) feeds the server the recorded Claude Code
 sessions from `fixtures/sessions/`, shown as three sessions called revview, garden and notes. It loops through twelve
-scenes (thirteen with `--lights`), and the terminal prints a `demo: N scene` line for each:
+scenes (thirteen with `--lights`), and the terminal prints a `demo: N name` line (for example `demo: 11 tasks`) for each:
 
 1. working  2. permission  3. done  4. waiting  5. offline  6. insert-key  7. ended  8. compaction  9. compact-cmd  10. asking (key 0)  11. tasks (key T)  12. plan (key A)  13. lights (key L, only with `--lights`)
 
