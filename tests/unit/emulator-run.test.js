@@ -512,12 +512,12 @@ test('--keys lists the demo keys, every scene name and the no-Claude note', asyn
   try {
     assert.equal((await run.exit()).code, 0);
     assert.match(run.out, /^Demo keys \(demo mode only; the demo player takes them, not the bar\):$/m);
-    const { buildLoop } = await import('../../emulator/demo/scenes.js');
+    const { buildLoop, DEMO_KEYS } = await import('../../emulator/demo/scenes.js');
     const all = buildLoop(1).map((s) => s.name);
     assert.equal(all.length, 12, 'tasks and plan follow the ten scenes with keys');
     const names = all.slice(0, 10);
     for (const n of names) assert.ok(run.out.includes(n), `scene ${n}`);
-    assert.match(run.out, /^ {2}1-9 and 0 .*jump/m);
+    for (const k of DEMO_KEYS) assert.match(run.out, new RegExp(`(^|\\s)${k.key} ${k.scene}( |$)`, 'm'), `demo key ${k.key} ${k.scene}`);
     assert.match(run.out, /^ {2}P +pause/m);
     assert.match(run.out, /\[ +slower/);
     assert.match(run.out, /\] +faster/);

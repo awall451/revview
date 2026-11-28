@@ -10,16 +10,21 @@ import { spawnSync } from 'node:child_process';
 const MAP = fileURLToPath(new URL('../../config/buttons.laptop.json', import.meta.url));
 const SCENES = fileURLToPath(new URL('../../emulator/demo/scenes.js', import.meta.url));
 const RUN = fileURLToPath(new URL('../../emulator/run.sh', import.meta.url));
-const { buildSheet, LABELS } = await import('../../emulator/keys-sheet.js');
+const { buildSheet, buildPages, LABELS } = await import('../../emulator/keys-sheet.js');
 const map = JSON.parse(fs.readFileSync(MAP, 'utf8'));
 
 const sheet = () => buildSheet({ mapPath: MAP, scenesPath: SCENES });
 
-test('fits a 24-row terminal: at most 24 lines of at most 80 columns', async () => {
-  const lines = (await sheet()).split('\n');
-  if (lines.at(-1) === '') lines.pop();
-  assert.ok(lines.length <= 24, `${lines.length} lines`);
-  for (const l of lines) assert.ok(l.length <= 80, `${l.length} columns: ${l}`);
+test('fits a 24-row terminal: two pages of at most 24 lines of at most 80 columns', async () => {
+  const pages = await buildPages({ mapPath: MAP, scenesPath: SCENES });
+  assert.equal(pages.length, 2);
+  for (const page of pages) {
+    const lines = page.split('\n');
+    if (lines.at(-1) === '') lines.pop();
+    assert.ok(lines.length <= 24, `${lines.length} lines`);
+    for (const l of lines) assert.ok(l.length <= 80, `${l.length} columns: ${l}`);
+  }
+  assert.match(await sheet(), /\n\n-- page 2: demo keys and rules --\n/);
 });
 
 test('every button of the laptop map is in the sheet, with its key and its gestures', async () => {
@@ -62,20 +67,19 @@ test('the labels for the gestures that do something special match the real code'
   assert.match(LABELS.cancel.longHold, /Ctrl\+C/);
 });
 
-test('the demo keys come from scenes.js: every scene name and the range', async () => {
-  const out = await sheet();
-  const { buildLoop } = await import('../../emulator/demo/scenes.js');
+test('the demo keys come from scenes.js: every DEMO_KEYS entry with its scene name, on page 2', async () => {
+  const [p1, p2] = await buildPages({ mapPath: MAP, scenesPath: SCENES });
+  const { buildLoop, DEMO_KEYS } = await import('../../emulator/demo/scenes.js');
   const all = buildLoop(1).map((s) => s.name);
-  // keys 1-9 and 0 (= 10) reach the first ten scenes; keys T, A (and L with lights) reach tasks, plan and lights
-  assert.equal(all.length, 12);
   assert.equal(all[10], 'tasks');
   assert.equal(all[11], 'plan');
-  const names = all.slice(0, 10);
-  for (const n of names) assert.ok(out.includes(n), n);
-  assert.match(out, /1-9 and 0/);
-  assert.ok(names.includes('compaction') && names.includes('compact-cmd') && names.includes('asking'), 'keys 8, 9 and 0 are on the sheet');
-  assert.match(out, /nothing is sent to a Claude/i);
-  assert.match(out, /--live/);
+  for (const k of DEMO_KEYS) assert.match(p2, new RegExp(`(^|\\s)${k.key} ${k.scene}( |$)`, 'm'), `${k.key} ${k.scene}`);
+  const scenes = DEMO_KEYS.map((k) => k.scene);
+  assert.ok(scenes.includes('compaction') && scenes.includes('compact-cmd') && scenes.includes('asking'), 'keys 8, 9 and 0 are on the sheet');
+  assert.doesNotMatch(p1, /Demo keys/);
+  assert.match(p2, /Too early: press again/);
+  assert.match(await sheet(), /nothing is sent to a Claude/i);
+  assert.match(await sheet(), /--live/);
 });
 
 test('the footer says what really happens: no variable for speech, what the demo shows and what needs --live', async () => {
