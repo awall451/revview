@@ -403,7 +403,7 @@ test('default is demo mode: the server has --dev-demo, GET /dev/demo is routed, 
   try {
     const url = await run.url();
     const port = portOf(url);
-    assert.match(run.out, /demo mode: 1-9 and 0 scenes, P pause, \[ \] slower\/faster; see --keys/);
+    assert.match(run.out, /demo mode: 1-9, 0, T, A scenes \(L with --lights\), P pause, \[ \] slower\/faster; see --keys/);
     await until(() => /^demo: 1 working/m.test(run.out), 'first demo scene line');
     const spid = await until(() => run.serverPid(), 'server pid');
     assert.ok(fs.readFileSync(`/proc/${spid}/cmdline`, 'utf8').split('\0').includes('--dev-demo'));
@@ -514,7 +514,7 @@ test('--keys lists the demo keys, every scene name and the no-Claude note', asyn
     assert.match(run.out, /^Demo keys \(demo mode only; the demo player takes them, not the bar\):$/m);
     const { buildLoop } = await import('../../emulator/demo/scenes.js');
     const all = buildLoop(1).map((s) => s.name);
-    assert.equal(all.length, 11, 'the eleventh scene (tasks) has no key');
+    assert.equal(all.length, 12, 'tasks and plan follow the ten scenes with keys');
     const names = all.slice(0, 10);
     for (const n of names) assert.ok(run.out.includes(n), `scene ${n}`);
     assert.match(run.out, /^ {2}1-9 and 0 .*jump/m);

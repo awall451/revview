@@ -4,8 +4,8 @@ import { text } from './http.js';
 
 export const MAX_DEV_BODY_BYTES = 1024;
 export const MAX_DEMO_CLIENTS = 2;
-// Browser codes the demo player owns under --dev-demo (the demo's keys: scene 1-9 and 0 (= 10), pause, slower, faster).
-export const DEMO_CODES = Object.freeze([...Array.from({ length: 9 }, (_, i) => `Digit${i + 1}`), 'Digit0', 'KeyP', 'BracketLeft', 'BracketRight']);
+// Browser codes the demo player owns under --dev-demo (the demo's scene keys, pause, slower, faster; the scene keys = DEMO_KEYS in emulator/demo/scenes.js, a test keeps both in step).
+export const DEMO_CODES = Object.freeze([...Array.from({ length: 9 }, (_, i) => `Digit${i + 1}`), 'Digit0', 'KeyT', 'KeyA', 'KeyL', 'KeyP', 'BracketLeft', 'BracketRight']);
 
 // browser codes of the bridge's bound non-modifier keys (the page prevents their default action)
 export const bridgeCodes = (ctx) => {

@@ -393,9 +393,11 @@ if [ "$mode" = live ]; then
   if [ -n "${TMUX:-}" ]; then echo "(you are inside tmux: run the attach line from a shell outside tmux, or prefix it with TMUX=)"; fi
   echo "detach again with Ctrl-b d; closing the window, Ctrl+C or run.sh --stop ends this Claude session"
 else
-  node "$root/emulator/demo/player.js" --url "http://127.0.0.1:$actual" &
+  player_args=(--url "http://127.0.0.1:$actual")
+  if [ -n "$want_lights" ]; then player_args+=(--lights); fi
+  node "$root/emulator/demo/player.js" "${player_args[@]}" &
   dpid=$!
-  echo "demo mode: 1-9 and 0 scenes, P pause, [ ] slower/faster; see --keys"
+  echo "demo mode: 1-9, 0, T, A scenes (L with --lights), P pause, [ ] slower/faster; see --keys"
 fi
 player_noted=
 note_player() { # the demo player stopped by itself while the server is up: the bar still works

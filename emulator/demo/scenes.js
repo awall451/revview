@@ -14,14 +14,14 @@
 // left, and the compaction ended with scene 9): CLAUDE ASKS with the question and its options. It ends on the asking state; scene 11 (or
 // the loop's restart, after a jump) moves on. After the question the scene taps Down, Down, Up (steps `DemoKey`, which the player sends as laptop keys through
 // POST /dev/key, the way a typed key goes): the highlighted option moves 1 -> 2 -> 3 -> 2 so the owner sees it; a jump (key 0) skips them
-// and shows option 1. The demo keys are 1-9 and 0 (= 10).
+// and shows option 1. The keys are in DEMO_KEYS below (1-9, 0 = asking, T tasks, A plan, L lights).
 //
-// Scene 11: a task list and the time marks, from fixtures/sessions/task-list.jsonl (Claude Code 2.1.332: TaskCreate / TaskUpdate), in a session of
-// its own (repo revview, id ...-tasks) that replaces the asking one (its SessionEnd comes first). Real events of the recording, the tool
-// rows left out: the prompt, four TaskCreate, then Bash and TaskUpdate calls up to 2 of 4 done: WORKING with the clock running ("0:07"...) and "tasks 2/4"
-// in row A. The scene holds long (`hold`), so the server's quiet timer (run.sh passes --quiet-minutes 0.4 = 24 s to the demo server) fires inside the
-// hold: the QUIET mark appears at the end, and the next event (the loop's restart) clears it. At speeds above 1x the hold is shorter than
-// the timer and no QUIET shows. No demo key reaches it (the keys are 1-9 and 0 = 10): it follows the asking scene in the loop.
+// Scene 11: a task list and the time marks, from fixtures/sessions/task-list.jsonl (TaskCreate / TaskUpdate), in a session of its own
+// (repo revview, id ...-tasks) that replaces the asking one: WORKING with the clock and "tasks 2/4". It holds long (`hold`), so the
+// server's quiet timer (run.sh: 24 s) fires inside the hold and the QUIET mark appears; the next event clears it (no QUIET above 1x).
+// Scene 12: plan approval, from fixtures/sessions/plan-approve.jsonl up to its first permission_prompt (ExitPlanMode): CLAUDE ASKS with a
+// plan, in a session of its own (id ...-plan). Scene 13 (only with `buildLoop(loop, { lights: true })`): four sessions at once, one per
+// light state (working, permission, asking, waiting), so the LED strip shows them together.
 import fs from 'node:fs';
 
 function recording(name) {
@@ -42,6 +42,7 @@ const idlePrompt = recording('idle-prompt');
 const compaction = recording('compaction');
 const askQuestion = recording('ask-question');
 const taskList = recording('task-list');
+const planApprove = recording('plan-approve');
 const start = is('SessionStart');
 const lastBash = workingTurn.findLastIndex(is('PostToolUse', { tool_name: 'Bash' }));
 
@@ -63,6 +64,8 @@ const PARTS = {
   ask: between(askQuestion, is('UserPromptSubmit'), is('Notification', { notification_type: 'permission_prompt' })),
   // the prompt, the four creates, the first Bash step and the first two tasks done: events 1, 7, 10, 13, 16, 19, 21, 25, 27, 33, 35, 37 of the recording
   tasks: [1, 7, 10, 13, 16, 19, 21, 25, 27, 33, 35, 37].map((i) => taskList[i]),
+  // the plan recording from SessionStart to its first permission_prompt (ExitPlanMode asks for approval)
+  plan: between(planApprove, start, is('Notification', { notification_type: 'permission_prompt' })),
   waiting: between(idlePrompt, is('UserPromptSubmit'), is('Notification', { notification_type: 'idle_prompt' })),
 };
 if (!start(PARTS.starts.revview[0]) || !start(PARTS.starts.garden[0]) || !start(PARTS.starts.notes[0])) throw new Error('demo: recording does not start with SessionStart');
@@ -73,6 +76,18 @@ export const sessionId = (loop, repo) => `demo${loop}-${repo}`;
 
 const COMPACTION = 'compaction';
 const TASKS = 'tasks';
+const PLAN = 'plan';
+const LIGHTS = ['l1', 'l2', 'l3', 'l4'];
+const LIGHT_REPOS = ['revview', 'garden', 'notes', 'docs']; // working, permission, asking, waiting
+
+// The demo keys (browser code -> scene name; the sheet shows `key`). A scene a loop does not contain (lights without --lights) is ignored.
+export const DEMO_KEYS = Object.freeze([
+  ...['working', 'permission', 'done', 'waiting', 'offline', 'insert-key', 'ended', 'compaction', 'compact-cmd'].map((scene, i) => ({ code: `Digit${i + 1}`, key: String(i + 1), scene })),
+  { code: 'Digit0', key: '0', scene: 'asking' },
+  { code: 'KeyT', key: 'T', scene: 'tasks' },
+  { code: 'KeyA', key: 'A', scene: 'plan' },
+  { code: 'KeyL', key: 'L', scene: 'lights' },
+].map((k) => Object.freeze(k)));
 const TASKS_HOLD = 36000; // ms at 1x: the quiet timer of the demo server is 24 s
 const readdress = (events, id, repo) => events.map((ev) => {
   const { cwd, ...rest } = ev;
@@ -94,18 +109,21 @@ export const clearOverlays = () => [net(true), lock(false)];
 
 // The loop's last events: every demo session still on the board ends (an id the board never saw is harmless).
 export function endLoop(loop) {
-  return [...REPOS, COMPACTION, TASKS].map((repo) => ({ hook_event_name: 'SessionEnd', session_id: sessionId(loop, repo) }));
+  return [...REPOS, COMPACTION, TASKS, PLAN, ...LIGHTS].map((repo) => ({ hook_event_name: 'SessionEnd', session_id: sessionId(loop, repo) }));
 }
 
 // The scenes of loop number `loop` (session ids derive from it, so every loop's ids are fresh).
-export function buildLoop(loop) {
+export function buildLoop(loop, { lights = false } = {}) {
   const [a, b, c] = REPOS.map((repo) => ({ repo, id: sessionId(loop, repo) }));
   const as = (s, events) => readdress(events, s.id, s.repo);
   const ctx = (s) => ({ hook_event_name: 'RevviewContext', session_id: s.id, cwd: `/home/user/${s.repo}`, branch: 'main' });
   const d = { repo: 'revview', id: sessionId(loop, COMPACTION) };
   const e = { repo: 'revview', id: sessionId(loop, TASKS) };
+  const f = { repo: 'revview', id: sessionId(loop, PLAN) };
+  const [l1, l2, l3, l4] = LIGHTS.map((n, i) => ({ repo: LIGHT_REPOS[i], id: sessionId(loop, n) }));
+  const lightStarts = [[l1, workingTurn[0]], [l2, permissionPrompt[0]], [l3, askQuestion[0]], [l4, idlePrompt[0]]].flatMap(([s, ev]) => [...as(s, [ev]), ctx(s)]);
   const starts = [a, b, c].flatMap((s) => [...as(s, PARTS.starts[s.repo]), ctx(s)]);
-  return [
+  const scenes = [
     { name: 'working', steps: [...steps(starts, 0), ...steps(as(a, PARTS.working))], expect: { view: 'working', sessions: 3 } },
     { name: 'permission', steps: steps(as(b, PARTS.permission)), expect: { view: 'permission', sessions: 3 } },
     // the first session's turn ends and the second one's prompt is answered: both done, nothing asks or works
@@ -113,7 +131,7 @@ export function buildLoop(loop) {
     { name: 'waiting', steps: steps(as(c, PARTS.waiting)), expect: { view: 'waiting', sessions: 3 } },
     { name: 'offline', steps: steps([net(false)]), expect: { view: 'offline', sessions: 3 } },
     { name: 'insert-key', steps: steps([net(true), lock(true)]), expect: { view: 'insert-key', sessions: 3 } },
-    { name: 'ended', steps: steps([lock(false), ...endLoop(loop)]), expect: { view: 'ended', sessions: 0 } },
+    { name: 'ended', steps: steps([lock(false), ...REPOS.map((repo) => ({ hook_event_name: 'SessionEnd', session_id: sessionId(loop, repo) }))]), expect: { view: 'ended', sessions: 0 } },
     // one session of its own, started here (the three above have ended): auto compaction in the middle of a turn
     { name: 'compaction', steps: [...steps([...as(d, PARTS.compactAuto.slice(0, 1)), ctx(d)], 0), ...steps(as(d, PARTS.compactAuto.slice(1)))], expect: { view: 'working', sessions: 1, compacting: true } },
     // the compaction ends, the turn finishes, then /compact at the prompt
@@ -132,5 +150,26 @@ export function buildLoop(loop) {
       hold: TASKS_HOLD,
       expect: { view: 'working', sessions: 1 },
     },
+    // the tasks session ends; a plan waits for approval in a session of its own
+    {
+      name: 'plan',
+      steps: [...steps([{ hook_event_name: 'SessionEnd', session_id: e.id }, ...as(f, PARTS.plan.slice(0, 1)), ctx(f)], 0), ...steps(as(f, PARTS.plan.slice(1)))],
+      expect: { view: 'asking', sessions: 1 },
+    },
   ];
+  if (lights) {
+    // four sessions in four light states at once (the plan one ends first); the bar shows the permission one
+    scenes.push({
+      name: 'lights',
+      steps: [
+        ...steps([{ hook_event_name: 'SessionEnd', session_id: f.id }, ...lightStarts], 0),
+        ...steps(as(l1, PARTS.working)),
+        ...steps(as(l2, PARTS.permission)),
+        ...steps(as(l3, PARTS.ask)),
+        ...steps(as(l4, PARTS.waiting)),
+      ],
+      expect: { view: 'permission', sessions: 4 },
+    });
+  }
+  return scenes;
 }

@@ -6,8 +6,9 @@ import { TextDecoder } from 'node:util';
 import { startLiveServer, parseArgs, DEMO_CODES } from '../../src/server/index.js';
 import { loadConfig } from '../../src/input/keymap.js';
 import { BROWSER_CODES } from '../../src/input/keys.js';
+import { initialBoard, reduceBoard, boardView, shownAsk } from '../../src/state/index.js';
 import { createPlayer, SPEEDS } from '../../emulator/demo/player.js';
-import { buildLoop, clearOverlays } from '../../emulator/demo/scenes.js';
+import { buildLoop, clearOverlays, DEMO_KEYS } from '../../emulator/demo/scenes.js';
 
 // The laptop demo (emulator/demo): the player posts the real recordings to a live server with a FAKE clock
 // (timers run only when a test fires them), the demo keys come back over GET /dev/demo.
@@ -90,7 +91,7 @@ test('playing through: every scene reaches the state the bar shows, then the loo
     }
     const s1 = await shown(url);
     assert.deepEqual({ view: s1.view, sessions: s1.sessions, offline: s1.offline, locked: s1.locked, compacting: s1.compacting }, { view: 'working', sessions: 3, offline: false, locked: false, compacting: false });
-    const names = ['working', 'permission', 'done', 'waiting', 'offline', 'insert-key', 'ended', 'compaction', 'compact-cmd', 'asking', 'tasks'];
+    const names = ['working', 'permission', 'done', 'waiting', 'offline', 'insert-key', 'ended', 'compaction', 'compact-cmd', 'asking', 'tasks', 'plan'];
     assert.deepEqual(lines.slice(0, names.length + 1), [...names, 'working'].map((n, i) => `demo: ${(i % names.length) + 1} ${n}`));
   } finally {
     player.stop();
@@ -301,8 +302,10 @@ test('--dev-demo needs --dev-bridge; with it the flag is set', () => {
   assert.notEqual(parseArgs(['--dev-bridge']).devDemo, true);
 });
 
-test('DEMO_CODES: Digit1-9 and Digit0, P, [ and ], none of them bound in the laptop key map', () => {
-  assert.deepEqual([...DEMO_CODES], [...'1234567890'].map((d) => `Digit${d}`).concat(['KeyP', 'BracketLeft', 'BracketRight']));
+test('DEMO_CODES: the DEMO_KEYS codes plus P, [ and ], none of them bound in the laptop key map', () => {
+  assert.deepEqual(new Set(DEMO_CODES), new Set([...DEMO_KEYS.map((k) => k.code), 'KeyP', 'BracketLeft', 'BracketRight']));
+  assert.equal(new Set(DEMO_CODES).size, DEMO_CODES.length);
+  assert.equal(DEMO_KEYS.length, new Set(DEMO_KEYS.map((k) => k.code)).size);
   const bound = new Set(loadConfig(LAPTOP).bindings.map((b) => b.key));
   for (const code of DEMO_CODES) {
     const linux = Object.hasOwn(BROWSER_CODES, code) ? BROWSER_CODES[code] : undefined;
@@ -313,7 +316,7 @@ test('DEMO_CODES: Digit1-9 and Digit0, P, [ and ], none of them bound in the lap
 test('scenes: ids are fresh per loop, overlays are cleared by the loop end, Claude events come from the recordings', () => {
   const ids = (loop) => new Set(buildLoop(loop).flatMap((s) => s.steps.map((x) => x.event.session_id)).filter(Boolean));
   const [one, two] = [ids(1), ids(2)];
-  assert.equal(one.size, 5, 'three sessions, the compaction one and the task list one');
+  assert.equal(one.size, 6, 'three sessions, the compaction one, the task list one and the plan one');
   for (const id of one) assert.ok(!two.has(id));
   assert.deepEqual(clearOverlays().map((e) => e.hook_event_name), ['RevviewNetwork', 'RevviewDataLock']);
   const names = new Set(buildLoop(1).flatMap((s) => s.steps.map((x) => x.event.hook_event_name)));
@@ -361,7 +364,7 @@ test('asking scenes: the real ask-question recording, events 1-4, in the compact
   const rec = fs.readFileSync(new URL('../../fixtures/sessions/ask-question.jsonl', import.meta.url), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
   const [asking, ...more] = buildLoop(1).slice(9);
   assert.equal(asking.name, 'asking');
-  assert.deepEqual(more.map((s) => s.name), ['tasks'], 'asking is the last scene a key reaches; the task list follows');
+  assert.deepEqual(more.map((s) => s.name), ['tasks', 'plan'], 'the task list and the plan follow asking');
   const claude = (scene) => scene.steps.map((x) => x.event).filter((e) => !e.hook_event_name.startsWith('Revview') && e.hook_event_name !== 'DemoKey');
   const key = (e) => [e.hook_event_name, e.tool_name, e.notification_type].join('/');
   assert.deepEqual(claude(asking).map(key), rec.slice(1, 5).map(key));
@@ -427,8 +430,7 @@ test('asking scene played: Down, Down, Up as laptop keys move the highlighted op
 
 test('tasks scene: real task-list recording events in a session of its own; the bar shows the clock data, tasks 2/4, and the quiet mark after the hold', async () => {
   const rec = fs.readFileSync(new URL('../../fixtures/sessions/task-list.jsonl', import.meta.url), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
-  const scene = buildLoop(1).at(-1);
-  assert.equal(scene.name, 'tasks');
+  const scene = buildLoop(1).find((x) => x.name === 'tasks');
   assert.ok(scene.hold > HOLD, 'it holds longer than the others (the quiet timer must fire inside the hold)');
   const claude = scene.steps.map((x) => x.event).filter((e) => !e.hook_event_name.startsWith('Revview') && e.hook_event_name !== 'SessionEnd');
   const key = (e) => [e.hook_event_name, e.tool_name].join('/');
@@ -450,5 +452,56 @@ test('tasks scene: real task-list recording events in a session of its own; the 
   } finally {
     player.stop();
     await live.close();
+  }
+});
+
+// the scenes' events through the real reducer: what the bar shows after the scene's last step
+function reduced(loop, upTo) {
+  let b = initialBoard();
+  for (const sc of loop.slice(0, upTo + 1)) for (const { event } of sc.steps) if (event.hook_event_name !== 'DemoKey') b = reduceBoard(b, event);
+  return b;
+}
+
+test('DEMO_KEYS: every scene of the loop (lights on) has a key, every key a scene; lights is only there with the option', () => {
+  const loop = buildLoop(1, { lights: true });
+  assert.deepEqual(buildLoop(1).map((s) => s.name), loop.slice(0, -1).map((s) => s.name));
+  assert.equal(loop.at(-1).name, 'lights');
+  assert.deepEqual(DEMO_KEYS.map((k) => k.scene).sort(), loop.map((s) => s.name).sort());
+});
+
+test('plan scene: the real plan-approve events up to the first permission_prompt show CLAUDE ASKS with a plan', () => {
+  const loop = buildLoop(1);
+  const i = loop.findIndex((s) => s.name === 'plan');
+  const b = reduced(loop, i);
+  assert.equal(boardView(b).view, 'asking');
+  assert.equal(shownAsk(b).ask.kind, 'plan');
+  assert.equal(boardView(b).ask.kind, 'plan');
+  assert.deepEqual(loop[i].expect, { view: 'asking', sessions: 1 });
+  assert.equal(boardView(b).others + 1, 1);
+});
+
+test('lights scene: four sessions at once, ended by the loop end', () => {
+  const loop = buildLoop(1, { lights: true });
+  const i = loop.findIndex((s) => s.name === 'lights');
+  const b = reduced(loop, i);
+  const v = boardView(b);
+  assert.equal(v.view, loop[i].expect.view);
+  assert.equal(v.others + 1, 4);
+  assert.equal(loop[i].expect.sessions, 4);
+  const ids = new Set(loop[i].steps.map((x) => x.event.session_id).filter((x) => x?.includes('-l')));
+  assert.equal(ids.size, 4);
+});
+
+test('player: a key for a scene the loop does not have (lights without the option) is ignored; with it the key jumps', async () => {
+  for (const lights of [false, true]) {
+    const lines = [];
+    const player = createPlayer({ url: 'http://127.0.0.1:1', clock: fakeClock(), post: async () => 204, log: (m) => lines.push(m), lights });
+    await player.handleKey('KeyL');
+    await player.idle();
+    assert.equal(lines.some((l) => /lights/.test(l)), lights);
+    await player.handleKey('KeyA');
+    await player.idle();
+    assert.ok(lines.some((l) => /plan/.test(l)));
+    player.stop();
   }
 });

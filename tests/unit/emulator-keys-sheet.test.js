@@ -66,9 +66,10 @@ test('the demo keys come from scenes.js: every scene name and the range', async 
   const out = await sheet();
   const { buildLoop } = await import('../../emulator/demo/scenes.js');
   const all = buildLoop(1).map((s) => s.name);
-  // keys 1-9 and 0 (= 10) reach the first ten scenes; the eleventh (tasks, the clock and the quiet mark) only follows asking in the loop
-  assert.equal(all.length, 11);
+  // keys 1-9 and 0 (= 10) reach the first ten scenes; keys T, A (and L with lights) reach tasks, plan and lights
+  assert.equal(all.length, 12);
   assert.equal(all[10], 'tasks');
+  assert.equal(all[11], 'plan');
   const names = all.slice(0, 10);
   for (const n of names) assert.ok(out.includes(n), n);
   assert.match(out, /1-9 and 0/);

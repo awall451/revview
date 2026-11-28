@@ -1,11 +1,11 @@
 // The demo player: posts the demo loop (emulator/demo/scenes.js) to a running revview server (--dev-bridge --dev-demo)
-// at a watchable pace, and follows the demo keys the page sends (GET /dev/demo): 1-9 and 0 (= 10) jump to a scene, P pause/continue,
+// at a watchable pace, and follows the demo keys the page sends (GET /dev/demo): the keys of DEMO_KEYS (1-9, 0, T, A, L) jump to a scene, P pause/continue,
 // [ slower, ] faster. Dev only, for the laptop emulator; never part of the product.
 //   node emulator/demo/player.js --url http://127.0.0.1:8138
 // Exits 0 when the server goes away (its demo stream closes, or a POST cannot connect) and on SIGTERM/SIGINT.
 import http from 'node:http';
 import { pathToFileURL } from 'node:url';
-import { buildLoop, endLoop, clearOverlays } from './scenes.js';
+import { buildLoop, endLoop, clearOverlays, DEMO_KEYS } from './scenes.js';
 
 export const SPEEDS = Object.freeze([0.25, 0.5, 1, 2, 4]);
 const DEFAULT_SPEED = SPEEDS.indexOf(1);
@@ -43,9 +43,9 @@ function postKey(url, code) {
   });
 }
 
-export function createPlayer({ url, clock = { setTimeout, clearTimeout }, post = (event) => (isKeyStep(event) ? postKey(url, event.code) : postHttp(url, event)), log = (m) => console.log(m), gapMs = 1500, holdMs = 5000 }) {
+export function createPlayer({ url, clock = { setTimeout, clearTimeout }, post = (event) => (isKeyStep(event) ? postKey(url, event.code) : postHttp(url, event)), log = (m) => console.log(m), gapMs = 1500, holdMs = 5000, lights = false }) {
   let loop = 1;
-  let scenes = buildLoop(loop);
+  let scenes = buildLoop(loop, { lights });
   let si = 0; // the next step to post: scene si, step ti
   let ti = 0;
   let speed = DEFAULT_SPEED;
@@ -124,7 +124,7 @@ export function createPlayer({ url, clock = { setTimeout, clearTimeout }, post =
   async function closeLoop(g) {
     for (const ev of [...endLoop(loop), ...clearOverlays()]) if (!await send(g, ev)) return false;
     loop++;
-    scenes = buildLoop(loop);
+    scenes = buildLoop(loop, { lights });
     si = 0;
     ti = 0;
     return true;
@@ -168,8 +168,11 @@ export function createPlayer({ url, clock = { setTimeout, clearTimeout }, post =
   }
 
   function handleKey(code) {
-    const m = /^Digit([0-9])$/.exec(code);
-    if (m) return jump(Number(m[1]) === 0 ? 10 : Number(m[1]));
+    const k = DEMO_KEYS.find((x) => x.code === code);
+    if (k) {
+      const n = scenes.findIndex((s) => s.name === k.scene) + 1;
+      return n > 0 ? jump(n) : undefined; // a scene this loop does not have (lights without --lights)
+    }
     if (code === 'KeyP') togglePause();
     else if (code === 'BracketLeft') setSpeed(speed - 1);
     else if (code === 'BracketRight') setSpeed(speed + 1);
@@ -227,10 +230,10 @@ function main(argv) {
   const i = argv.indexOf('--url');
   const url = i >= 0 ? argv[i + 1] : undefined;
   if (url === undefined || !/^http:\/\/[^/]+$/.test(url)) {
-    console.error('usage: node emulator/demo/player.js --url http://127.0.0.1:PORT');
+    console.error('usage: node emulator/demo/player.js --url http://127.0.0.1:PORT [--lights]');
     process.exit(2);
   }
-  const player = createPlayer({ url });
+  const player = createPlayer({ url, lights: argv.includes('--lights') });
   const quit = () => player.stop();
   process.on('SIGTERM', quit);
   process.on('SIGINT', quit);
