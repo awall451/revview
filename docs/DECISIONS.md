@@ -2385,3 +2385,44 @@ Code: `src/server/settings.js`.
   without a feature does not forget the choice for it.
 - **Not proven.** Nothing here has run on a Pi: the write on the real data partition, a power cut during the write,
   the order of unlock and server start at key-on. Bench items ST1-ST3 in `docs/BENCH-TEST.md` are `untested`.
+
+## CLAUDE ASKS rough edges (cycle 80, owner issue #37, branch work/ask-edges)
+
+- **The true state after Esc on a question.** What the recordings show: `fixtures/answers/events-esc.jsonl` (Esc on the
+  AskUserQuestion picker, Claude Code 2.1.332) ends with `PermissionRequest` and its `Notification`: no further event,
+  no Stop; `pane-16-esc.txt` shows "Declined to answer Claude's questions" and the empty `❯` prompt, so the turn is over
+  and Claude waits for the driver; the held hook process was killed at once. `fixtures/sessions/permission-interrupted.jsonl`
+  (Esc on a permission dialog, 2.1.330) agrees: after the dialog's `Notification` the next event is the driver's next
+  `UserPromptSubmit`, no Stop. So the true state is WAITING FOR ME, the same as after revview's own Esc
+  (`RevviewInterrupted`, QA r3-02), and no new event is invented: the existing internal `RevviewAskGone` (the server saw
+  the hook connection close before revview answered) carries it. The catch: answering in the terminal closes the
+  connection too (Claude kills the hook), then its `PostToolUse` follows. The recordings do not time the close against
+  that PostToolUse, so the server waits a grace of 1.5 s (`ASK_GONE_GRACE_MS`, injected timers, cleared at close) before
+  applying `RevviewAskGone {how: 'closed'}`. A PostToolUse (or the driver's next UserPromptSubmit) in that time removes
+  the entry, and the late event finds nothing and changes nothing. If the entry is still there, it is the main agent's,
+  and the session is working or permission, the board makes the session waiting exactly as `RevviewInterrupted` does
+  (one shared helper: other prompts of the session cleared too, since Esc ends the whole turn). A subagent's question
+  closing is only dropped as before (Esc there is not recorded). Costs: after Esc the question stays on the bar 1.5 s
+  longer than before (a press then says "Not sent: the question is not waiting any more"); a terminal answer whose
+  PostToolUse were later than 1.5 s would show WAITING FOR ME until it comes (never seen; the hook is a short node
+  process). The 540 s `timeout` path is unchanged (immediate, note "Question left for the terminal"). Not tried on a
+  real Claude after this change.
+- **Note kind `terminal`.** "Answer in the terminal when parked" / "Approve in the terminal when parked" are posted by
+  `actions.js` with kind `terminal` (they were kind `ask`); the board's rule (table at the top of the note code in
+  `src/state/board.js`): not drawn while the shown ask's `answer` is `terminal`, whose hint row says the same. The view
+  no longer has a copy of the text and matches on no note text. Same bar as before.
+- **Row A under CLAUDE ASKS** says `Question` / `Plan` instead of `AskUserQuestion` / `ExitPlanMode` (display only; the
+  state keeps the tool name).
+- **Plan titles read aloud keep file names**: in a plan title a path is spoken as its last part with "dot"
+  (`add hello.sh` -> "add hello dot sh", `src/view/view.js` -> "view dot js"). Questions, options and summaries still
+  drop paths (unchanged).
+- **Once each.** Read aloud remembers each session's last spoken Stop: the same Stop again, with no other event of that
+  session between, is not spoken again (a new turn ending in the same words is). Sounds: a burst of board changes (each
+  within 250 ms of the last, at most 2 s) gives at most one cue, `cueFor(board before the burst, board after it)`, so a
+  demo scene jump (many events posted back to back) plays one cue, for where it lands; a quick needs -> working -> done
+  burst gives done; done -> working -> done gives none. `sounds.idle()` waits for an open burst, so on a Stop the done
+  cue still comes before the spoken summary. Cost: every cue is 250 ms later than the change; a question that leaves the
+  bar within 250 ms of appearing gives no cue. The server option `soundsSettleMs` (0 = the old immediate cue) is used by
+  the server wiring tests; the burst rule is tested with fake timers.
+- **Speech's 2 s wait** before automatic speech runs on the injected timers. New tests: the wheel-answer path
+  (`RevviewAnswered`) and the 540 s timeout (`RevviewAskGone timeout`) give no cue and a later question cues once.

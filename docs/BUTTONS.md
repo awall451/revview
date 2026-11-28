@@ -397,6 +397,7 @@ each with an ellipsis):
 - The highlighted option is an inverted block: lime `#e6f25a` background, black text, a 3 px white frame. Not by
   colour alone: the block and the frame show it in black and white too. Only one option is ever highlighted; a plan
   or a `terminal` ask has none. Gallery: `asking-choice.png` (option 3), `asking.png` (option 1).
+- Row A says `Question` (AskUserQuestion) or `Plan` (ExitPlanMode), not the tool name (cycle 80).
 - A hint row under the options says what the buttons do: "Allow picks · Deny cancels", for a plan "Allow approves ·
   Deny keeps planning", for a `terminal` ask "Answer in the terminal when parked" (`asking-terminal.png`). When the
   offline and voice notes take the room, the hint row goes first (the question keeps its 4.0 mm).
@@ -430,7 +431,7 @@ at the next gesture):
 | the question is no longer held (answered in the terminal: Claude ends the hook; 16 requests already held; after an Esc or the 540 s timeout the bar has dropped the question, so there is nothing to press) | Not sent: the question is not waiting any more |
 | shown for less than 1.5 s | Too early: press again (as for permission prompts) |
 | the session is not one revview started (no tmux window of its own) | Not sent: not a session revview started |
-| several questions, multi-select, a request with no questions | Answer in the terminal when parked (plan: Approve in the terminal when parked) |
+| several questions, multi-select, a request with no questions | Answer in the terminal when parked (plan: Approve in the terminal when parked); note kind `terminal`, not drawn under a `terminal` ask whose hint row already says it |
 | plan: the pane does not show the dialog's three choices `1. Yes…`, `2. Yes, manually approve edits`, `3. Tell Claude what to change` on consecutive lines (read with `capture-pane` just before the key) | Not sent: the terminal does not show the plan |
 
 The held request releases its slot in every case: answered by the hook (the registry finishes it), or ended by
@@ -440,16 +441,19 @@ connection close and drops it). There is never a second answer: a question gets 
 **A held request that ends unanswered (cycle 60, QA r11-02).** No hook fires on Esc, but Claude closes the hook
 connection at once (`fixtures/answers/events-esc.jsonl`). When the long poll ends without revview answering, the server
 applies the internal event `RevviewAskGone {session_id, agent, since, how}` (refused over HTTP) and the board drops exactly
-that entry, so push-to-talk works again and the session shows what it otherwise is (no cue plays; a later question cues
-once). The two cases are told apart by who ended the poll: `closed` (the connection closed before revview answered:
+that entry, so push-to-talk works again (no cue plays; a later question cues once). For `closed` the server first waits
+1.5 s (cycle 80): answering in the terminal closes the connection too, and its PostToolUse, which comes within that time,
+removes the entry first, so the late `RevviewAskGone` does nothing. When it still finds the main agent's entry, the
+question was dismissed with Esc, which ends Claude's turn without any event: the session shows WAITING FOR ME, as after
+revview's own Esc (`RevviewInterrupted`). A subagent's entry is only dropped (not recorded). The two cases are told apart by who ended the poll: `closed` (the connection closed before revview answered:
 Esc, or a killed hook; the hook's own 600 s timeout is later than our 540 s, so that never comes first) says nothing, the
 question is gone; `timeout` (our 540 s wait ran out and the 204 gave the question to the terminal, where the picker may
 still be open) leaves the note "Question left for the terminal" ("Plan left for the terminal"), kind `left`, gone with the
 next gesture or when a question is on the bar again. It never fires for an answered request, nor for another entry of the
 session (the entry is found by session, agent and `since`). Not tried on a real Claude after this change.
 
-**Not solved:** which of several questions is on screen (several are refused). After an Esc the session shows what its
-events say (WORKING until the next event), not that Claude is idle.
+**Not solved:** which of several questions is on screen (several are refused). A terminal answer whose PostToolUse
+comes more than 1.5 s after the picker closed shows WAITING FOR ME until that event (never seen; DECISIONS cycle 80).
 
 ## Not recorded / not proven
 
