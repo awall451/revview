@@ -279,7 +279,8 @@ function nextTasks(t, event, at) {
   if (r === t || r === null) return r;
   if (!allCompleted(r)) {
     if (!('doneAt' in r)) return r;
-    const { doneAt, ...rest } = r;
+    const rest = { ...r };
+    delete rest.doneAt;
     return rest;
   }
   if (allCompleted(t) && finiteNum(t.doneAt)) return { ...r, doneAt: t.doneAt };
