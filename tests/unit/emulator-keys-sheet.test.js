@@ -15,6 +15,13 @@ const map = JSON.parse(fs.readFileSync(MAP, 'utf8'));
 
 const sheet = () => buildSheet({ mapPath: MAP, scenesPath: SCENES });
 
+test('docs/EMULATOR-LAPTOP.md: the fenced copy of the sheet is what --keys prints', async () => {
+  const doc = fs.readFileSync(fileURLToPath(new URL('../../docs/EMULATOR-LAPTOP.md', import.meta.url)), 'utf8');
+  const m = /^## The keys$[\s\S]*?^```\n([\s\S]*?)^```$/m.exec(doc);
+  assert.ok(m, 'a code fence under "## The keys"');
+  assert.equal(m[1], await sheet());
+});
+
 test('fits a 24-row terminal: two pages of at most 24 lines of at most 80 columns', async () => {
   const pages = await buildPages({ mapPath: MAP, scenesPath: SCENES });
   assert.equal(pages.length, 2);

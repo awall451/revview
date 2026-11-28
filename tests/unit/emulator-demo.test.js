@@ -505,3 +505,15 @@ test('player: a key for a scene the loop does not have (lights without the optio
     player.stop();
   }
 });
+
+test('player: every DEMO_KEYS entry jumps to its scene (lights on)', async () => {
+  const lines = [];
+  const player = createPlayer({ url: 'http://127.0.0.1:1', clock: fakeClock(), post: async () => 204, log: (m) => lines.push(m), lights: true });
+  for (const k of DEMO_KEYS) {
+    lines.length = 0;
+    await player.handleKey(k.code);
+    await player.idle();
+    assert.ok(lines.some((l) => new RegExp(`^demo: \\d+ ${k.scene}$`).test(l)), `key ${k.key} -> ${k.scene}: ${lines.join(' | ')}`);
+  }
+  player.stop();
+});
