@@ -2430,3 +2430,8 @@ Code: `src/server/settings.js`.
   the server wiring tests; the burst rule is tested with fake timers.
 - **Speech's 2 s wait** before automatic speech runs on the injected timers. New tests: the wheel-answer path
   (`RevviewAnswered`) and the 540 s timeout (`RevviewAskGone timeout`) give no cue and a later question cues once.
+
+## The long drive runs the server in simulated time (cycle 81)
+
+- `tools/long-drive` (not part of the gate) starts the server with the lights, sounds and auto look, with stand-ins for the LED helper and the cue player (`tests/long/fake/`), and scales the server's own JavaScript timers and clocks by the replay speed-up (`tests/long/clock-skew.js`), so its real timers (ping, look clock, quiet, lights tick) run at the replay's pace. The drive passes no `--settings` file: it never changes a Settings choice, so a kept file would only repeat the config defaults. Results and limits (an emulation, nothing on a Pi): `docs/LONG-DRIVE.md`.
+- The SSE ping and the owned-sessions poll run on the injected `timers` like every other server timer (self-arming `setTimeout`, unref'd, cleared by `close()`).
