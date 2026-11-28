@@ -13,7 +13,16 @@ export function fakeFs(files = {}) {
   };
   f.mkdirSync = (p) => { fail('mkdir', p); f.dirs.add(p); };
   f.openSync = (p) => { fail('open', p); const fd = f.nextFd++; f.fds.set(fd, { path: p, buf: '' }); return fd; };
-  f.writeSync = (fd, data) => { const o = f.fds.get(fd); fail('write', o.path); o.buf += String(data); return Buffer.byteLength(String(data)); };
+  f.shortWrite = 0; // > 0: each writeSync takes at most this many bytes
+  f.writeSync = (fd, data, off = 0, len) => {
+    const o = f.fds.get(fd);
+    fail('write', o.path);
+    const b = Buffer.from(data).subarray(off, len === undefined ? undefined : off + len);
+    const part = f.shortWrite > 0 ? b.subarray(0, f.shortWrite) : b;
+    o.buf += part.toString();
+    return part.length;
+  };
+  f.unlinkSync = (p) => { f.calls.push(`unlink ${p}`); f.files.delete(p); };
   f.fsyncSync = (fd) => fail('fsync', f.fds.get(fd).path);
   f.closeSync = (fd) => {
     const o = f.fds.get(fd);

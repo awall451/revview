@@ -1,8 +1,9 @@
 // Settings kept over a restart: the Sounds, Look and Lights modes chosen in the Settings menu (or by the menu hold) are
 // written to one small JSON file and read back at the next start. See docs/DECISIONS.md ("Settings kept over a restart").
 // Node built-ins only. The file system is injectable; the functions of it that are used (and nothing else):
-//   readFileSync, mkdirSync, openSync, writeSync, fsyncSync, closeSync, renameSync
+//   readFileSync, mkdirSync, openSync, writeSync, fsyncSync, closeSync, renameSync, unlinkSync
 import nodeFs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 export const MAX_SETTINGS_BYTES = 4096;
@@ -39,7 +40,7 @@ export function parseSettings(text) {
 }
 
 export function defaultSettingsPath(env = process.env) {
-  const base = env.XDG_STATE_HOME ? env.XDG_STATE_HOME : path.join(env.HOME ?? '', '.local', 'state');
+  const base = env.XDG_STATE_HOME ? env.XDG_STATE_HOME : path.join(env.HOME || os.homedir(), '.local', 'state');
   return path.join(base, 'revview', 'settings.json');
 }
 
@@ -77,7 +78,12 @@ export function createSettingsStore({ path: file, fs = nodeFs, log = () => {} })
     try {
       fs.mkdirSync(dir, { recursive: true });
       fd = fs.openSync(tmp, 'w', 0o600);
-      fs.writeSync(fd, `${JSON.stringify(next, null, 2)}\n`);
+      const buf = Buffer.from(`${JSON.stringify(next, null, 2)}\n`);
+      for (let off = 0; off < buf.length;) {
+        const n = fs.writeSync(fd, buf, off, buf.length - off);
+        if (!(n > 0)) throw new Error('short write');
+        off += n;
+      }
       fs.fsyncSync(fd);
       const done = fd;
       fd = null;
@@ -85,6 +91,7 @@ export function createSettingsStore({ path: file, fs = nodeFs, log = () => {} })
       fs.renameSync(tmp, file);
     } catch (e) {
       if (fd !== null) { try { fs.closeSync(fd); } catch { /* already failing */ } }
+      try { fs.unlinkSync(tmp); } catch { /* best effort: no stray temp file */ }
       carried = next;
       if (!failing) log(`settings: cannot write ${file} (${why(e)}); the choice stays until the restart`);
       failing = true;
@@ -105,6 +112,13 @@ const inside = (file, dir) => {
   const rel = path.relative(path.resolve(dir), path.resolve(file));
   return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
 };
+
+// A settings file under the default data mount without a data lock would be read and written at once, before the data is
+// unlocked (or on the root): the message to log when that is refused, else null.
+export function refusedWithoutLock(file, dataLock, mount) {
+  if (dataLock?.mountPoint || !inside(file, mount)) return null;
+  return `settings: ${file} is under ${mount} but there is no data lock (REVVIEW_DATA_MOUNT / --data-lock); not kept, the config defaults are used`;
+}
 
 // The server side (one per server, set as ctx.settings). `has` says which features this run has ({ sounds, lights });
 // look always exists. A setting that changed since the start is "touched": only touched settings are written (over what the
@@ -134,11 +148,12 @@ export function createSettingsKeeper(ctx, { path: file, fs, dataLock = null, has
     waiting = false;
     const r = store.load();
     log(describe(r));
-    if (touched.size > 0) { write(); return; } // the driver's latest choice wins
+    // per setting: what the driver changed since the start wins (written over the file); every other kept value is applied
     applying = true;
     try {
-      for (const [k, v] of Object.entries(usable(r.values))) ctx.apply({ hook_event_name: EVENT[k], mode: v }, true);
+      for (const [k, v] of Object.entries(usable(r.values))) if (!touched.has(k)) ctx.apply({ hook_event_name: EVENT[k], mode: v }, true);
     } finally { applying = false; }
+    if (touched.size > 0) write();
   }
   return {
     // at creation, before the board is built: the kept values to start with (none while the data is locked); logs the one start line

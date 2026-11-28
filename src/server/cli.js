@@ -7,7 +7,7 @@
 //   --boot: key-on start: show STARTING until the first session is on the board; with no tmux windows, start one session in $REVVIEW_START (or each --start dir)
 //   --data-lock [dir]: the data is locked until the topmost mount on dir (default /srv/revview-data, or $REVVIEW_DATA_MOUNT) is ext4 from /dev/mapper/revview-data;
 //     locked shows INSERT KEY, no session starts (key-on and New session wait); a posted RevviewDataLock is only a poke to re-read the mount table
-//   --settings [file]: keep the Sounds, Look and Lights choices over a restart in this file (bare: $XDG_STATE_HOME/revview/settings.json, else ~/.local/state/revview/settings.json; or $REVVIEW_SETTINGS); without it nothing is kept
+//   --settings [file]: (the file is taken only if it contains a / or ends in .json, so `npm start -- 9000` is a port) keep the Sounds, Look and Lights choices over a restart in this file (bare: $XDG_STATE_HOME/revview/settings.json, else ~/.local/state/revview/settings.json; or $REVVIEW_SETTINGS); without it nothing is kept
 //   --quiet-minutes N: a working session with no hook event for N minutes (default 5; decimals allowed, at most 120) gets the quiet mark; 0 = off
 //   --netmon: watch the network (default route + TCP connect to $REVVIEW_NETMON_HOST, default api.anthropic.com:443); offline after 2 failures, online after 1 success; a posted RevviewNetwork is only a poke to probe again
 //   --thermal: watch temperature and the Pi throttle flags: HOT and LOW POWER marks (sources: $REVVIEW_THERMAL_TEMP file, default /sys/class/thermal/thermal_zone0/temp;
@@ -91,7 +91,7 @@ export function parseArgs(argv) {
       i++;
     } else if (a === '--settings') {
       const next = argv[i + 1];
-      if (next !== undefined && !next.startsWith('--')) { out.settings = next; i++; } else out.settings = defaultSettingsPath(process.env);
+      if (next !== undefined && !next.startsWith('--') && (next.includes('/') || next.endsWith('.json'))) { out.settings = next; i++; } else out.settings = defaultSettingsPath(process.env);
     } else if (a === '--dev-demo') out.devDemo = true;
     else if (a === '--dev-keys') {
       const next = argv[i + 1];

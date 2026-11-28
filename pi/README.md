@@ -189,7 +189,7 @@ PASSPHRASE from cryptsetup: write it down and keep it apart from the Pi and the 
 `~/.claude`, `~/.ssh` and `~/repos` onto it, writes the configuration and ends with `done. Next:` and a WARNING: the
 old copies were deleted from the SD card, but flash may still hold them, so sign in to Claude Code again and replace
 push keys. It also makes the directory `/srv/revview-data/revview` (owned by you, mode 700), where the server keeps the
-Settings choices (Sounds, Lights, Look; `--settings` in `pi/revview.service`; untested on a Pi). Without `--format` it only writes the configuration for a partition that is already encrypted.
+Settings choices (Sounds, Lights, Look; `--settings` in `pi/revview.service`; untested on a Pi). Without `--format` it only writes the configuration for a partition that is already encrypted; on such a partition the unlock script makes that directory after the mount if it is missing (the data is not mounted while data-setup runs without `--format`).
 
 Exit codes: 0 done; 1 something failed after work had started (read the messages, fix, run again); 2 refused before
 anything was changed. It refuses, in plain words: a device that is not in `lsblk`; a whole disk instead of a

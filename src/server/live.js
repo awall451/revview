@@ -16,7 +16,8 @@ import { acceptGesture, setupInput, buttonsHandler } from './gestures.js';
 import { createLifecycle, LAUNCH_LIMIT_MS, COMPACT_LIMIT_MS, QUIET_MS } from './lifecycle.js';
 import { startMonitors } from './monitors.js';
 import { startLookClock } from './look.js';
-import { createSettingsKeeper } from './settings.js';
+import { createSettingsKeeper, refusedWithoutLock } from './settings.js';
+import { DEFAULT_DATA_MOUNT } from './datalock.js';
 
 export const DEFAULT_PORT = 8138;
 // The server's clock for the bar's times: ms since the epoch at process start, then monotonic. A Pi has no RTC and sets
@@ -64,7 +65,9 @@ export async function startLiveServer({
     acceptGesture: (g) => acceptGesture(ctx, g),
   };
   // settings = { path, fs? } or null (nothing kept over a restart). Kept values override the config defaults below (src/server/settings.js).
-  ctx.settings = settings ? createSettingsKeeper(ctx, { ...settings, dataLock, has: { sounds: Boolean(speech), lights: Boolean(lights) } }) : null;
+  const refusal = settings ? refusedWithoutLock(settings.path, dataLock, DEFAULT_DATA_MOUNT) : null;
+  if (refusal) (settings.log ?? ((m) => console.error(m)))(refusal);
+  ctx.settings = settings && !refusal ? createSettingsKeeper(ctx, { ...settings, dataLock, has: { sounds: Boolean(speech), lights: Boolean(lights) } }) : null;
   const kept = ctx.settings?.start() ?? {};
   // speech = { engine, speakOnStop, sounds?, cuePlayer?, spawn?, killWaitMs? } or null: with null nothing about speech or sounds exists.
   // sounds is the mode ('off' | 'cues' | 'speech'); cuePlayer is { argv, dir?, spawn? } or null (no player found: silent).

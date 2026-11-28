@@ -2360,10 +2360,15 @@ Code: `src/server/settings.js`.
 - **Locked data.** With a data lock (`REVVIEW_DATA_MOUNT`, set by data-setup) and the file under that mount, nothing
   is read or written while the data is locked: the mount point is then a directory of the read-only root, and a write
   would land in RAM and hide under the mount. The server starts with the config defaults. At the unlock it reads the
-  file and applies what is kept, unless a setting was already changed since the start: then it writes the current
-  choice instead (the driver's latest choice wins). A change while locked is kept on the board and written at the
+  file and decides per setting: every kept value of a setting nobody changed since the start is applied, and the
+  settings the driver changed meanwhile are written over the file (the driver's latest choice wins), the other keys
+  of the file carried along. A change while locked is kept on the board and written at the
   unlock. If the monitor sees the data locked again, writes wait for the next unlock the same way. A locked start
-  logs one line (`waiting for the data unlock`), the unlock a second one (what was read).
+  logs one line (`waiting for the data unlock`), the unlock a second one (what was read). A settings file under the
+  default data mount (`/srv/revview-data`) with no data lock at all (`REVVIEW_DATA_MOUNT` unset: data-setup never ran)
+  is refused with one log line and the config defaults, because it would be read and written before any unlock. The
+  directory `revview` on the partition is made by data-setup (`--format`) and, for a partition set up earlier, by
+  `pi/unlock.sh` after the mount (owner copied from the `claude` directory, mode 700); untested on a Pi.
 - **What is written.** Only the settings changed since this start, merged over what the file held: an untouched
   config default is never pinned into the file by a change to another setting.
 - **Missing, unreadable, refused, read-only.** The server always starts. At the start exactly one log line (stderr)

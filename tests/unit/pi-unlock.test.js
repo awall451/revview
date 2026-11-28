@@ -311,3 +311,23 @@ test('unit and udev rule templates', () => {
   for (const c of ['/etc/revview/data.conf', 'revview-data', '/srv/revview-data', '/run/revview-key',
     'http://127.0.0.1:8138/event']) assert.ok(sh.includes(c), c);
 });
+
+test('unlock: a partition without the revview directory gets it (mode 700, owner like claude), once', withRoot({}, (r) => {
+  const mnt = path.join(r, 'srv/revview-data');
+  fs.mkdirSync(path.join(mnt, 'claude'), { mode: 0o755 });
+  const res = run(r);
+  assert.equal(res.code, 0, res.err);
+  assert.match(res.out, /made \/srv\/revview-data\/revview/);
+  const st = fs.statSync(path.join(mnt, 'revview'));
+  assert.equal(st.mode & 0o777, 0o700);
+  assert.equal(st.uid, fs.statSync(path.join(mnt, 'claude')).uid);
+  const again = run(r);
+  assert.equal(again.code, 0, again.err);
+  assert.doesNotMatch(again.out, /made /);
+}));
+
+test('unlock: no revview directory is made on a partition data-setup never filled (no claude directory)', withRoot({}, (r) => {
+  const res = run(r);
+  assert.equal(res.code, 0, res.err);
+  assert.equal(fs.existsSync(path.join(r, 'srv/revview-data/revview')), false);
+}));

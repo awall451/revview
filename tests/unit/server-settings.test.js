@@ -276,6 +276,28 @@ test('a change while locked: kept on the board, no write while locked, written a
   assert.deepEqual(r.file(INSIDE), { sounds: 'off', look: 'night' }, 'the current choices written over the file');
 });
 
+test('a change while locked: the kept values of the settings nobody changed are applied at the unlock; the file keeps all three', T, async (t) => {
+  const r = lockRig(t, { [INSIDE]: '{"sounds":"speech","lights":"on","look":"day"}' });
+  const c = await r.start(FULL({ speech: SPEECH('cues'), lights: LIGHTS('off') }));
+  await c.tap('menu', 'hold'); // look day -> night while locked
+  await until(() => c.s.state().look === 'night', 'night while locked');
+  r.unlock();
+  assert.deepEqual(await c.modes(), { sounds: 'speech', look: 'night', lights: 'on' });
+  assert.deepEqual(r.file(INSIDE), { sounds: 'speech', lights: 'on', look: 'night' });
+});
+
+test('a settings file under the default data mount without a data lock is refused: one log line, defaults, no file access', T, async (t) => {
+  const r = rig(t, { [INSIDE]: '{"look":"night"}' });
+  const c = await r.start(FULL(), INSIDE);
+  assert.equal(c.s.state().look, 'day');
+  assert.deepEqual(r.fs.calls, []);
+  assert.equal(r.logs.length, 1);
+  assert.match(r.logs[0], /no data lock/);
+  await c.tap('menu', 'hold');
+  await until(() => c.s.state().look === 'night', 'night');
+  assert.deepEqual(r.fs.calls, [], 'nothing is written either');
+});
+
 test('a change while locked keeps the other keys of the file (carried)', T, async (t) => {
   const r = lockRig(t, { [INSIDE]: '{"sounds":"speech","lights":"off"}' });
   const c = await r.start(NO_SPEECH_LIGHTS());
@@ -309,6 +331,10 @@ test('parseArgs: --settings, --settings file, REVVIEW_SETTINGS, absent', () => {
     assert.equal(parseArgs(['--dev-bridge', '--settings']).devBridge, true);
     assert.equal(parseArgs(['--settings', '/x/s.json']).settings, '/x/s.json');
     assert.equal(parseArgs(['--settings', '/x/s.json', '9000']).port, 9000);
+    assert.equal(parseArgs(['--settings', '9000']).port, 9000);
+    assert.equal(parseArgs(['--settings', '9000']).settings, defaultSettingsPath(process.env));
+    assert.equal(parseArgs(['--settings', 's.json']).settings, 's.json');
+    assert.equal(parseArgs(['--settings', 'dir/s']).settings, 'dir/s');
     process.env.REVVIEW_SETTINGS = '/env/s.json';
     assert.equal(parseArgs([]).settings, '/env/s.json');
     assert.equal(parseArgs(['--settings', '/x/s.json']).settings, '/x/s.json');

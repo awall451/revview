@@ -555,5 +555,6 @@ test('the rendered unit keeps the settings on the data partition (--settings und
   // the directory is made by data-setup.sh (not shipped in the package)
   const ds = fs.readFileSync(path.join(ROOT, 'pi/data-setup.sh'), 'utf8');
   assert.match(ds, /for d in claude ssh repos revview; do/);
-  assert.equal(fs.existsSync(path.join(ROOT, 'revview/settings.json')), false);
+  // the partition of a Pi set up before this existed gets it at the unlock (pi/unlock.sh, tested in pi-unlock.test.js)
+  assert.match(fs.readFileSync(path.join(ROOT, 'pi/unlock.sh'), 'utf8'), /mkdir -m 0700 "\$rp\$MNT\/revview"/);
 });

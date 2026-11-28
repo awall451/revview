@@ -171,6 +171,15 @@ fi
 
 { [ -d "$rp$MNT" ] && [ ! -L "$rp$MNT" ]; } || fail "$MNT is missing or not a plain directory"
 mount -o noatime,nosuid,nodev "$rp$MAPPER" "$rp$MNT" || fail "cannot mount the data partition"
+# A partition set up before the server kept settings has no revview directory (its top is root's, mode 755, so the server
+# could not make it). Make it here, owned like the user's other directories on the partition (the owner is not in data.conf).
+if [ ! -e "$rp$MNT/revview" ] && [ -d "$rp$MNT/claude" ] && [ ! -L "$rp$MNT/claude" ]; then
+  if mkdir -m 0700 "$rp$MNT/revview" && chown --reference="$rp$MNT/claude" "$rp$MNT/revview"; then
+    echo "made $MNT/revview (settings kept here)"
+  else
+    echo "unlock.sh: could not make $MNT/revview (the settings will not be kept)" >&2
+  fi
+fi
 echo "unlocked"
 poke false
 exit 0

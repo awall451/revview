@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseSettings, defaultSettingsPath, createSettingsStore, SettingsError, MAX_SETTINGS_BYTES } from '../../src/server/settings.js';
+import path from 'node:path';
 import { fakeFs } from './settings-fake-fs.js';
 
 const P = '/state/revview/settings.json';
@@ -153,4 +154,21 @@ test('a store without a load first starts from nothing carried', () => {
   const { fs, store } = mk({ [P]: '{"sounds":"speech"}' });
   store.save({ look: 'night' });
   assert.deepEqual(JSON.parse(fs.files.get(P)), { look: 'night' });
+});
+
+test('defaultSettingsPath: HOME unset or empty falls back to the home directory, never a relative path', () => {
+  for (const env of [{}, { HOME: '' }]) assert.ok(path.isAbsolute(defaultSettingsPath(env)), JSON.stringify(env));
+});
+
+test('store.save: a failed save removes the temp file; a short write is continued', () => {
+  const fs = fakeFs();
+  const store = createSettingsStore({ path: '/s/settings.json', fs, log: () => {} });
+  fs.failOn = { fsync: 'EIO' };
+  assert.equal(store.save({ look: 'night' }), false);
+  assert.ok(fs.calls.includes('unlink /s/settings.json.tmp'));
+  assert.equal(fs.files.has('/s/settings.json.tmp'), false);
+  fs.failOn = {};
+  fs.shortWrite = 3;
+  assert.equal(store.save({ look: 'night' }), true);
+  assert.deepEqual(JSON.parse(fs.files.get('/s/settings.json')), { look: 'night' });
 });
