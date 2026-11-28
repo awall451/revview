@@ -22,7 +22,7 @@ why. (Compare: a New session window killed while STARTING gives the note "beta e
 ## Expected
 
 This is the realistic key-on failure (sign-in expired, Claude update broke something). The driver sees a bar that
-looks like "nothing was ever started"; the owner who reads `journalctl --user -u revview` as P17 says finds no reason
+looks like "nothing was ever started"; the owner who reads `sudo journalctl --user-unit=revview` as P17 says finds no reason
 in either case. Expected: a note such as "Key-on session ended at once: see the server log", and a log line naming the
 window that disappeared (and, if feasible, Claude's exit status or last stderr line, e.g. via tmux `remain-on-exit`).
 P17 accepts both outcomes as passing, so the bench will not catch that the reason is missing.

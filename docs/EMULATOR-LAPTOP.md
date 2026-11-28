@@ -68,10 +68,10 @@ server did not start) or the server stopped while running; 2 for a bad option.
 ## What you see
 
 By default you see the **demo**. A small player (`emulator/demo/player.js`) feeds the server the recorded Claude Code
-sessions from `fixtures/sessions/`, shown as three sessions called revview, garden and notes. It loops through eleven
-scenes, and the terminal prints a `demo: N scene` line for each:
+sessions from `fixtures/sessions/`, shown as three sessions called revview, garden and notes. It loops through twelve
+scenes (thirteen with `--lights`), and the terminal prints a `demo: N scene` line for each:
 
-1. working  2. permission  3. done  4. waiting  5. offline  6. insert-key  7. ended  8. compaction  9. compact-cmd  10. asking (key 0)  11. tasks (no key: it follows asking)
+1. working  2. permission  3. done  4. waiting  5. offline  6. insert-key  7. ended  8. compaction  9. compact-cmd  10. asking (key 0)  11. tasks (key T)  12. plan (key A)  13. lights (key L, only with `--lights`)
 
 What each scene puts on the screen (the big state word of the bar):
 
@@ -87,9 +87,11 @@ What each scene puts on the screen (the big state word of the bar):
 | compaction | WORKING, the tool line reads "Compacting context" (Claude compacts in the middle of a turn) |
 | compact-cmd | DONE, the tool line reads "Compacting context" (a `/compact` typed at the prompt); scene 8 and 9 are one session, revview |
 | asking | CLAUDE ASKS: a question with options (key 0; see "CLAUDE ASKS" below) |
-| tasks | WORKING with a clock beside the word (0:07, counting up) and `tasks 2/4` in the top line (a real task-list recording); it holds 36 s and after 24 s of silence the QUIET 1 MIN mark appears (the demo server runs with `--quiet-minutes 0.4`, the real default is 5 min); at 2x or 4x speed the hold is too short for it |
+| tasks (key T) | WORKING with a clock beside the word (0:07, counting up) and `tasks 2/4` in the top line (a real task-list recording); it holds 36 s and after 24 s of silence the QUIET 1 MIN mark appears (the demo server runs with `--quiet-minutes 0.4`, the real default is 5 min); at 2x or 4x speed the hold is too short for it |
+| plan (key A) | CLAUDE ASKS with a plan to approve (key A; a real plan recording, ExitPlanMode); Enter would approve it and N keep planning, here they only log the gesture |
+| lights (key L) | (only with `--lights`, key L) four sessions at once, one per light state: the bar shows the one that needs you (NEEDS PERMISSION), the strip shows steady blue, a flashing amber, a flashing yellow and a flashing violet LED |
 
-The digit keys jump to a scene; P pauses; `[` and `]` slow down and speed up (the cheatsheet lists them).
+The digit keys, T, A and L jump to a scene (every scene has a key; L does nothing without `--lights`); P pauses; `[` and `]` slow down and speed up (the cheatsheet lists them).
 
 With `--live` there is no demo. `run.sh` starts a real Claude Code session and the bar shows that session (see
 "Live: a real Claude Code session" below). Until its first hook arrives the bar shows STARTING (the
@@ -105,7 +107,7 @@ anything you can see:
   session that needs you most (permission first, then waiting, then done, then working; the oldest first) and closes
   the list or menu. Backspace **tapped** only does something inside the list or the menu (it steps back); on the
   plain bar it does nothing.
-- **CLAUDE ASKS (the last demo scene, key 0):** the bar shows Claude's question with its options and highlights one (an
+- **CLAUDE ASKS (demo scene 10, key 0; the plan is scene 12, key A):** the bar shows Claude's question with its options and highlights one (an
   inverted block with a thick frame). Up and Down move the highlight (no wrap), as they do on the real bar; in
   the watched play the scene taps Down, Down, Up by itself so you see it move; a jump with key 0 posts no key
   steps, so you see option 1 highlighted and move it yourself. On the real bar Enter (allow) would answer with the
@@ -145,7 +147,7 @@ round LEDs below the panel, outside its 1280x400 area (the window is 1280x440; t
 is session i in the bar's order. The colours and flash patterns are the lights module's real frames (`src/lights/`),
 polled from `GET /dev/lights` every 100 ms. The real frames are capped (48 of 255 by day) and look dim, so the page
 draws each LED as colour x 255 / cap, to show the hue on a laptop screen; the raw frame is in each LED's `data-rgb`.
-Settings has a "Lights: on/off" row. The real LEDs are untested on hardware.
+Press L for the lights scene (four sessions in four light states at once). Settings has a "Lights: on/off" row. The real LEDs are untested on hardware.
 
 ## Settings kept over a restart
 
@@ -166,7 +168,8 @@ is ignored (the log says why) and replaced at the next change.
 
 `bash emulator/run.sh --keys` prints this sheet. It is generated from `config/buttons.laptop.json` (which key is which
 button, which buttons have a hold or a long hold) and from the demo scenes, so it cannot list a key that is not
-mapped. Click the window first so it gets the keys.
+mapped; it has two pages (the keys, then the demo keys and the rules). A test runs every key of the sheet through the
+real input layer and checks that what the key does is what its label says. Click the window first so it gets the keys.
 
 ```
 Click the window first. Tap = press and release; hold = 0.4 s, long hold = 1 s.
@@ -182,15 +185,29 @@ R         read-aloud    read aloud      stop speech
 Esc       cancel        Esc to Claude                Ctrl+C
 N         deny          deny / ASKS: cancel
 M         menu          menu            day/night
+
+ASKS = the CLAUDE ASKS screen: Up and Down move the highlighted choice, Enter
+answers it (or approves a plan), N cancels it (or keeps planning).
+ASKS: several questions, pick-any: terminal.
+-- page 1 of 2: keys; the demo keys and the rules are on page 2 --
+
+-- page 2: demo keys and rules --
 Demo keys (demo mode only; the demo player takes them, not the bar):
-  1-9 and 0  jump: working, permission, done, waiting, offline, insert-key,
-       ended, compaction (mid-turn), compact-cmd (/compact), asking (a question)
+  1 working                 2 permission
+  3 done                    4 waiting
+  5 offline                 6 insert-key
+  7 ended                   8 compaction
+  9 compact-cmd             0 asking
+  T tasks                   A plan
+  L lights (only with --lights)
   P  pause / continue          [  slower          ]  faster
 In the demo these change the screen: Left, Right, Up, Down, M, Backspace held
-(to the session needing you most). ASKS: several questions, pick-any: terminal.
+(to the session needing you most).
 Enter, N, Esc, Space on a permission or done screen only log the gesture
 in the demo: nothing is sent to a Claude. With --live they go to the run's
 own Claude: Enter allows a shown permission, N denies, Esc and Space are sent.
+Too early: press again = the bar refuses an answer (Enter, N, or a plan
+approval) that comes right after the prompt appeared; wait, press again.
 R reads aloud only after Left/Right has chosen a session, and only with
 espeak-ng, or Piper installed as config/speech.json says.
 ```

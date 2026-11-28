@@ -21,4 +21,4 @@ report a bug that is only the instructions.
 
 Either a line at the top of BENCH-TEST ("items that run `node src/server/index.js` by hand: first `systemctl --user
 stop revview` as the kiosk user, `start` it afterwards") or the items rewritten to use the service
-(`systemctl --user restart revview`, `journalctl --user -u revview`) as D1-D4 and the P items do.
+(`systemctl --user restart revview`, `sudo journalctl --user-unit=revview`) as D1-D4 and the P items do.
