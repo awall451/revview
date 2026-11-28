@@ -63,7 +63,7 @@ test('install.sh: fake root gets every file, the hooks, and the old unit goes', 
   const unit = fs.readFileSync(p('etc/systemd/user/revview.service'), 'utf8');
   assert.ok(unit.includes(`${ROOT.replace(/\/$/, '')}/src/server/index.js`));
   assert.match(unit, /--boot/);
-  assert.ok(unit.includes(` --lights-config ${ROOT.replace(/\/$/, '')}/config/lights.json\n`), 'the unit passes --lights-config with the repo path');
+  assert.ok(unit.includes(` --lights-config ${ROOT.replace(/\/$/, '')}/config/lights.json --settings /srv/revview-data/revview/settings.json\n`), 'the unit passes --lights-config with the repo path, then --settings on the data partition');
 }));
 
 test('install.sh: a second run changes nothing', withRoot((r) => {

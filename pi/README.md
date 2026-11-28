@@ -188,7 +188,8 @@ PASSPHRASE from cryptsetup: write it down and keep it apart from the Pi and the 
 (`--no-recovery-passphrase` skips it, and then a lost stick means lost data). It makes the file system, moves your
 `~/.claude`, `~/.ssh` and `~/repos` onto it, writes the configuration and ends with `done. Next:` and a WARNING: the
 old copies were deleted from the SD card, but flash may still hold them, so sign in to Claude Code again and replace
-push keys. Without `--format` it only writes the configuration for a partition that is already encrypted.
+push keys. It also makes the directory `/srv/revview-data/revview` (owned by you, mode 700), where the server keeps the
+Settings choices (Sounds, Lights, Look; `--settings` in `pi/revview.service`; untested on a Pi). Without `--format` it only writes the configuration for a partition that is already encrypted.
 
 Exit codes: 0 done; 1 something failed after work had started (read the messages, fix, run again); 2 refused before
 anything was changed. It refuses, in plain words: a device that is not in `lsblk`; a whole disk instead of a
@@ -373,7 +374,7 @@ SPI0 is GPIO 7-11, so no collision with the other revview parts):
 - **PoE HAT.** The one on the bench covers the header (`docs/DESIGN.md`): fit the strip in the car, or wire to the HAT's
   own pins; the lights are not a bench-with-PoE feature.
 - **Enable.** Set `"lights": "on"` in `config/lights.json` (the install keeps it, restart the service), or use the
-  Settings row "Lights" (not kept over a restart). `"leds"` is how many are chained; `"driver": "none"` turns the
+  Settings row "Lights" (kept over a restart in `/srv/revview-data/revview/settings.json` while the data partition is unlocked; untested on a Pi). `"leds"` is how many are chained; `"driver": "none"` turns the
   feature off for good.
 - **SPI.** `install.sh` adds `dtparam=spi=on` and the user to group `spi`: reboot once. `/dev/spidev0.0` should exist
   afterwards. No SPI or no helper: one log line, the bar keeps working.

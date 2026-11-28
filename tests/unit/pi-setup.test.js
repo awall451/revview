@@ -6,6 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createWriter } from '../../pi/files.mjs';
+import { DATA_MOUNT } from '../../pi/data.mjs';
 import {
   editCmdline, editConfigTxt, editLightdm, renderAutostart, renderTouchRule, renderUnit, renderServerEnv,
 } from '../../pi/setup.mjs';
@@ -541,4 +542,18 @@ test('editConfigTxt: an explicit spi=off is left alone with a warning; a later s
   assert.ok(!later.warnings.some((w) => /lights will not work/.test(w)));
   const commented = editConfigTxt('dtoverlay=vc4-kms-v3d\n#dtparam=spi=off\n');
   assert.match(commented.text, /^dtparam=spi=on$/m);
+});
+
+test('the rendered unit keeps the settings on the data partition (--settings under DATA_MOUNT, made by data-setup)', () => {
+  const tpl = fs.readFileSync(path.join(ROOT, 'pi/revview.service'), 'utf8');
+  const unit = renderUnit(tpl, { dir: '/opt/revview', node: '/usr/bin/node', user: 'alice' });
+  const exec = unit.split('\n').find((l) => l.startsWith('ExecStart='));
+  const m = / --settings (\S+)(?: |$)/.exec(exec);
+  assert.ok(m, 'ExecStart has --settings FILE');
+  assert.equal(m[1], `${DATA_MOUNT}/revview/settings.json`);
+  assert.ok(m[1].startsWith(`${DATA_MOUNT}/`));
+  // the directory is made by data-setup.sh (not shipped in the package)
+  const ds = fs.readFileSync(path.join(ROOT, 'pi/data-setup.sh'), 'utf8');
+  assert.match(ds, /for d in claude ssh repos revview; do/);
+  assert.equal(fs.existsSync(path.join(ROOT, 'revview/settings.json')), false);
 });

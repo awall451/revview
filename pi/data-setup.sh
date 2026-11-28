@@ -5,6 +5,7 @@
 #          [--format [--confirm /dev/X]] [--no-recovery-passphrase] [--dry-run] [--root DIR] [REVVIEW_DIR]
 #   --user        the kiosk user (the one install.sh was given); its ~/.claude, ~/.claude.json, ~/.ssh and ~/repos move
 #                 onto the data partition and are replaced by symlinks to /srv/revview-data/{claude,ssh,repos}.
+#                 It also makes /srv/revview-data/revview (kept Settings choices; owned by the user, mode 700).
 #   --device      the partition that holds (or will hold) the encrypted data. Never guessed, never defaulted.
 #   --key-device  the USB stick's partition (vfat, exfat or ext4) that holds the key file revview/data.key.
 #   --format      ERASE --device: make it LUKS2 (xchacha12,aes-adiantum-plain64), add the key file (and a recovery
@@ -278,7 +279,7 @@ if [ "$format" -eq 1 ]; then
   run mkdir -p "$mnt"
   run chmod 755 "$mnt"
   run mount -o noatime,nosuid,nodev "/dev/mapper/$MAPPER" "$mnt"
-  for d in claude ssh repos; do
+  for d in claude ssh repos revview; do
     run mkdir -p "$mnt/$d"
     run chown "$uid:$gid" "$mnt/$d"
     run chmod 700 "$mnt/$d"

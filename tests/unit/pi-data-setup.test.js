@@ -197,6 +197,7 @@ test('--format: the steps in order, the key only on the stick, files and links m
 
   // data moved, links made
   const data = path.join(e.r, 'srv/revview-data');
+  assert.equal(fs.statSync(path.join(data, 'revview')).mode & 0o777, 0o700, 'revview (the kept settings)');
   for (const d of ['claude', 'ssh', 'repos']) {
     assert.equal(fs.statSync(path.join(data, d)).mode & 0o777, 0o700, d);
     assert.equal(fs.readlinkSync(path.join(home, d === 'repos' ? 'repos' : `.${d}`)), `/srv/revview-data/${d}`);
