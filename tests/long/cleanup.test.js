@@ -28,7 +28,7 @@ function descendants(root) {
 }
 // the servers of this drive: their environment names this drive's skew file
 const serversOf = (out) => allPids().filter((p) => read(p, 'environ').split('\0').includes(`LONG_DRIVE_SKEW_FILE=${path.join(out, 'skew-ms')}`));
-const portOf = (pid) => Number(read(pid, 'cmdline').split('\0').filter(Boolean).at(-1));
+const portOf = (pid) => { const a = read(pid, 'cmdline').split('\0').filter(Boolean); return Number(a[a.findIndex((x) => x.endsWith('src/server/index.js')) + 1]); }; // the port follows the script (more flags come after it since cycle 81)
 const listening = (port) => new Promise((resolve) => {
   const s = net.connect(port, '127.0.0.1');
   s.once('connect', () => { s.destroy(); resolve(true); });
@@ -57,7 +57,8 @@ async function run(t, { env = {}, end }) {
   await end(child);
   const result = await exited;
   await until(() => before.every((p) => !alive(p)), 8000, `children gone (${before.filter(alive)} left)`);
-  assert.deepEqual(serversOf(out).filter(alive), []);
+  // a cue stand-in that was playing when the server died runs in its own process group and ends by itself within 120 ms
+  await until(() => serversOf(out).filter(alive).length === 0, 3000, `server and stand-ins gone (${serversOf(out).filter(alive)} left)`);
   assert.equal(await listening(port), false, 'the port is closed');
   return result;
 }
