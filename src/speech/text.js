@@ -72,18 +72,20 @@ function looksLikePath(core) {
   return /^[\w-]+(?:\.[\w-]+)*\.[A-Za-z]{1,5}$/.test(core) && /[A-Za-z]$/.test(core);
 }
 
-const dropPathWords = (line) => line.split(/\s+/).map((w) => {
+// keep: a path word is spoken (its last part only, dots read "dot": src/view/view.js -> "view dot js") instead of dropped
+const pathSpoken = (core) => (core.split(/[\\/]/).filter((p) => p !== '').pop() ?? '').replace(/\./g, ' dot ');
+const dropPathWords = (line, keep = false) => line.split(/\s+/).map((w) => {
   const m = /^([("'[<]*)(.*?)([)"'\]>,;:!?.]*)$/s.exec(w);
   if (m === null) return w;
-  if (looksLikePath(m[2])) return m[1] + m[3];
+  if (looksLikePath(m[2])) return m[1] + (keep ? pathSpoken(m[2]) : '') + m[3];
   return m[2].includes('/') ? m[1] + m[2].replace(/\//g, ' ') + m[3] : w; // and/or -> "and or"
 }).join(' ');
 
 
 // One question, option label or plan title as plain spoken words: paths, markdown, [[ ]] and < > removed. '' if nothing is left.
-function askWords(raw) {
+function askWords(raw, keepPaths = false) {
   if (!isStr(raw)) return '';
-  const t = flat(scrub(dropPathWords(flat(raw))
+  const t = flat(scrub(dropPathWords(flat(raw), keepPaths)
     .replace(/\*+|~~|`/g, '')
     .replace(/(^|[\s(])_+(?=\S)/g, '$1')
     .replace(/(?<=\S)_+(?=$|[\s).,!?;:])/g, '')
@@ -101,7 +103,7 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 export function askText(ask) {
   const a = ask !== null && typeof ask === 'object' ? ask : {};
   if (a.kind === 'plan') {
-    const title = askWords(a.title);
+    const title = askWords(a.title, true); // a file name in a plan title is spoken
     const steps = Number.isInteger(a.steps) && a.steps > 0 ? ` ${plural(a.steps, 'step')}.` : '';
     if (title === '') return `Claude has a plan ready.${steps} Approve it in the terminal when parked.`;
     return cutWords(`Claude has a plan: ${noEnd(title)}.${steps} Approve it in the terminal when parked.`, SPEECH_LIMITS.maxChars);

@@ -197,8 +197,24 @@ test('ask: a question with no options', () => {
 
 test('ask: a plan with a title and steps', () => {
   const plan = '# Plan: add hello.sh\n\n## Steps\n1. Create hello.sh\n2. Add a comment\n3. Make it executable\n';
-  assert.equal(askLine('ExitPlanMode', { plan, planFilePath: '/tmp/x.md' }), 'Claude has a plan: add. 3 steps. Approve it in the terminal when parked.'); // hello.sh is a file name: dropped like everywhere else
+  assert.equal(askLine('ExitPlanMode', { plan, planFilePath: '/tmp/x.md' }), 'Claude has a plan: add hello dot sh. 3 steps. Approve it in the terminal when parked.'); // a file name in the plan title is spoken
   assert.equal(askLine('ExitPlanMode', { plan: '# Plan: tidy the repo\n## Steps\n1. a\n2. b\n3. c' }), 'Claude has a plan: tidy the repo. 3 steps. Approve it in the terminal when parked.');
+});
+
+test('ask: file names in a plan title are spoken, paths keep their last part', () => {
+  const t = (title) => askText({ kind: 'plan', title, steps: null });
+  const say = (x) => `Claude has a plan: ${x}. Approve it in the terminal when parked.`;
+  assert.equal(t('Edit src/view/view.js'), say('Edit view dot js'));
+  assert.equal(t('Update README.md and hello.sh'), say('Update README dot md and hello dot sh'));
+  assert.equal(t('Fix the bug in hello.sh.'), say('Fix the bug in hello dot sh'));
+  assert.equal(t('Fix (hello.sh), then docs/'), say('Fix (hello dot sh), then docs'));
+  assert.equal(t('Move ~/x/y.txt'), say('Move y dot txt'));
+  assert.equal(t('Move /home/u/x/y.txt now'), say('Move y dot txt now'));
+});
+
+test('ask: a question with a file name still drops it', () => {
+  assert.equal(askText({ kind: 'question', question: 'Edit src/view/view.js now?', options: ['Use hello.sh', 'Skip'] }),
+    'Claude asks: Edit now? Options: 1, Use. 2, Skip.');
 });
 
 test('ask: a plan without title or steps; one step', () => {

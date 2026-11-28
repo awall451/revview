@@ -22,7 +22,7 @@ the read-aloud wheel button (`docs/BUTTONS.md` section 5, DECISIONS "wheel butto
   files exist; `describeChoice` makes the log line.
 - `speaker.js`: one utterance at a time. A new speak stops the old one first. Calls are serialized. Failures are
   logged, never thrown.
-- `index.js`: `createReadAloud({ speaker, memo, speakOnStop, beforeSpeak, log })` (`speakOnStop` is a boolean or a function read at each event; `beforeSpeak` is awaited, at most 2 s, before an automatic speech but not before a button press) with `textFor`, `speakFor`, `onEvent`, `stop`, `close`.
+- `index.js`: `createReadAloud({ speaker, memo, speakOnStop, beforeSpeak, timers, log })` (`speakOnStop` is a boolean or a function read at each event; `beforeSpeak` is awaited, at most 2 s on `timers` = `{ setTimeout, clearTimeout }`, before an automatic speech but not before a button press; an identical Stop posted again with no other event of that session between is not spoken again; a file name in a plan title is spoken: last part of a path, dots read "dot") with `textFor`, `speakFor`, `onEvent`, `stop`, `close`.
 
 ## Config (`config/speech.json`)
 

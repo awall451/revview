@@ -50,6 +50,59 @@ test('beforeSpeak is awaited before an automatic speech, not before speakFor', a
   assert.equal(order.length, 1);
 });
 
+test('an identical Stop posted again is not spoken again; any other event of the session resets it', async () => {
+  const { said, ra } = make({ speakOnStop: true });
+  const b = reduceBoard(B0, STOP);
+  await ra.onEvent(STOP, b, A);
+  assert.equal(ra.onEvent({ ...STOP }, b, A), null);
+  assert.deepEqual(said, ['All done.']);
+  const prompt = ev('UserPromptSubmit', { prompt: 'again' });
+  ra.onEvent(prompt, reduceBoard(B0, prompt), A);
+  await ra.onEvent(STOP, b, A);
+  assert.deepEqual(said, ['All done.', 'All done.']);
+  // a different Stop text is spoken; a read-aloud press is unaffected
+  const other = ev('Stop', { last_assistant_message: 'Other.' });
+  await ra.onEvent(other, reduceBoard(B0, other), A);
+  assert.deepEqual(said, ['All done.', 'All done.', 'Other.']);
+  await ra.speakFor(b, A);
+  assert.equal(said.length, 4);
+});
+
+// fake timers: the 2 s wait before an automatic speech
+const fakeTimers = () => {
+  const pending = new Map();
+  let n = 0;
+  return {
+    pending,
+    setTimeout: (fn, ms) => { n += 1; pending.set(n, { fn, ms }); return n; },
+    clearTimeout: (id) => { pending.delete(id); },
+  };
+};
+const tick = () => new Promise((r) => nodeSetImmediate(r));
+
+test('a beforeSpeak that never resolves: speech starts when the fake 2000 ms timer fires, which is then cleared', async () => {
+  const timers = fakeTimers();
+  const { said, ra } = make({ speakOnStop: true, beforeSpeak: () => new Promise(() => {}), timers });
+  const p = ra.onEvent(STOP, reduceBoard(B0, STOP), A);
+  await tick();
+  assert.deepEqual(said, []);
+  assert.equal(timers.pending.size, 1);
+  const [[, t]] = [...timers.pending];
+  assert.equal(t.ms, 2000);
+  t.fn();
+  await p;
+  assert.deepEqual(said, ['All done.']);
+  assert.equal(timers.pending.size, 0);
+});
+
+test('a beforeSpeak that resolves: speech at once, the timer is cleared', async () => {
+  const timers = fakeTimers();
+  const { said, ra } = make({ speakOnStop: true, beforeSpeak: async () => {}, timers });
+  await ra.onEvent(STOP, reduceBoard(B0, STOP), A);
+  assert.deepEqual(said, ['All done.']);
+  assert.equal(timers.pending.size, 0);
+});
+
 test('a beforeSpeak that fails does not stop the speech', async () => {
   const { said, ra } = make({ speakOnStop: true, beforeSpeak: () => { throw new Error('x'); } });
   await ra.onEvent(STOP, reduceBoard(B0, STOP), A);

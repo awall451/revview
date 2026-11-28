@@ -16,12 +16,13 @@ const BEFORE_SPEAK_MS = 2000;
 //                                  closing words when its turn really ended. `board` is the board after the event.
 //   speakOnStop: a boolean or a function returning one (read at each event). beforeSpeak: an async function awaited (at most 2 s)
 //   before an automatic speech (not before speakFor: a button press speaks at once).
-export function createReadAloud({ speaker, memo, speakOnStop = false, beforeSpeak = null, log = () => {} }) {
+export function createReadAloud({ speaker, memo, speakOnStop = false, beforeSpeak = null, log = () => {}, timers = { setTimeout, clearTimeout } }) {
   const on = () => (typeof speakOnStop === 'function' ? speakOnStop() === true : speakOnStop === true);
+  const lastStop = new Map(); // session id -> JSON of its last Stop, while no other event of that session came after it
   const auto = async (text) => {
     if (beforeSpeak) {
       let t;
-      try { await Promise.race([Promise.resolve(beforeSpeak()), new Promise((r) => { t = setTimeout(r, BEFORE_SPEAK_MS); })]); } catch { /* speak anyway */ } finally { clearTimeout(t); }
+      try { await Promise.race([Promise.resolve(beforeSpeak()), new Promise((r) => { t = timers.setTimeout(r, BEFORE_SPEAK_MS); })]); } catch { /* speak anyway */ } finally { timers.clearTimeout(t); }
     }
     return speaker.speak(text);
   };
@@ -41,6 +42,10 @@ export function createReadAloud({ speaker, memo, speakOnStop = false, beforeSpea
   const onEvent = (event, board, selectedId) => {
     try {
       memo.note(event);
+      const sid = event?.session_id;
+      const stopJson = event?.hook_event_name === 'Stop' ? JSON.stringify(event) : null;
+      const repeated = stopJson !== null && lastStop.get(sid) === stopJson;
+      if (stopJson === null) lastStop.delete(sid); // any other event of the session starts afresh
       // a question or plan that waits for the driver is read out the same way (same switch)
       if (on() && event?.hook_event_name === 'PermissionRequest' && typeof selectedId === 'string' && event.session_id === selectedId
         && (event.tool_name === 'AskUserQuestion' || event.tool_name === 'ExitPlanMode')) {
@@ -53,6 +58,8 @@ export function createReadAloud({ speaker, memo, speakOnStop = false, beforeSpea
       if (board?.sessions?.[selectedId]?.state?.activity === 'working') return null;
       const text = closingText(memo.get(selectedId));
       if (text === '') return null;
+      if (repeated) return null; // the same Stop posted again: spoken once
+      lastStop.set(sid, stopJson);
       return auto(text).catch((e) => { log(`read aloud failed: ${String(e?.message ?? e)}`); });
     } catch (e) {
       log(`read aloud failed: ${String(e?.message ?? e)}`);
