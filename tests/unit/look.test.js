@@ -68,7 +68,7 @@ function fakeTimers() {
     setTimeout: (fn, ms) => { const h = { id: ++n, unref: () => { h.unrefd = true; return h; } }; pending.set(h.id, { fn, ms, h }); return h; },
     clearTimeout: (h) => { pending.delete(h.id); },
     fire() {
-      const [id, p] = [...pending.entries()][0];
+      const [id, p] = [...pending.entries()].find(([, e]) => e.ms !== 15000); // not the SSE ping, which runs on the injected timers too (cycle 81)
       pending.delete(id);
       p.fn();
     },
