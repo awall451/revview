@@ -71,7 +71,7 @@ test('closed, main agent: the session waits for the driver, as after RevviewInte
   assert.deepEqual([g.sessions[SID].pending, g.sessions[SID].open, g.sessions[SID].pre], [[], [], []]);
   assert.equal(stateOf(g).compacting, false);
   assert.equal(g.note, null);
-  // the same board an interrupt makes
+  // the same state an interrupt makes
   const i = reduceBoard(b, { hook_event_name: 'RevviewInterrupted', session_id: SID });
   assert.deepEqual(stateOf(g), stateOf(i));
 });
@@ -126,4 +126,73 @@ test('a prompt typed in the terminal removes the question too: the AskGone is a 
   const typed = reduceBoard(b, { hook_event_name: 'UserPromptSubmit', session_id: SID, prompt: 'hello' });
   assert.equal(typed.sessions[SID].pending.length, 0);
   assert.equal(gone(typed, 'closed', since), typed);
+});
+
+// ---- the other held prompts of the session stay; a terminal answer after the grace brings working back ----
+const ESC = fs.readFileSync(new URL('../../fixtures/answers/events-esc.jsonl', import.meta.url), 'utf8')
+  .split('\n').filter((l) => l.trim() !== '').map((l) => JSON.parse(l));
+const ESC_SID = ESC[0].session_id;
+const TUID = ESC.find((e) => e.hook_event_name === 'PreToolUse').tool_use_id;
+const escGone = (b) => reduceBoard(b, {
+  hook_event_name: 'RevviewAskGone', session_id: ESC_SID, agent: '', since: b.sessions[ESC_SID].pending[0].since, how: 'closed',
+});
+const post = (tid, name = 'PostToolUse') => ({ hook_event_name: name, session_id: ESC_SID, tool_name: 'AskUserQuestion', tool_use_id: tid, tool_input: {}, tool_response: {} });
+const escAct = (b) => b.sessions[ESC_SID].state.activity;
+
+test('closed, then the PostToolUse of that question (a terminal answer after the grace): working again', () => {
+  const g = escGone(run(ESC));
+  assert.equal(escAct(g), 'waiting');
+  assert.equal(g.sessions[ESC_SID].askGone, TUID);
+  const p = reduceBoard(g, post(TUID));
+  assert.equal(escAct(p), 'working');
+  assert.equal(p.sessions[ESC_SID].askGone, undefined);
+  assert.equal(escAct(reduceBoard(g, post(TUID, 'PostToolUseFailure'))), 'working');
+  // an unrelated commit keeps the remembered id
+  const n = reduceBoard(g, { hook_event_name: 'Notification', session_id: ESC_SID, notification_type: 'idle_prompt' });
+  assert.equal((n.sessions[ESC_SID] ?? g.sessions[ESC_SID]).askGone, TUID);
+});
+
+test('closed: a Post of another tool call does not bring working back', () => {
+  const g = escGone(run(ESC));
+  assert.equal(escAct(reduceBoard(g, post('toolu_other'))), 'waiting');
+});
+
+test('closed: the id is forgotten at the next Stop, so a later Post of it changes nothing', () => {
+  const g = escGone(run(ESC));
+  const s = reduceBoard(g, { hook_event_name: 'Stop', session_id: ESC_SID });
+  assert.equal(escAct(s), 'done');
+  assert.equal(s.sessions[ESC_SID].askGone, undefined);
+  assert.equal(escAct(reduceBoard(s, post(TUID))), 'done');
+});
+
+test('closed: the id is forgotten at the next call, request, session start and prompt', () => {
+  const g = escGone(run(ESC));
+  const base = { session_id: ESC_SID };
+  for (const e of [
+    { ...base, hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_use_id: 'toolu_b', tool_input: { command: 'ls' } },
+    { ...base, agent_id: 'sub1', hook_event_name: 'PermissionRequest', tool_name: 'Bash', tool_input: { command: 'ls' } }, // a main-thread request of a waiting session is ignored
+    { ...base, hook_event_name: 'SessionStart', source: 'resume' },
+    { ...base, hook_event_name: 'UserPromptSubmit', prompt: 'x' },
+  ]) {
+    const n = reduceBoard(g, e);
+    assert.equal(n.sessions[ESC_SID].askGone, undefined, e.hook_event_name);
+  }
+});
+
+test('closed, a subagent prompt is also held: only the question entry goes, the subagent entry stays and its Post removes it', () => {
+  const sub = { session_id: ESC_SID, agent_id: 'sub1' };
+  const bash = { tool_name: 'Bash', tool_input: { command: 'ls' } };
+  const b = run([
+    ...ESC,
+    { ...sub, hook_event_name: 'PreToolUse', tool_use_id: 'toolu_sub', ...bash },
+    { ...sub, hook_event_name: 'PermissionRequest', ...bash },
+  ]);
+  assert.equal(b.sessions[ESC_SID].pending.length, 2);
+  const q = b.sessions[ESC_SID].pending.find((p) => p.agent === null || p.agent === '');
+  const g = reduceBoard(b, { hook_event_name: 'RevviewAskGone', session_id: ESC_SID, agent: q.agent, since: q.since, how: 'closed' });
+  assert.deepEqual(g.sessions[ESC_SID].pending.map((p) => p.agent), ['sub1']);
+  assert.equal(escAct(g), 'waiting');
+  assert.equal(boardView(g).view, 'permission', 'the held subagent prompt still shows');
+  const p = reduceBoard(g, { ...sub, hook_event_name: 'PostToolUse', tool_use_id: 'toolu_sub', ...bash, tool_response: {} });
+  assert.equal(p.sessions[ESC_SID].pending.length, 0);
 });

@@ -265,3 +265,38 @@ test('a question that ends within quietMs: the mark comes quietMs after it ended
   timers.live()[0].fn();
   assert.equal(view(live).quietSince, 62000);
 });
+
+test('a question closed by Esc: after the grace the session waits, and the quiet timer that fires later marks nothing', async (t) => {
+  const GRACE = 6161;
+  const { c, timers, opts } = setup();
+  const graces = [];
+  const inner = timers.setTimeout;
+  timers.setTimeout = (fn, ms) => (ms === GRACE ? (graces.push(fn), { unref() {} }) : inner(fn, ms));
+  const sid0 = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../../fixtures/answers/events-esc.jsonl', import.meta.url)), 'utf8').split('\n')[0]).session_id;
+  const runner = { target: async (id) => (id === sid0 ? { id, window: '@1' } : null), send: async (k, id) => ({ sent: true, id, window: '@1' }), list: async () => [{ id: sid0, window: '@1' }] };
+  const { post, live } = await boot(t, { ...opts, askGoneGraceMs: GRACE, sessions: runner });
+  const ESC = fs.readFileSync(fileURLToPath(new URL('../../fixtures/answers/events-esc.jsonl', import.meta.url)), 'utf8')
+    .split('\n').filter((l) => l.trim() !== '').map((l) => JSON.parse(l));
+  const sid = ESC[0].session_id;
+  for (const e of ESC.slice(0, 3)) await post(e);
+  assert.equal(view(live).view, 'working');
+  const ac = new AbortController();
+  fetch(`${live.url}/permission`, { method: 'POST', body: JSON.stringify(ESC[3]), signal: ac.signal }).catch(() => {});
+  for (let i = 0; i < 200 && view(live).view !== 'asking'; i++) await new Promise((r) => setTimeout(r, 10));
+  assert.equal(view(live).view, 'asking');
+  ac.abort();
+  for (let i = 0; i < 200 && graces.length === 0; i++) await new Promise((r) => setTimeout(r, 10));
+  assert.equal(graces.length, 1, 'the grace is armed');
+  graces[0]();
+  assert.equal(view(live).view, 'waiting');
+  // the session does not work now: the quiet timers that are still armed fire and mark nothing
+  c.t = 1000 + QUIET;
+  for (const h of timers.live()) h.fn();
+  assert.equal(view(live).view, 'waiting');
+  assert.equal(view(live).quietSince, null);
+  // the terminal answer comes late: working again, and the silence counts from now
+  await post({ hook_event_name: 'PostToolUse', session_id: sid, tool_name: 'AskUserQuestion', tool_use_id: ESC[2].tool_use_id, tool_input: {}, tool_response: {} });
+  assert.equal(view(live).view, 'working');
+  assert.equal(view(live).quietSince, null);
+  assert.ok(timers.live().length >= 1, 'a quiet timer is armed for the working session');
+});

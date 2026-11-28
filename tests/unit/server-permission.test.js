@@ -494,7 +494,8 @@ test('plan: the request closes unanswered: the plan leaves the bar; a timeout sa
 });
 
 test('an answered question is not "left"; a newer question of the session is not cleared by the older one closing', async (t) => {
-  const c = await setup(t);
+  const timers = graceTimers();
+  const c = await setup(t, { timers, askGoneGraceMs: GRACE });
   const { r } = await askPrompt(c);
   c.ctx.now = 1600;
   await c.press('F21'); // answered
@@ -509,8 +510,11 @@ test('an answered question is not "left"; a newer question of the session is not
   for (let i = 0; i < 100 && (await c.state()).state.view !== 'asking'; i++) await sleep(10);
   r.abort();
   await sleep(150);
+  assert.equal(timers.list.length, 0, 'the late close of an answered request arms no grace');
   assert.equal((await c.state()).state.view, 'asking');
   assert.equal(c.s.permissionsWaiting(), 1);
+  for (const h of timers.live()) h.fn(); // whatever grace were armed: the newer question stays
+  assert.equal((await c.state()).state.view, 'asking');
   r2.abort();
 });
 

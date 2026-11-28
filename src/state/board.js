@@ -565,12 +565,13 @@ function reduceNav(b, event) {
 }
 
 // The turn is over without a hook event (an Esc or Ctrl+C): waiting for the driver, the last tool/command/file/diff
-// kept, dialogs rejected by the Esc.
-function interruptedBoard(b, id, live) {
+// kept, dialogs rejected by the Esc. `kept`: the pending entries that stay (a closed question drops only itself);
+// `askGone`: that question's tool-use id, so its late PostToolUse (a terminal answer) is not a late event.
+function interruptedBoard(b, id, live, kept = [], askGone = null) {
   const st = live.state;
   const state = { ...st, activity: 'waiting', compacting: false, view: st.locked ? 'insert-key' : st.offline ? 'offline' : 'waiting' };
   const tick = b.tick + 1;
-  return { ...b, tick, sessions: withSession(b.sessions, id, { ...live, state, open: [], pending: [], pre: [], touched: tick }) };
+  return { ...b, tick, sessions: withSession(b.sessions, id, { ...live, state, open: [], pending: kept, pre: [], touched: tick, ...(askGone === null ? {} : { askGone }) }) };
 }
 
 function reduceInner(b, event) {
@@ -634,7 +635,8 @@ function reduceInner(b, event) {
       // agent's entry going 'closed' while the session works means it waits for the driver now, as after an interrupt
       // (a question answered in the terminal was removed by its PostToolUse before the server's grace ran out)
       if (event.how === 'closed' && (gone.agent === '' || gone.agent === null) && (act(live) === 'working' || act(live) === 'permission')) {
-        return interruptedBoard(b, id, live);
+        // only the question's entry goes: no recording shows Esc ending the session's other held prompts
+        return interruptedBoard(b, id, live, live.pending.filter((p) => p !== gone), gone.tuid);
       }
       const tick = b.tick + 1;
       const sessions = withSession(b.sessions, id, { ...live, pending: live.pending.filter((p) => p !== gone), touched: tick });
@@ -900,12 +902,15 @@ function applyToSession(b, live, id, event) {
   const clears = name === 'PreToolUse' || name === 'PermissionRequest' || name === 'SessionStart' || isDriverPrompt(event)
     || (name === 'Notification' && PERMISSION_TYPES.has(event.notification_type));
   const answer = live !== null && live.answer !== undefined && !clears ? live.answer : undefined;
+  // the closed question's tool-use id (RevviewAskGone) stays until that call's Post or the session's next activity
+  const askGone = live !== null && isStr(live.askGone) && !clears && !(POST.has(name) && toolUseId === live.askGone) && name !== 'Stop'
+    ? live.askGone : undefined;
   const commit = (state, open, dropped) => {
     const stopped = name === 'Stop' ? true : (state.activity === 'done' || state.activity === 'waiting') && prevStopped;
     if (stopped === prevStopped && closed === prevClosed && state === prev && sameList(open, prevOpen) && (live === null || dropped === live.dropped)
-      && pending === prevPending && pre === prevPre && answer === (live === null ? undefined : live.answer)) return b;
+      && pending === prevPending && pre === prevPre && answer === (live === null ? undefined : live.answer) && askGone === (live === null ? undefined : live.askGone)) return b;
     const tick = b.tick + 1;
-    const sessions = capSessions(withSession(b.sessions, id, { state, open, touched: tick, born: live === null ? tick : live.born, dropped, pending, pre, ...(closed.length === 0 ? {} : { closed }), ...(stopped ? { stopped } : {}), ...(answer === undefined ? {} : { answer }) }), id, b.selected ?? b.focus, b.selected, b.want, b.owned === null ? null : [...b.owned, ...(b.missing ?? [])]);
+    const sessions = capSessions(withSession(b.sessions, id, { state, open, touched: tick, born: live === null ? tick : live.born, dropped, pending, pre, ...(closed.length === 0 ? {} : { closed }), ...(stopped ? { stopped } : {}), ...(answer === undefined ? {} : { answer }), ...(askGone === undefined ? {} : { askGone }) }), id, b.selected ?? b.focus, b.selected, b.want, b.owned === null ? null : [...b.owned, ...(b.missing ?? [])]);
     const ended = b.ended.includes(id) ? b.ended.filter((x) => x !== id) : b.ended;
     return { ...b, sessions, ended, tick };
   };
@@ -913,7 +918,8 @@ function applyToSession(b, live, id, event) {
 
   // The turn's `finished` flag decides what a late hook is. Pending prompts are kept beside the state: the
   // state's activity never becomes `permission` here, `act()` derives it from `pending`.
-  const finished = live !== null
+  // (the Post of a question RevviewAskGone dropped is a terminal answer that came late: it is not a late event)
+  const finished = live !== null && !(POST.has(name) && toolUseId !== null && toolUseId === live.askGone)
     && (prev.activity === 'done' || (prev.activity === 'waiting' && (prevOpen.length === 0 || prevStopped)));
 
   if (name === 'PermissionRequest' && isStr(event.tool_name)) {

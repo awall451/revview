@@ -2401,11 +2401,15 @@ Code: `src/server/settings.js`.
   applying `RevviewAskGone {how: 'closed'}`. A PostToolUse (or the driver's next UserPromptSubmit) in that time removes
   the entry, and the late event finds nothing and changes nothing. If the entry is still there, it is the main agent's,
   and the session is working or permission, the board makes the session waiting exactly as `RevviewInterrupted` does
-  (one shared helper: other prompts of the session cleared too, since Esc ends the whole turn). A subagent's question
-  closing is only dropped as before (Esc there is not recorded). Costs: after Esc the question stays on the bar 1.5 s
+  (one shared helper). Only the question's own entry goes: the session's other held prompts stay pending, because no
+  recording shows Esc on a question ending them (`fixtures/answers/events-esc.jsonl` has a single question, and in
+  `fixtures/sessions/permission-interrupted.jsonl` a subagent's held prompt outlives the main turn's Stop and later gets
+  its PostToolUse). A subagent's question closing is only dropped as before (Esc there is not recorded). Costs: after Esc the question stays on the bar 1.5 s
   longer than before (a press then says "Not sent: the question is not waiting any more"); a terminal answer whose
-  PostToolUse were later than 1.5 s would show WAITING FOR ME until it comes (never seen; the hook is a short node
-  process). The 540 s `timeout` path is unchanged (immediate, note "Question left for the terminal"). Not tried on a
+  PostToolUse comes later than 1.5 s: the board remembers the dropped question's tool-use id on the session
+  (`askGone`), and that Post of the dropped call is not a late event, so working comes back. The id is kept until the
+  session's next call, request, driver prompt, Stop or SessionStart. The hook is a node cold start per event and the
+  gap from the close to the Post was never timed. The 540 s `timeout` path is unchanged (immediate, note "Question left for the terminal"). Not tried on a
   real Claude after this change.
 - **Note kind `terminal`.** "Answer in the terminal when parked" / "Approve in the terminal when parked" are posted by
   `actions.js` with kind `terminal` (they were kind `ask`); the board's rule (table at the top of the note code in
