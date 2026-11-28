@@ -1,0 +1,8 @@
+#!/usr/bin/env node
+// A stand-in for the cue player (aplay), put first in the server's PATH by the long drive: notes which cue it was asked to
+// play in <dir>/cues.log, "plays" for 120 ms and ends. Emulation only: no sound.
+const fs = process.getBuiltinModule('fs');
+const path = process.getBuiltinModule('path');
+const dir = process.env.LONG_DRIVE_FAKE_DIR;
+fs.appendFileSync(path.join(dir, 'cues.log'), `${path.basename(process.argv.at(-1))}\n`);
+setTimeout(() => process.exit(0), 120);

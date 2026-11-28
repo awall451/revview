@@ -8,6 +8,7 @@
 //   --streams N      sessions replayed at once (default 4)
 //   --samples N      measurement points between start and end (default 7, evenly spread)
 //   --out DIR        logs and long-drive.json go here (default /tmp/long-drive)
+//   --cpu-load N     N busy loops (nice 5) run beside the drive and the server (default 0)
 //   --smoke          a short pass to see that the tool works: 1/3 simulated hour at 60x, but the simulated clock runs
 //                    on through the outages (wall seconds, 60x), so it simulates about 65 minutes in about a minute
 /* global document */
@@ -19,6 +20,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import { chromium } from '@playwright/test';
+import { encodeWs2812 } from '../../src/lights/ws2812.js';
 import { createReplay, loadSessions, postEvent, DEFAULTS } from './replay.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -64,6 +66,9 @@ const LABELS = {
   unknown: 'UNKNOWN', ended: 'CLAUDE EXITED', 'no-link': 'NO LINK',
 };
 
+const ASK_WORDS = { AskUserQuestion: 'Question', ExitPlanMode: 'Plan' }; // row A under CLAUDE ASKS (src/view/view.js)
+const NIGHT = { from: '21:00', to: '23:00' }; // the look config's night, in the server's simulated local time
+
 // Disturbances, as a fraction of the simulated run. `down` and `out` are WALL milliseconds.
 const PLAN = [
   { at: 0.08, kind: 'sse-reset' },
@@ -77,7 +82,7 @@ const PLAN = [
 ];
 
 export function parseArgs(argv) {
-  const o = { simHours: 4, speedup: 30, streams: DEFAULTS.streams, samples: 7, out: '/tmp/long-drive', smoke: false };
+  const o = { simHours: 4, speedup: 30, streams: DEFAULTS.streams, samples: 7, out: '/tmp/long-drive', smoke: false, cpuLoad: 0 };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const val = () => { const v = argv[++i]; if (v === undefined) throw new Error(`${a} needs a value`); return v; };
@@ -86,10 +91,12 @@ export function parseArgs(argv) {
     else if (a === '--streams') o.streams = Number(val());
     else if (a === '--samples') o.samples = Number(val());
     else if (a === '--out') o.out = val();
+    else if (a === '--cpu-load') o.cpuLoad = Number(val());
     else if (a === '--smoke') { o.smoke = true; o.simHours = 1 / 3; o.speedup = 60; o.samples = 2; }
     else throw new Error(`unknown option ${a}`);
   }
   for (const k of ['simHours', 'speedup', 'streams', 'samples']) if (!(o[k] > 0)) throw new Error(`--${k} must be a positive number`);
+  if (!(o.cpuLoad >= 0 && o.cpuLoad <= 16)) throw new Error('--cpu-load must be 0 to 16');
   return o;
 }
 
@@ -155,10 +162,34 @@ async function drive(argv) {
   let serverStarts = 0;
   let skewMs = 0;
   const serverLog = fs.createWriteStream(path.join(opt.out, 'server.log'));
+  // What the server is started with (cycle 81): the feature set of the appliance, with stand-ins for what needs hardware.
+  // No --settings: the drive never changes a Settings choice, so a kept file would only hold what the config files say; every
+  // restart reads the same config defaults, as the first run's restarts did. (settings.js is not exercised here.)
+  const fakeState = path.join(opt.out, 'fake-state');
+  fs.rmSync(fakeState, { recursive: true, force: true });
+  fs.mkdirSync(fakeState, { recursive: true });
+  const speechFile = path.join(opt.out, 'speech.json');
+  const lookFile = path.join(opt.out, 'look.json');
+  const lightsFile = path.join(opt.out, 'lights.json');
+  fs.writeFileSync(speechFile, JSON.stringify({ engines: [], sounds: 'cues', cuePlayers: [['aplay', '-q']] }));
+  fs.writeFileSync(lookFile, JSON.stringify({ look: 'auto', night: NIGHT }));
+  fs.writeFileSync(lightsFile, JSON.stringify({ lights: 'on', leds: 8, driver: 'ws2812-spi', device: '/dev/spidev0.0', brightness: { day: 48, night: 12 } }));
+  const simStart = new Date(); // the simulated wall clock of the server: today 20:30 local, so the night (21:00-23:00) starts after 30 and ends after 150 simulated minutes
+  simStart.setHours(20, 30, 0, 0);
+  const wallAnchor = Date.now();
+  const diagFile = path.join(opt.out, 'diag.json');
   async function startServer() {
     serverStarts++;
-    const child = spawn(process.execPath, ['--import', path.join(HERE, 'clock-skew.js'), path.join(ROOT, 'src/server/index.js'), String(port)], {
-      cwd: ROOT, env: { ...process.env, LONG_DRIVE_SKEW_FILE: skewFile, LONG_DRIVE_SKEW_MS: String(skewMs) }, stdio: ['pipe', 'pipe', 'pipe'], detached: true, // stdin: a pipe, whose close ends the server (clock-skew.js)
+    const child = spawn(process.execPath, [
+      '--import', path.join(HERE, 'clock-skew.js'), path.join(ROOT, 'src/server/index.js'), String(port),
+      '--dev-bridge', '--speech', speechFile, '--look-config', lookFile, '--lights-config', lightsFile,
+    ], {
+      cwd: ROOT, stdio: ['pipe', 'pipe', 'pipe'], detached: true, // stdin: a pipe, whose close ends the server (clock-skew.js)
+      env: {
+        ...process.env, PATH: `${path.join(HERE, 'fake')}:${process.env.PATH}`, LONG_DRIVE_FAKE_DIR: fakeState,
+        LONG_DRIVE_SKEW_FILE: skewFile, LONG_DRIVE_SKEW_MS: String(skewMs), LONG_DRIVE_DIAG: diagFile,
+        LONG_DRIVE_SCALE: String(opt.speedup), LONG_DRIVE_SIM_START: String(simStart.getTime()), LONG_DRIVE_WALL_ANCHOR: String(wallAnchor),
+      },
     });
     if (child.pid) started.add(child.pid);
     child.once('exit', () => started.delete(child.pid));
@@ -184,6 +215,10 @@ async function drive(argv) {
   const browser = await launching;
   launching = null;
   trackBrowser();
+  for (let i = 0; i < opt.cpuLoad; i++) { // CPU load beside the drive: busy loops, own process groups, stopped with everything else
+    const b = spawn('nice', ['-n', '5', process.execPath, '-e', 'for(;;){}'], { stdio: 'ignore', detached: true });
+    if (b.pid) { started.add(b.pid); b.once('exit', () => started.delete(b.pid)); }
+  }
   const context = await browser.newContext({ viewport: { width: 1280, height: 400 }, deviceScaleFactor: 1 });
   const page = await context.newPage();
   const pageProblems = { errors: [], consoleErrors: 0, consoleTexts: {}, crashed: false };
@@ -211,6 +246,7 @@ async function drive(argv) {
       link: document.documentElement.dataset.link ?? null,
       seq: document.documentElement.dataset.seq ?? null,
       view: document.body.dataset.view ?? null,
+      look: document.documentElement.dataset.look ?? null,
       // a long path is shown cut in its middle (src/view/view.js fitFile); data-full holds the whole path the page has
       word: t('state-word'), tool: t('tool'), file: document.getElementById('file')?.dataset.full ?? null,
     };
@@ -219,10 +255,10 @@ async function drive(argv) {
     const working = ['working', 'waiting', 'permission', 'done'].includes(state.view);
     const compacting = working && state.compacting === true;
     return {
-      seq: String(seq), view: state.view, word: LABELS[state.view],
+      seq: String(seq), view: state.view, word: LABELS[state.view], look: state.look,
       ...(working ? { tool: compacting ? 'Compacting context' : state.tool || '', file: compacting ? '' : state.file || '' } : {}),
       // CLAUDE ASKS: the tool in row A (as emulator/tests/live.spec.js checks it); the file row is not used
-      ...(state.view === 'asking' ? { tool: state.tool || '' } : {}),
+      ...(state.view === 'asking' ? { tool: ASK_WORDS[state.tool] ?? state.tool ?? '' } : {}),
     };
   }
   const differs = (shown, want) => Object.keys(want).filter((k) => shown[k] !== want[k]);
@@ -232,6 +268,51 @@ async function drive(argv) {
   const ticker = setInterval(() => replay.tick(), 25);
   const simMin = () => replay.simNow() / 60000;
   async function untilSim(ms) { while (replay.simNow() < ms) await sleep(100); }
+
+  // --- the stand-ins and the server's own diagnostics
+  const readJson = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
+  const procs = () => {
+    const out = [];
+    for (const n of fs.readdirSync('/proc')) {
+      if (!/^\d+$/.test(n)) continue;
+      try {
+        const ppid = Number(fs.readFileSync(`/proc/${n}/stat`, 'utf8').replace(/^.*\) \S+ /, '').split(' ')[0]);
+        out.push({ pid: Number(n), ppid, cmd: fs.readFileSync(`/proc/${n}/cmdline`, 'utf8').replace(/\0/g, ' ').trim() });
+      } catch { /* gone */ }
+    }
+    return out;
+  };
+  const standIns = () => procs().filter((p) => /tests\/long\/fake\/(python3|aplay)/.test(p.cmd));
+  const helperEvents = () => {
+    try { return fs.readFileSync(path.join(fakeState, 'helper.log'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)); } catch { return []; }
+  };
+  const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+  const countLines = (f) => { try { return fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).length; } catch { return 0; } };
+  // The lights: the frame the server says it shows (GET /dev/lights) against what the fake helper last received (the
+  // helper keeps the last 32 frames), and the brightness cap of the look the board is in. A helper that was stalled or
+  // that died is not expected to match (the driver stops by design, "the LEDs stay off until the server restarts").
+  async function lightsCheck(look) {
+    const ev = helperEvents();
+    const n = Math.max(0, ...ev.map((e) => e.n));
+    const mine = ev.filter((e) => e.n === n);
+    const helperPid = mine[0]?.pid;
+    const expectMatch = mine.length === 1 && mine[0].mode === 'normal' && alive(helperPid);
+    const cap = look === 'night' ? 12 : 48;
+    let r = null;
+    let max = 0;
+    let match = false;
+    for (let i = 0; i < 8 && !match; i++) {
+      r = await (await fetch(`${url}/dev/lights`)).json();
+      max = Math.max(0, ...r.frame.flat());
+      const want = encodeWs2812(r.frame).toString('hex');
+      let ring = [];
+      try { ring = fs.readFileSync(path.join(fakeState, 'last-frames'), 'utf8').split('\n').slice(1); } catch { /* no frame yet */ }
+      match = ring.includes(want);
+      if (!match && expectMatch) await sleep(100); else break;
+    }
+    const ok = r.lights === 'on' && max <= cap && (!expectMatch || match);
+    return { ok, board: r.lights, max, cap, match, expectMatch, helperStart: n, helperMode: mine[0]?.mode ?? null, helperLast: mine.at(-1)?.ev ?? null };
+  }
 
   // Wait for the page to agree with the server's board while the replay is stopped. Returns how long it took (ms), or
   // null with the two views when it did not within `limitMs`.
@@ -251,11 +332,14 @@ async function drive(argv) {
       } catch { bad = ['unreachable']; }
       await sleep(150);
     }
+    let lights = null;
+    try { lights = await lightsCheck(want?.look); } catch (e) { lights = { ok: false, error: String(e) }; }
     replay.resume();
     const ms = Math.round(performance.now() - t);
-    if (bad.length === 0) { log(`${label}: page agrees with the server's board after ${ms} ms (view ${want.view}, seq ${want.seq})`); return { ok: true, ms, view: want.view, seq: want.seq }; }
+    if (!lights.ok) log(`${label}: LIGHTS ${JSON.stringify(lights)}`);
+    if (bad.length === 0) { log(`${label}: page agrees with the server's board after ${ms} ms (view ${want.view}, look ${want.look}, seq ${want.seq}; lights ${lights.ok ? 'ok' : 'WRONG'})`); return { ok: lights.ok, ms, view: want.view, look: want.look, seq: want.seq, lights }; }
     log(`${label}: MISMATCH on ${bad.join(', ')} after ${ms} ms: page ${JSON.stringify(shown)} board ${JSON.stringify(want)}`);
-    return { ok: false, ms, differs: bad, page: shown, board: want };
+    return { ok: false, ms, differs: bad, page: shown, board: want, lights };
   }
 
   // --- measurements
@@ -272,6 +356,10 @@ async function drive(argv) {
       serverRssKb: procKb(server.pid, 'VmRSS'), serverPeakRssKb: procKb(server.pid, 'VmHWM'),
       heapUsedKb: Math.round(before.JSHeapUsedSize / 1024), heapUsedAfterGcKb: Math.round(after.JSHeapUsedSize / 1024), heapTotalKb: Math.round(after.JSHeapTotalSize / 1024),
       domNodes, cdpNodes: after.Nodes, listeners: after.JSEventListeners, documents: after.Documents, stateBytes,
+      serverFds: (() => { try { return fs.readdirSync(`/proc/${server.pid}/fd`).length; } catch { return null; } })(),
+      serverChildren: procs().filter((p) => p.ppid === server.pid).map((p) => p.cmd.replace(/^\S*node\S* /, '').replace(ROOT, '.').slice(0, 60)),
+      standIns: standIns().length, cues: countLines(path.join(fakeState, 'cues.log')), helperStarts: Number(readJson(path.join(fakeState, 'helper-spawns')) ?? 0),
+      diag: readJson(diagFile), simClock: readJson(diagFile) ? new Date(readJson(diagFile).simNow).toTimeString().slice(0, 5) : null,
     };
     log(`measured ${label}: server RSS ${s.serverRssKb} kB, JS heap ${s.heapUsedKb} kB (${s.heapUsedAfterGcKb} kB after GC), DOM ${s.domNodes} nodes`);
     return s;
@@ -354,7 +442,18 @@ async function drive(argv) {
   results.replay = replay.stats;
   results.serverStarts = serverStarts;
   results.pageProblems = pageProblems;
-  results.serverLogLines = fs.readFileSync(path.join(opt.out, 'server.log'), 'utf8').split('\n').filter((l) => l.trim()).length;
+  const serverLogText = fs.readFileSync(path.join(opt.out, 'server.log'), 'utf8');
+  results.serverLogLines = serverLogText.split('\n').filter((l) => l.trim()).length;
+  // what the server's own log said, by kind (the first line of each kind is kept as an example)
+  results.serverLogKinds = {};
+  for (const l of serverLogText.split('\n').filter((x) => x.trim())) {
+    const kind = l.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/g, '<id>').replace(/\d+/g, '#').slice(0, 70);
+    results.serverLogKinds[kind] = (results.serverLogKinds[kind] ?? 0) + 1;
+  }
+  results.helperLog = helperEvents();
+  results.cues = countLines(path.join(fakeState, 'cues.log'));
+  results.cueNames = Object.fromEntries([...new Set(fs.readFileSync(path.join(fakeState, 'cues.log'), 'utf8').split('\n').filter(Boolean))].map((c) => [c, fs.readFileSync(path.join(fakeState, 'cues.log'), 'utf8').split('\n').filter((x) => x === c).length]));
+  results.endChildren = procs().filter((p) => p.ppid === server.pid).map((p) => p.cmd.slice(0, 80));
   const checks = [results.startCheck, results.endCheck, ...results.samples.map((s) => s.check).filter(Boolean), ...results.disturbances.map((d) => d.check)];
   results.failedChecks = checks.filter((c) => !c.ok).length;
   fs.writeFileSync(path.join(opt.out, 'long-drive.json'), JSON.stringify(results, null, 2));
@@ -364,8 +463,12 @@ async function drive(argv) {
   for (const p of browserPids) started.delete(p);
   proxy.close();
   await stopServer('SIGTERM');
+  await sleep(1500);
+  results.leftoverStandIns = standIns().map((p) => p.cmd.slice(0, 80)); // helper and player processes still alive after the server stopped
+  log(`stopped; stand-in processes left: ${results.leftoverStandIns.length}`);
+  fs.writeFileSync(path.join(opt.out, 'long-drive.json'), JSON.stringify(results, null, 2));
   serverLog.end();
-  return results.failedChecks === 0 ? 0 : 1;
+  return results.failedChecks === 0 && results.leftoverStandIns.length === 0 ? 0 : 1;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

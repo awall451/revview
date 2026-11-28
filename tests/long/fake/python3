@@ -1,0 +1,37 @@
+#!/usr/bin/env node
+// A stand-in for the LED helper (src/lights/spi-helper.py), put first in the server's PATH under the name `python3` by the
+// long drive. It reads the hex frame lines the server writes (one per line), keeps the last 32 (after a line with the count) in <dir>/last-frames, and
+// behaves by the order in which it is started (a counter in <dir>/helper-spawns): start 1 is normal, start 2 STALLS (stops
+// reading after 40 frames, so the pipe fills and the driver gives up and kills it), start 3 DIES (exit 5 after 40 frames),
+// later ones are normal. Every start and end is a line in <dir>/helper.log. It exits when its parent is gone.
+// Emulation only: no SPI, no real LEDs.
+const fs = process.getBuiltinModule('fs');
+const path = process.getBuiltinModule('path');
+const dir = process.env.LONG_DRIVE_FAKE_DIR;
+const file = (n) => path.join(dir, n);
+let n = 1;
+try { n = Number(fs.readFileSync(file('helper-spawns'), 'utf8')) + 1; } catch { /* first start */ }
+fs.writeFileSync(file('helper-spawns'), String(n));
+const mode = ['normal', 'stall', 'die'][n - 1] ?? 'normal';
+const note = (ev) => fs.appendFileSync(file('helper.log'), `${JSON.stringify({ n, mode, pid: process.pid, ev, at: Date.now() })}\n`);
+note('start');
+const ppid = process.ppid;
+let frames = 0;
+let rest = '';
+let ring = [];
+const finish = (code, ev) => { note(`${ev} after ${frames} frames`); process.exit(code); };
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (d) => {
+  rest += d;
+  const lines = rest.split('\n');
+  rest = lines.pop();
+  if (lines.length === 0) return;
+  frames += lines.length;
+  ring = [...ring, ...lines].slice(-32);
+  fs.writeFileSync(file('last-frames'), `${frames}\n${ring.join('\n')}\n`);
+  if (frames >= 40 && mode === 'die') { process.stderr.write('fake helper: died on purpose\n'); finish(5, 'died'); }
+  if (frames >= 40 && mode === 'stall') { process.stdin.pause(); note('stalled'); }
+});
+process.stdin.on('end', () => finish(0, 'stdin closed'));
+process.on('SIGTERM', () => finish(0, 'SIGTERM'));
+setInterval(() => { if (process.ppid !== ppid) finish(0, 'parent gone'); }, 1000);
