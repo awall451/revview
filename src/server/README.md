@@ -153,7 +153,7 @@ then bound to the board entry **this event created** (same `session_id`, agent =
 if there is none (e.g. nothing was added) it is bound to nothing and no button can ever answer it (logged). Without
 `sessions`: 204 at once. Else it waits: 200 `application/json` `{"behavior":"allow"}` or `{"behavior":"deny","message":...}` when a
 wheel button answers it, 204 when the prompt is gone (answered in the terminal, interrupted, timeout `permissionWaitMs`,
-default 540 s, or server close). 503 when 16 are already waiting. A client that disconnects is forgotten. There is no route that
+default 540 s, or server close). 503 when 16 are already waiting. A client that disconnects is forgotten; for a question or plan this ends it as `RevviewAskGone 'closed'` only after `askGoneGraceMs` (default `ASK_GONE_GRACE_MS` = 1500 ms, on the injected `timers`, cleared at server close), so a question answered in the terminal (PostToolUse follows the hook's death) is not taken for Esc. `timeout` is applied at once. There is no route that
 answers a request and the client cannot pass an id: only the buttons act (see `src/sessions/README.md`). After every
 board change the registry drops requests whose prompt left the board and notes which prompt the bar shows.
 
@@ -245,7 +245,7 @@ else `config/speech.json`) is loaded at start. A bad config is logged and the se
 With a runner, `RevviewOwned` (the ids of `runner.list()`) is applied at start, after every session start and every `ownedPollMs`
 (default 5000; an unref'd timer; a failing `list()` is logged and the last value kept). The tmux server is never killed by the live server (sessions outlive a restart).
 
-Programmatic use (tests): `startLiveServer({ port: 0, viewDir, reduce, input, devBridge, inputDeps, inputRetryMs, onGesture, sessions, speech, clock, permissionWaitMs, minShownMs, projects, timers, navTimeoutMs, ownedPollMs, look, lights, lookNow })`
+Programmatic use (tests): `startLiveServer({ port: 0, viewDir, reduce, input, devBridge, inputDeps, inputRetryMs, onGesture, sessions, speech, clock, permissionWaitMs, minShownMs, projects, timers, navTimeoutMs, ownedPollMs, askGoneGraceMs, look, lights, lookNow })`
 (`speech` is a read-aloud object from `src/speech` (default none); `sessions` is a runner (`list/target/send/start`), `clock`/`permissionWaitMs`/`minShownMs` go to the permission registry, `projects` is the
 validated path list, `timers`/`navTimeoutMs` go to the actions; `permissionsWaiting()` is a test seam)
 (`input` is a parsed config, `inputDeps`/`inputRetryMs` go to the device reader; `gestures()` returns a copy of the log) (`reduce` is a test seam for a failing state core; there is no host option) resolves to

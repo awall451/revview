@@ -403,19 +403,72 @@ test('question: deny answers the long poll with a deny; no key', async (t) => {
   assert.deepEqual(c.ctx.sent, []);
 });
 
+// timers that hold only the ask-gone grace (delay GRACE); every other delay is the real one
+const GRACE = 777;
+function graceTimers() {
+  const list = [];
+  const cleared = [];
+  return {
+    list,
+    setTimeout: (fn, ms) => {
+      if (ms !== GRACE) return setTimeout(fn, ms);
+      const h = { fn: () => { cleared.push(h); fn(); }, ms, unref() {} };
+      list.push(h);
+      return h;
+    },
+    clearTimeout: (h) => { if (h && h.fn) cleared.push(h); else clearTimeout(h); },
+    live: () => list.filter((h) => !cleared.includes(h)),
+  };
+}
+
 // ---- QA r11-02: a held question / plan request that ends without revview answering leaves the bar
-test('question: Esc in the terminal (the hook connection closes): the question leaves the bar, push-to-talk works, no note', async (t) => {
-  const c = await setup(t);
+test('question: Esc on the picker (the hook connection closes): the bar keeps the question until the grace, then waits for me, no note', async (t) => {
+  const timers = graceTimers();
+  const c = await setup(t, { timers, askGoneGraceMs: GRACE });
   const { r } = await askPrompt(c);
   r.abort(); // Claude closes the hook connection at once
-  for (let i = 0; i < 100 && (await c.state()).state.view === 'asking'; i++) await sleep(10);
+  for (let i = 0; i < 100 && timers.live().length === 0; i++) await sleep(10);
+  assert.equal(timers.live().length, 1, 'the grace timer is armed');
+  assert.equal((await c.state()).state.view, 'asking', 'not gone before the grace');
+  timers.live()[0].fn();
   const st = (await c.state()).state;
-  assert.notEqual(st.view, 'asking');
+  assert.equal(st.view, 'waiting');
   assert.equal(st.ask, null);
   assert.equal(st.note, null);
   c.ctx.now = 5000;
   await c.press('F21'); // push-to-talk: not "Answer the prompt first" any more
   assert.notEqual((await c.state()).state.note, 'Answer the prompt first');
+});
+
+test('question: answered in the terminal (the connection closes, then PostToolUse within the grace): working, never waiting', async (t) => {
+  const timers = graceTimers();
+  const c = await setup(t, { timers, askGoneGraceMs: GRACE });
+  const ASKQ = readLines('sessions/ask-question.jsonl').map((e) => ({ ...e, session_id: SID }));
+  const { r } = await askPrompt(c);
+  r.abort();
+  for (let i = 0; i < 100 && timers.live().length === 0; i++) await sleep(10);
+  await c.ev(ASKQ.slice(4).find((e) => e.hook_event_name === 'PostToolUse'));
+  assert.equal((await c.state()).state.view, 'working');
+  timers.live()[0].fn(); // the grace runs out: nothing is left to drop
+  const st = (await c.state()).state;
+  assert.equal(st.view, 'working');
+  assert.equal(st.activity, 'working');
+});
+
+test('question: a pending grace timer is cleared when the server closes', async (t) => {
+  const timers = graceTimers();
+  const c = await setup(t, { timers, askGoneGraceMs: GRACE });
+  const { r } = await askPrompt(c);
+  r.abort();
+  for (let i = 0; i < 100 && timers.live().length === 0; i++) await sleep(10);
+  assert.equal(timers.live().length, 1);
+  await c.s.close();
+  assert.equal(timers.live().length, 0, 'no handle left');
+});
+
+test('the grace constant is 1500 ms', async () => {
+  const { ASK_GONE_GRACE_MS } = await import('../../src/server/routes-permission.js');
+  assert.equal(ASK_GONE_GRACE_MS, 1500);
 });
 
 test('question: our own wait ran out (204): the question leaves the bar and the note says it is left for the terminal', async (t) => {

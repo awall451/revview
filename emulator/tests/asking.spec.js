@@ -74,7 +74,7 @@ test.describe('question', () => {
     await expect(page.locator('body')).toHaveAttribute('data-view', 'asking');
     await expect(page.locator('#state-word')).toHaveText('CLAUDE ASKS');
     await expect(page.locator('#shape')).toHaveAttribute('data-shape', 'asking');
-    await expect(page.locator('#tool')).toHaveText('AskUserQuestion');
+    await expect(page.locator('#tool')).toHaveText('Question');
     await expect(page.locator('#ask-question')).toHaveText('Which colour should the new file use?');
     expect(await full(page, '#ask-question')).toBe('Which colour should the new file use?');
     for (const [i, label] of ['Red', 'Green', 'Blue'].entries()) {
@@ -179,7 +179,7 @@ test.describe('plan', () => {
   test('Plan: title, steps and the terminal line', async ({ openView, page }) => {
     await openView(plan());
     await expect(page.locator('#state-word')).toHaveText('CLAUDE ASKS');
-    await expect(page.locator('#tool')).toHaveText('ExitPlanMode');
+    await expect(page.locator('#tool')).toHaveText('Plan');
     await expect(page.locator('#ask-question')).toHaveText('Plan: add hello.sh and README line');
     expect(await full(page, '#ask-question')).toBe('Plan: add hello.sh and README line');
     await expect(page.locator('#ask-steps')).toHaveText('3 steps');
@@ -355,8 +355,8 @@ test.describe('the highlighted choice and the hint row', () => {
 
   test.describe('a board note under CLAUDE ASKS', () => {
   const TERMINAL = 'Answer in the terminal when parked';
-  test('the terminal note equal to the hint is shown once (QA r11-03)', async ({ openView, page }) => {
-    await openView(question({ answer: 'terminal', choice: null, multiSelect: true }, { note: TERMINAL }));
+  test('under a terminal ask the terminal text is on the bar once: the board gives no note (QA r11-03)', async ({ openView, page }) => {
+    await openView(question({ answer: 'terminal', choice: null, multiSelect: true }, { note: null })); // the board hides a terminal note here (board-terminal-note.test.js)
     const rows = await page.evaluate((t) => [...document.querySelectorAll('body *')].filter((e) => e.getClientRects().length > 0 && e.textContent.startsWith(t) && e.children.length === 0).length, TERMINAL);
     expect(rows).toBe(1);
     await expect(page.locator('#ask-hint')).toHaveText(HINTS.terminal);

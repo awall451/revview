@@ -91,6 +91,7 @@ export function createActions({
 
   // ---- CLAUDE ASKS (a question or a plan on the bar). Never a key for a question; only '2' for a plan.
   const askNote = (text) => note(text, 'ask');
+  const terminalNote = (text) => note(text, 'terminal'); // the board hides it under an ask that says the same in its hint
   const TERMINAL_NOTE = 'Answer in the terminal when parked';
   const PLAN_TERMINAL_NOTE = 'Approve in the terminal when parked';
   const CHANGED_NOTE = 'Not sent: the question changed';
@@ -98,11 +99,11 @@ export function createActions({
     && a.since === b.since && a.choice === b.choice;
 
   // the note for a registry refusal (too-early keeps its own kind)
-  function refuseAsk(action, reason, terminalNote) {
+  function refuseAsk(action, reason, terminalText) {
     if (reason === 'too-early') note('Too early: press again', 'too-early');
     else if (reason === 'not-shown-long-enough' || reason === 'label-changed') askNote(CHANGED_NOTE);
     else if (reason === 'no-request') askNote('Not sent: the question is not waiting any more');
-    else askNote(terminalNote);
+    else terminalNote(terminalText);
     return out(action, false, reason ?? 'refused');
   }
 
@@ -276,7 +277,7 @@ export function createActions({
         const a = shownAsk(b);
         if (a === null) return out('allow', false, 'question shown');
         if (a.answer === 'terminal') {
-          askNote(TERMINAL_NOTE);
+          terminalNote(TERMINAL_NOTE);
           return out('allow', false, 'answer in terminal');
         }
         return a.answer === 'plan' ? approvePlan() : answerAsk('allow');

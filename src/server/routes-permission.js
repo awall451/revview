@@ -2,6 +2,11 @@ import { pendingPrompts, selectedKey } from '../state/index.js';
 import { text } from './http.js';
 import { readBody } from './routes-event.js';
 
+// How long a closed hook connection of a question or plan waits before the board is told it is gone. Esc on the
+// picker closes it at once and fires no hook event; but answering IN THE TERMINAL closes it too (Claude kills the
+// hook), and its PostToolUse follows shortly: that one removes the entry, so the later AskGone does nothing.
+export const ASK_GONE_GRACE_MS = 1500;
+
 // The PermissionRequest hook's long poll. The request is bound to the prompt this very event put on the
 // board (matched by session, agent and the board tick); nothing the client sends can name another prompt,
 // and no route answers it: only a wheel button (src/sessions/actions.js) can.
@@ -49,6 +54,16 @@ export function postPermission(ctx, req, res) {
         ctx.apply({ hook_event_name: 'RevviewAskGone', session_id: prompt.session, agent: prompt.agent, since: prompt.since, how });
       }
     };
+    // 'closed' waits for the grace (see ASK_GONE_GRACE_MS) on the server's injected timers; a close of the server clears it
+    const goneAfterGrace = () => {
+      if (ctx.closed || ctx.askGoneTimers === undefined) return gone('closed');
+      const h = (ctx.timers?.setTimeout ?? setTimeout)(() => {
+        ctx.askGoneTimers.delete(h);
+        if (!ctx.closed) gone('closed');
+      }, ctx.askGoneGraceMs ?? ASK_GONE_GRACE_MS);
+      h?.unref?.();
+      ctx.askGoneTimers.add(h);
+    };
     const id = ctx.registry.add(prompt, (decision, why) => {
       if (over || res.writableEnded) return;
       over = true;
@@ -61,7 +76,7 @@ export function postPermission(ctx, req, res) {
       const unanswered = !over;
       over = true;
       ctx.registry.remove(id);
-      if (unanswered) gone('closed');
+      if (unanswered) goneAfterGrace();
     });
   });
 }

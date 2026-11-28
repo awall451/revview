@@ -212,6 +212,8 @@ function withContext(board, patch) {
 //   too-early     actions.js: an answer refused too early    goes when the prompt the bar shows changes
 //   ask           the server: an answer to the shown question   goes when the prompt the bar shows changes
 //                 refused ("Not sent: the question changed")
+//   terminal      actions.js: a press on a question or     not shown while the bar shows an ask whose `answer` is
+//                 plan only the terminal can answer          'terminal' (the hint row says the same); a gesture clears it
 //   starting-ptt  actions.js: push-to-talk during STARTING   goes when the selected session no longer shows STARTING
 //   answer-prompt actions.js: push-to-talk refused, the      goes when the selected session has no pending prompt left
 //                 selected session has a pending prompt
@@ -224,12 +226,12 @@ function withContext(board, patch) {
 //   no-session    the server's boot (BootDone): "No session    hidden while the data is locked; not an ended note
 //                 yet: open the menu for New session"         (a push-to-talk tap does not clear it)
 const NOTE_RULES = {
-  plain: {}, 'too-early': {}, ask: {}, 'starting-ptt': {}, 'answer-prompt': {}, left: {}, 'no-session': { hiddenLocked: true },
+  plain: {}, 'too-early': {}, ask: {}, terminal: {}, 'starting-ptt': {}, 'answer-prompt': {}, left: {}, 'no-session': { hiddenLocked: true },
   ended: { ended: true }, 'ended-last': { ended: true, hiddenLocked: true },
 };
 export const NOTE_KINDS = Object.freeze(Object.keys(NOTE_RULES));
 // the kinds a RevviewNote may carry (absent = plain); the ended kinds are made by the board and BootDone only
-const POSTED_NOTE_KINDS = ['plain', 'too-early', 'ask', 'starting-ptt', 'answer-prompt'];
+const POSTED_NOTE_KINDS = ['plain', 'too-early', 'ask', 'terminal', 'starting-ptt', 'answer-prompt'];
 const noteOf = (kind, text) => ({ kind, text });
 const isNoteText = (t) => typeof t === 'string' && t.length >= 1 && t.length <= 120;
 const isEndedNote = (n) => isObj(n) && NOTE_RULES[n.kind]?.ended === true;
@@ -562,6 +564,15 @@ function reduceNav(b, event) {
   return b;
 }
 
+// The turn is over without a hook event (an Esc or Ctrl+C): waiting for the driver, the last tool/command/file/diff
+// kept, dialogs rejected by the Esc.
+function interruptedBoard(b, id, live) {
+  const st = live.state;
+  const state = { ...st, activity: 'waiting', compacting: false, view: st.locked ? 'insert-key' : st.offline ? 'offline' : 'waiting' };
+  const tick = b.tick + 1;
+  return { ...b, tick, sessions: withSession(b.sessions, id, { ...live, state, open: [], pending: [], pre: [], touched: tick }) };
+}
+
 function reduceInner(b, event) {
   const name = event.hook_event_name;
   const id = keyOf(event);
@@ -592,11 +603,7 @@ function reduceInner(b, event) {
     case 'RevviewInterrupted': { // revview sent Esc / Ctrl+C itself; Claude Code fires no hook for it
       if (!isStr(event.session_id) || live === null) return b;
       if (act(live) !== 'working' && act(live) !== 'permission') return b;
-      // like an interrupt: waiting for the driver, last tool/command/file/diff kept, dialogs rejected by the Esc
-      const st = live.state;
-      const state = { ...st, activity: 'waiting', compacting: false, view: st.locked ? 'insert-key' : st.offline ? 'offline' : 'waiting' };
-      const tick = b.tick + 1;
-      return { ...b, tick, sessions: withSession(b.sessions, id, { ...live, state, open: [], pending: [], pre: [], touched: tick }) };
+      return interruptedBoard(b, id, live);
     }
     case 'RevviewCompactExpired': { // the server's limit for a compaction whose end event never came
       if (!isStr(event.session_id) || live === null || live.state.compacting !== true) return b;
@@ -623,6 +630,12 @@ function reduceInner(b, event) {
       if (typeof event.since !== 'number' || (event.how !== 'closed' && event.how !== 'timeout')) return b;
       const gone = live.pending.find((p) => p.since === event.since && p.agent === event.agent && askIn(p) !== null);
       if (gone === undefined) return b;
+      // Esc on the picker ends Claude's turn and fires no hook event (fixtures/answers/events-esc.jsonl): the main
+      // agent's entry going 'closed' while the session works means it waits for the driver now, as after an interrupt
+      // (a question answered in the terminal was removed by its PostToolUse before the server's grace ran out)
+      if (event.how === 'closed' && (gone.agent === '' || gone.agent === null) && (act(live) === 'working' || act(live) === 'permission')) {
+        return interruptedBoard(b, id, live);
+      }
       const tick = b.tick + 1;
       const sessions = withSession(b.sessions, id, { ...live, pending: live.pending.filter((p) => p !== gone), touched: tick });
       const note = event.how === 'timeout' ? noteOf('left', gone.ask.kind === 'plan' ? 'Plan left for the terminal' : 'Question left for the terminal') : b.note;
@@ -1071,6 +1084,15 @@ function answeredOf(shown) {
 // A quiet placeholder is STARTING while the boot lasts, or while revview's own start of it is recent (launching).
 const startingOf = (b, s, key) => s.quiet === true && (b.booting === true || (b.launching ?? []).includes(key));
 
+// A note the bar does not show: a kind that hides while the data is locked, or a terminal note under an ask the
+// hint row already says is answered in the terminal.
+function noteHidden(b, shownKey) {
+  if (b.locked && NOTE_RULES[b.note.kind]?.hiddenLocked === true) return true;
+  if (b.note.kind !== 'terminal' || shownKey === null || b.sessions[shownKey].pending.length === 0) return false;
+  const ask = askViewOf(b.sessions[shownKey].pending[0]);
+  return ask !== null && ask.answer === 'terminal';
+}
+
 // The keys every view state carries besides the shown session's own fields.
 function extrasOf(b, shownKey) {
   const order = orderOf(b);
@@ -1083,7 +1105,7 @@ function extrasOf(b, shownKey) {
     position: b.owned === null || i < 0 ? null : { index: i + 1, count: order.length },
     elsewhere: order.filter((k) => k !== shownKey && b.sessions[k].pending.length > 0).length,
     nav: navView(b),
-    note: isObj(b.note) ? (b.locked && NOTE_RULES[b.note.kind]?.hiddenLocked === true ? null : b.note.text) : voice !== 'none' && shownKey !== null && b.sessions[shownKey].quiet === true && !startingOf(b, b.sessions[shownKey], shownKey) ? 'No events from this session yet' : null,
+    note: isObj(b.note) ? (noteHidden(b, shownKey) ? null : b.note.text) : voice !== 'none' && shownKey !== null && b.sessions[shownKey].quiet === true && !startingOf(b, b.sessions[shownKey], shownKey) ? 'No events from this session yet' : null,
     answered: answeredOf(shownKey === null ? null : b.sessions[shownKey]),
   };
 }

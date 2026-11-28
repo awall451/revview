@@ -59,7 +59,7 @@ async function expectShows(page, state) {
   await expect(page.locator('#state-word')).toHaveText(LABELS[state.view]);
   if (state.view === 'asking') {
     // CLAUDE ASKS: the tool in row A, the question (or the plan title) in the big slot, the options numbered below it
-    await expect(page.locator('#tool')).toHaveText(state.tool);
+    await expect(page.locator('#tool')).toHaveText({ AskUserQuestion: 'Question', ExitPlanMode: 'Plan' }[state.tool] ?? state.tool);
     const a = state.ask || {};
     const big = a.kind === 'plan' ? (a.title ? `Plan: ${a.title}` : 'Claude has a plan') : a.question || 'Claude asks: look at the terminal when parked';
     await expect(page.locator('#ask-question')).toHaveAttribute('data-full', big);

@@ -345,13 +345,12 @@ export function render(input) {
     }
   } else if (view === 'asking') {
     // Claude asks the driver (AskUserQuestion / ExitPlanMode): the tool in row A, the ask block below it (renderAsk)
-    set(el.tool, str(s.tool));
+    set(el.tool, Object.hasOwn(ASK_WORDS, str(s.tool)) ? ASK_WORDS[str(s.tool)] : str(s.tool)); // plain words; the state keeps the raw tool name
     if (s.offline === true) { set(el['offline-note'], 'No network: voice input will not work'); askRows += 1; }
-    // the terminal hint already says what that board note says (QA r11-03): once, not twice
-    const sameAsHint = s.ask?.answer !== 'pick' && s.ask?.answer !== 'plan' && voiceNote !== '' && voiceNote === TERMINAL_NOTE;
-    if (voiceNote && !sameAsHint) { set(el['voice-note'], voiceNote); askRows += 1; }
+    // (a note the terminal hint already says is null in the state: the board hides it, QA r11-03)
+    if (voiceNote) { set(el['voice-note'], voiceNote); askRows += 1; }
     // a board note is the outcome of a press (not sent, too early): white and bold, apart from the grey hint (QA r11-05)
-    el['voice-note'].toggleAttribute('data-board', typeof s.note === 'string' && s.note !== '' && !sameAsHint);
+    el['voice-note'].toggleAttribute('data-board', typeof s.note === 'string' && s.note !== '');
   } else {
     set(el.tool, str(s.tool));
     if (answerWord(str(s.tool)) !== '') {
@@ -527,7 +526,7 @@ export function render(input) {
 }
 
 // ---- CLAUDE ASKS: the question (or the plan title) in big type, the options below, the counts in row A ----
-const TERMINAL_NOTE = 'Answer in the terminal when parked'; // the board note of actions.js
+const ASK_WORDS = { AskUserQuestion: 'Question', ExitPlanMode: 'Plan' }; // row A under CLAUDE ASKS
 const ASK_NOTE = 'Claude asks: look at the terminal when parked';
 const ASK_HINTS = {
   pick: 'Allow picks · Deny cancels',

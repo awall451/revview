@@ -209,19 +209,28 @@ async function until(f) {
 }
 // a runner with no windows: its presence makes /permission hold the request for the wheel
 const RUNNER = { target: async () => null, send: async () => ({ sent: false }), list: async () => [] };
+// the question's own wait (permissionWaitMs) on the injected timers: fired by hand, so a question ends the way our own limit ends it
+const WAIT = 9999;
+function heldWaits(timers) {
+  const waits = [];
+  const base = timers.setTimeout;
+  timers.setTimeout = (fn, ms) => (ms === WAIT ? (waits.push(fn), { unref() {} }) : base(fn, ms));
+  return waits;
+}
 const heldAsk = (live, id) => {
   const ac = new AbortController();
   fetch(`${live.url}/permission`, { method: 'POST', body: JSON.stringify(ask(id)), signal: ac.signal }).catch(() => null);
   return ac;
 };
 
-test('a held question ends with no hook event (internal RevviewAskGone): the quiet timer is re-armed from that moment', async (t) => {
-  const { c, timers, opts } = setup({ sessions: RUNNER });
+test('a held question ends with no hook event (internal RevviewAskGone, our own wait ran out): the quiet timer is re-armed from that moment', async (t) => {
+  const { c, timers, opts } = setup({ sessions: RUNNER, permissionWaitMs: WAIT });
+  const waits = heldWaits(timers);
   const { post, live } = await boot(t, opts);
   c.t = 1000;
   await post(prompt(A));
   c.t = 2000;
-  const ac = heldAsk(live, A);
+  heldAsk(live, A);
   await until(() => live.permissionsWaiting() === 1);
   assert.equal(timers.live().length, 1);
   // the timer fires while the question is held: ignored (not working)
@@ -231,7 +240,7 @@ test('a held question ends with no hook event (internal RevviewAskGone): the qui
   assert.equal(timers.live().length, 0);
   // the driver is away; the question goes (Esc, or our own wait): no hook event follows
   c.t = 800000;
-  ac.abort();
+  waits[0](); // Esc itself now ends the turn (waiting); a question left for the terminal keeps the session working
   await until(() => live.permissionsWaiting() === 0 && timers.live().length === 1);
   assert.equal(view(live).view, 'working');
   c.t = 800000 + QUIET;
@@ -240,16 +249,17 @@ test('a held question ends with no hook event (internal RevviewAskGone): the qui
 });
 
 test('a question that ends within quietMs: the mark comes quietMs after it ended, not after the request', async (t) => {
-  const { c, timers, opts } = setup({ sessions: RUNNER });
+  const { c, timers, opts } = setup({ sessions: RUNNER, permissionWaitMs: WAIT });
+  const waits = heldWaits(timers);
   const { post, live } = await boot(t, opts);
   c.t = 1000;
   await post(prompt(A));
   c.t = 2000;
-  const ac = heldAsk(live, A);
+  heldAsk(live, A);
   await until(() => live.permissionsWaiting() === 1);
   const asked = timers.live()[0];
   c.t = 62000;
-  ac.abort();
+  waits[0]();
   await until(() => live.permissionsWaiting() === 0 && timers.live().length === 1 && timers.live()[0] !== asked);
   c.t = 62000 + QUIET;
   timers.live()[0].fn();

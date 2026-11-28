@@ -10,7 +10,7 @@ import { createLights } from '../lights/index.js';
 import { text, serveStatic, originOk } from './http.js';
 import { apply as applyEvent, events, stateHandler, startPing } from './feed.js';
 import { postEvent } from './routes-event.js';
-import { postPermission } from './routes-permission.js';
+import { postPermission, ASK_GONE_GRACE_MS } from './routes-permission.js';
 import { devKey, demoStream, bridgeCodes } from './routes-dev.js';
 import { acceptGesture, setupInput, buttonsHandler } from './gestures.js';
 import { createLifecycle, LAUNCH_LIMIT_MS, COMPACT_LIMIT_MS, QUIET_MS } from './lifecycle.js';
@@ -30,7 +30,7 @@ const DEFAULT_VIEW_DIR = path.resolve(HERE, '..', 'view');
 export async function startLiveServer({
   port = 0, viewDir = DEFAULT_VIEW_DIR, reduce: reduceEvent = reduceBoard,
   input = null, devBridge = false, devKeys = null, devDemo = false, inputDeps, inputRetryMs, onGesture,
-  sessions = null, clock = steadyNow, quietMs = QUIET_MS, permissionWaitMs, minShownMs, projects = [], timers, navTimeoutMs, ownedPollMs = 5000, speech = null, launchLimitMs = LAUNCH_LIMIT_MS, compactLimitMs = COMPACT_LIMIT_MS,
+  sessions = null, clock = steadyNow, quietMs = QUIET_MS, permissionWaitMs, minShownMs, projects = [], timers, navTimeoutMs, ownedPollMs = 5000, speech = null, launchLimitMs = LAUNCH_LIMIT_MS, compactLimitMs = COMPACT_LIMIT_MS, askGoneGraceMs = ASK_GONE_GRACE_MS, soundsSettleMs = 250,
   boot = false, netmon = null, thermal = null, dataLock = null, look = null, lights = null, lookNow, clockSynced = null, settings = null,
 } = {}) {
   const root = path.resolve(viewDir);
@@ -43,8 +43,9 @@ export async function startLiveServer({
     seq: 0,
     clients: new Set(),
     ownPort: 0,
-    registry: createPermissionRegistry({ clock, waitMs: permissionWaitMs, minShownMs }),
+    registry: createPermissionRegistry({ clock, waitMs: permissionWaitMs, minShownMs, timers }),
     closed: false,
+    timers, askGoneGraceMs, askGoneTimers: new Set(), // a closed question's grace (routes-permission.js)
     demoClients: new Set(),
     gestureLog: [],
     lastSource: 'device',
@@ -80,8 +81,10 @@ export async function startLiveServer({
     ctx.sounds = createSounds({
       player: createCuePlayer({ argv: speech.cuePlayer?.argv ?? null, dir: speech.cuePlayer?.dir ?? CUE_DIR, spawn: speech.cuePlayer?.spawn, timers, log, waitBefore: () => speaker.idle() }),
       log,
+      timers,
+      settleMs: soundsSettleMs,
     });
-    ctx.readAloud = createReadAloud({ speaker, memo: createClosingMemo(), speakOnStop: () => ctx.board.sounds === 'speech', beforeSpeak: () => ctx.sounds.idle(), log });
+    ctx.readAloud = createReadAloud({ speaker, memo: createClosingMemo(), speakOnStop: () => ctx.board.sounds === 'speech', beforeSpeak: () => ctx.sounds.idle(), timers, log });
   }
   // look = { mode: 'day' | 'night' | 'auto', night: { from, to } } or null (day, no clock monitor). The mode lives on the
   // board (the Settings row and the menu hold change it); the clock monitor runs always when look is given, and only says "night now".
@@ -209,6 +212,8 @@ export async function startLiveServer({
         for (const t of ctx.compactTimers.values()) ctx.clearT(t);
         ctx.compactTimers.clear();
         ctx.quietClose();
+        for (const t of ctx.askGoneTimers) (timers?.clearTimeout ?? clearTimeout)(t);
+        ctx.askGoneTimers.clear();
         if (ctx.ownedTimer !== null) clearInterval(ctx.ownedTimer);
         ctx.registry.close(); // leaves the tmux server alone: sessions outlive a server restart
         clearInterval(timer);

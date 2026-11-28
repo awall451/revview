@@ -85,7 +85,7 @@ test('a question that only the terminal answers: note, no registry call, no key'
   const r = await s.a.handle(dev('press'));
   assert.deepEqual([r.action, r.done, r.reason], ['allow', false, 'answer in terminal']);
   assert.equal(s.noteOf().text, 'Answer in the terminal when parked');
-  assert.equal(s.noteOf().kind, 'ask');
+  assert.equal(s.noteOf().kind, 'terminal');
   assert.deepEqual([s.answers, s.sent], [[], []]);
 });
 
@@ -95,14 +95,14 @@ test('refusals by registry reason, each with its note', async () => {
     ['not-shown-long-enough', 'Not sent: the question changed', 'ask'],
     ['label-changed', 'Not sent: the question changed', 'ask'],
     ['no-request', 'Not sent: the question is not waiting any more', 'ask'],
-    ['unbound', 'Answer in the terminal when parked', 'ask'],
-    ['ambiguous', 'Answer in the terminal when parked', 'ask'],
-    ['no-input', 'Answer in the terminal when parked', 'ask'],
-    ['not-one-question', 'Answer in the terminal when parked', 'ask'],
-    ['multi-select', 'Answer in the terminal when parked', 'ask'],
-    ['choice', 'Answer in the terminal when parked', 'ask'],
-    ['needs-choice', 'Answer in the terminal when parked', 'ask'],
-    ['session', 'Answer in the terminal when parked', 'ask'],
+    ['unbound', 'Answer in the terminal when parked', 'terminal'],
+    ['ambiguous', 'Answer in the terminal when parked', 'terminal'],
+    ['no-input', 'Answer in the terminal when parked', 'terminal'],
+    ['not-one-question', 'Answer in the terminal when parked', 'terminal'],
+    ['multi-select', 'Answer in the terminal when parked', 'terminal'],
+    ['choice', 'Answer in the terminal when parked', 'terminal'],
+    ['needs-choice', 'Answer in the terminal when parked', 'terminal'],
+    ['session', 'Answer in the terminal when parked', 'terminal'],
   ];
   for (const [reason, text, kind] of table) {
     const s = setup({ answerResult: { ok: false, reason } });
@@ -239,7 +239,7 @@ test('plan: a registry check refusal means no capture and no key, with the plan 
   assert.equal((await s.a.handle(dev('press'))).done, false);
   assert.equal(s.captures, 0);
   assert.deepEqual(s.sent, []);
-  assert.equal(s.noteOf().text, 'Approve in the terminal when parked');
+  assert.deepEqual([s.noteOf().text, s.noteOf().kind], ['Approve in the terminal when parked', 'terminal']);
   const t = setup({ board: planBoard(), checkResult: { ok: false, reason: 'too-early' } });
   await t.a.handle(dev('press'));
   assert.deepEqual([t.noteOf().text, t.noteOf().kind, t.captures, t.sent], ['Too early: press again', 'too-early', 0, []]);

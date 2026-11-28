@@ -69,7 +69,7 @@ gesture.
   - **CLAUDE ASKS** (`boardView(b).view === 'asking'`, no list open; `shownAsk(board)` says what answers it). up/down move
     the highlighted choice (`RevviewNav`). The server's feed observes the shown ask for the registry's "shown long enough"
     clock (`observe(shownPrompt ?? shownAsk)`). Never a key for a question; only `2` for a plan.
-    - press tap: `answer: 'terminal'` -> note 'Answer in the terminal when parked', refused `answer in terminal`;
+    - press tap: `answer: 'terminal'` -> note 'Answer in the terminal when parked' (kind `terminal`), refused `answer in terminal`;
       `'pick'` -> `answerAsk('allow')`: `before = shownAsk(board)` at dispatch, `runner.target(id)` (null: note 'Not sent: not a
       session revview started'), then the board is read AGAIN: a list open, another selection, or a shownAsk that is not the
       same (session, agent, since, choice) refuses with 'Not sent: the question changed'. Then
@@ -82,7 +82,7 @@ gesture.
       handler removes it).
     - deny tap: a plan -> `answerAsk('deny', { plan: true })`; a pick or terminal question -> `answerAsk('deny')` (a hook
       deny cancels the whole call).
-    - Refusal notes (kind 'ask', except too-early): `too-early` -> 'Too early: press again' (kind too-early);
+    - Refusal notes (kind 'ask', except too-early and the terminal texts, which are kind 'terminal'): `too-early` -> 'Too early: press again' (kind too-early);
       `not-shown-long-enough`, `label-changed` -> 'Not sent: the question changed'; `no-request` -> 'Not sent: the question
       is not waiting any more'; every other reason (unbound, ambiguous, no-input, not-one-question, multi-select, choice,
       needs-choice, session) -> 'Answer in the terminal when parked' ('Approve in the terminal when parked' for a plan).
