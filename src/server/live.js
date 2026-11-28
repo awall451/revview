@@ -16,6 +16,7 @@ import { acceptGesture, setupInput, buttonsHandler } from './gestures.js';
 import { createLifecycle, LAUNCH_LIMIT_MS, COMPACT_LIMIT_MS, QUIET_MS } from './lifecycle.js';
 import { startMonitors } from './monitors.js';
 import { startLookClock } from './look.js';
+import { createSettingsKeeper } from './settings.js';
 
 export const DEFAULT_PORT = 8138;
 // The server's clock for the bar's times: ms since the epoch at process start, then monotonic. A Pi has no RTC and sets
@@ -29,7 +30,7 @@ export async function startLiveServer({
   port = 0, viewDir = DEFAULT_VIEW_DIR, reduce: reduceEvent = reduceBoard,
   input = null, devBridge = false, devKeys = null, devDemo = false, inputDeps, inputRetryMs, onGesture,
   sessions = null, clock = steadyNow, quietMs = QUIET_MS, permissionWaitMs, minShownMs, projects = [], timers, navTimeoutMs, ownedPollMs = 5000, speech = null, launchLimitMs = LAUNCH_LIMIT_MS, compactLimitMs = COMPACT_LIMIT_MS,
-  boot = false, netmon = null, thermal = null, dataLock = null, look = null, lights = null, lookNow, clockSynced = null,
+  boot = false, netmon = null, thermal = null, dataLock = null, look = null, lights = null, lookNow, clockSynced = null, settings = null,
 } = {}) {
   const root = path.resolve(viewDir);
   // Everything the modules share, per server (no module-level state: tests start many servers in one process).
@@ -56,18 +57,22 @@ export async function startLiveServer({
     thermalMonitor: null,
     dataMonitor: null,
     lookClock: null,
+    settings: null,
     ownedTimer: null,
     apply: (event, onlyIfChanged) => applyEvent(ctx, event, onlyIfChanged),
     compactSync: null,
     acceptGesture: (g) => acceptGesture(ctx, g),
   };
+  // settings = { path, fs? } or null (nothing kept over a restart). Kept values override the config defaults below (src/server/settings.js).
+  ctx.settings = settings ? createSettingsKeeper(ctx, { ...settings, dataLock, has: { sounds: Boolean(speech), lights: Boolean(lights) } }) : null;
+  const kept = ctx.settings?.start() ?? {};
   // speech = { engine, speakOnStop, sounds?, cuePlayer?, spawn?, killWaitMs? } or null: with null nothing about speech or sounds exists.
   // sounds is the mode ('off' | 'cues' | 'speech'); cuePlayer is { argv, dir?, spawn? } or null (no player found: silent).
   // The mode lives on the board (the Settings row changes it): speech on Stop follows board.sounds === 'speech'.
   if (speech) {
     const log = (m) => console.error(m);
     const speaker = createSpeaker({ engine: speech.engine, spawn: speech.spawn, killWaitMs: speech.killWaitMs, log });
-    const mode = speech.sounds ?? (speech.speakOnStop === true ? 'speech' : 'off');
+    const mode = kept.sounds ?? speech.sounds ?? (speech.speakOnStop === true ? 'speech' : 'off');
     ctx.board = reduceBoard(ctx.board, { hook_event_name: 'RevviewSounds', mode }); // set at creation: no seq, no broadcast
     ctx.sounds = createSounds({
       player: createCuePlayer({ argv: speech.cuePlayer?.argv ?? null, dir: speech.cuePlayer?.dir ?? CUE_DIR, spawn: speech.cuePlayer?.spawn, timers, log, waitBefore: () => speaker.idle() }),
@@ -77,11 +82,11 @@ export async function startLiveServer({
   }
   // look = { mode: 'day' | 'night' | 'auto', night: { from, to } } or null (day, no clock monitor). The mode lives on the
   // board (the Settings row and the menu hold change it); the clock monitor runs always when look is given, and only says "night now".
-  if (look) ctx.board = reduceBoard(ctx.board, { hook_event_name: 'RevviewLook', mode: look.mode }); // set at creation: no seq, no broadcast
+  if (look || kept.look) ctx.board = reduceBoard(ctx.board, { hook_event_name: 'RevviewLook', mode: kept.look ?? look.mode }); // set at creation: no seq, no broadcast
   // lights = { config: { lights, leds, brightness, ... }, driver } or null (no lights feature: board.lights stays null).
   // The mode lives on the board (the Settings row changes it); the first frame is computed once, now.
   if (lights) {
-    ctx.board = reduceBoard(ctx.board, { hook_event_name: 'RevviewLights', mode: lights.config.lights }); // set at creation: no seq, no broadcast
+    ctx.board = reduceBoard(ctx.board, { hook_event_name: 'RevviewLights', mode: kept.lights ?? lights.config.lights }); // set at creation: no seq, no broadcast
     ctx.lights = createLights({ driver: lights.driver, leds: lights.config.leds, brightness: lights.config.brightness, clock, timers, log: (m) => console.error(m) });
     ctx.lights.observe(null, ctx.board);
   }

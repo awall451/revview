@@ -2336,3 +2336,47 @@ wire, data on SPI0 MOSI, GPIO10 (header pin 19). One LED per session, in the bar
 - **Unproven.** Everything on the wire: the SPI clock the Pi really gives for 2.4 MHz (on a Pi 4 it follows the core
   clock: from memory), whether MOSI idles low between frames, 3.3 V data into a 5 V WS2812B without a level shifter,
   the colours and brightness as seen, the group / udev / dtparam on the real image. Bench group LT.
+
+## Settings kept over a restart (cycle 80, owner issue #35, branch work/settings-keep; nothing run on a Pi)
+
+A choice made in the Settings menu (Sounds, Lights, Look) or by the menu hold (day/night flip) is written to one
+small file and read back at the next start. The config files (`config/speech.json` `"sounds"`, `config/look.json`
+`"mode"`, `config/lights.json` `"lights"`) stay the defaults: they are used when nothing is kept for that setting.
+Code: `src/server/settings.js`.
+
+- **Format.** One JSON object, every key optional: `{"sounds": "off" | "cues" | "speech", "look": "day" | "night" |
+  "auto", "lights": "off" | "on"}` (the board's own values; the menu hold writes `day` or `night`). Nothing else: an
+  unknown key, a wrong value, a file that is not a JSON object or is larger than 4 KiB is refused as a whole, the
+  way `config/lights.json` refuses unknown keys. Only the mode is kept; the night hours, the LED count and the speech
+  engine stay in the config files.
+- **Where.** The server keeps settings only when it is given a file: `--settings <file>` (or `REVVIEW_SETTINGS`); a
+  bare `--settings` means `$XDG_STATE_HOME/revview/settings.json`, else `~/.local/state/revview/settings.json`. On a
+  laptop `npm start` and `npm run start:dev` pass the bare `--settings`; `node src/server/index.js` alone keeps nothing
+  (so tests and the emulator harness never pick up a laptop's choices). On the Pi, `pi/revview.service` passes
+  `/srv/revview-data/revview/settings.json`: the encrypted data partition, the only place that survives a power-off
+  under the read-only root (the overlay keeps every other write in RAM). `pi/data-setup.sh` makes the directory
+  `revview` there, owned by the kiosk user, as it does `claude`, `ssh`, `repos`. The server makes a missing parent
+  directory itself (`mkdir -p`) when it can.
+- **Locked data.** With a data lock (`REVVIEW_DATA_MOUNT`, set by data-setup) and the file under that mount, nothing
+  is read or written while the data is locked: the mount point is then a directory of the read-only root, and a write
+  would land in RAM and hide under the mount. The server starts with the config defaults. At the unlock it reads the
+  file and applies what is kept, unless a setting was already changed since the start: then it writes the current
+  choice instead (the driver's latest choice wins). A change while locked is kept on the board and written at the
+  unlock. If the monitor sees the data locked again, writes wait for the next unlock the same way. A locked start
+  logs one line (`waiting for the data unlock`), the unlock a second one (what was read).
+- **What is written.** Only the settings changed since this start, merged over what the file held: an untouched
+  config default is never pinned into the file by a change to another setting.
+- **Missing, unreadable, refused, read-only.** The server always starts. At the start exactly one log line (stderr)
+  says what happened: kept values read, none kept yet (no file), waiting for the data unlock, or the file refused or
+  unreadable (with the reason) and the config defaults used. A refused or corrupt file is overwritten at the next
+  change (it is the server's own file and holds at most three words; the start line has the reason), never at the
+  start. A failed write (read-only, no space, no permission) logs one line, keeps the choice on the board until the
+  restart, and logs again only after a write has worked in between; it never throws.
+- **Atomic write.** On each change of one of the three values: write `<file>.tmp` in the same directory, fsync it,
+  rename it over `<file>` (then a best-effort fsync of the directory). A power cut leaves the old file or the new one,
+  never half a file. No timer and no debounce: changes come from button presses.
+- **A setting the run does not have.** A kept `sounds` without the sound feature (no speech config) or a kept
+  `lights` without `--lights-config` is not applied, and is carried over unchanged into the next write, so a run
+  without a feature does not forget the choice for it.
+- **Not proven.** Nothing here has run on a Pi: the write on the real data partition, a power cut during the write,
+  the order of unlock and server start at key-on. Bench items ST1-ST3 in `docs/BENCH-TEST.md` are `untested`.

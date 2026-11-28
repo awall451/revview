@@ -1,18 +1,20 @@
 // Live server: hook scripts POST raw Claude Code hook JSON to /event, the state core
 // (src/state) reduces it, and the new state is pushed to the page over Server-Sent Events.
 // It also serves the view. Binds to 127.0.0.1 only; see src/server/README.md.
-//   node src/server/index.js [port] [--input [path]] [--dev-bridge [--dev-keys file] [--dev-demo]] [--sessions] [--start dir]... [--projects file] [--speech file] [--look-config file] [--clock-sync [file]] [--boot] [--netmon] [--thermal] [--data-lock [dir]] [--quiet-minutes N]   (port default 8138, or REVVIEW_PORT)
+//   node src/server/index.js [port] [--input [path]] [--dev-bridge [--dev-keys file] [--dev-demo]] [--sessions] [--start dir]... [--projects file] [--speech file] [--look-config file] [--clock-sync [file]] [--boot] [--netmon] [--thermal] [--data-lock [dir]] [--quiet-minutes N] [--settings [file]]   (port default 8138, or REVVIEW_PORT)
 //   --look-config file: the bar's look (day | night | auto with night hours; default config/look.json); a bad file logs and uses day
 //   --clock-sync [file]: auto look counts the clock as set only once systemd-timesyncd says it synced (default file /run/systemd/timesync/synchronized); the Pi service passes it, a laptop does not
 //   --boot: key-on start: show STARTING until the first session is on the board; with no tmux windows, start one session in $REVVIEW_START (or each --start dir)
 //   --data-lock [dir]: the data is locked until the topmost mount on dir (default /srv/revview-data, or $REVVIEW_DATA_MOUNT) is ext4 from /dev/mapper/revview-data;
 //     locked shows INSERT KEY, no session starts (key-on and New session wait); a posted RevviewDataLock is only a poke to re-read the mount table
+//   --settings [file]: keep the Sounds, Look and Lights choices over a restart in this file (bare: $XDG_STATE_HOME/revview/settings.json, else ~/.local/state/revview/settings.json; or $REVVIEW_SETTINGS); without it nothing is kept
 //   --quiet-minutes N: a working session with no hook event for N minutes (default 5; decimals allowed, at most 120) gets the quiet mark; 0 = off
 //   --netmon: watch the network (default route + TCP connect to $REVVIEW_NETMON_HOST, default api.anthropic.com:443); offline after 2 failures, online after 1 success; a posted RevviewNetwork is only a poke to probe again
 //   --thermal: watch temperature and the Pi throttle flags: HOT and LOW POWER marks (sources: $REVVIEW_THERMAL_TEMP file, default /sys/class/thermal/thermal_zone0/temp;
 //     `vcgencmd get_throttled`, command path $REVVIEW_THERMAL_VCGENCMD, or a file $REVVIEW_THERMAL_THROTTLED instead of the command); a missing source is logged once
 import path from 'node:path';
 import { DEFAULT_DATA_MOUNT } from './datalock.js';
+import { defaultSettingsPath } from './settings.js';
 import { createDefaultProbe } from './netmon.js';
 import { createDefaultReaders, thermalEnv, DEFAULT_TEMP_PATH, DEFAULT_VCGENCMD } from './thermal.js';
 import { createSessionRunner, loadProjects } from '../sessions/index.js';
@@ -87,6 +89,9 @@ export function parseArgs(argv) {
       if (next === undefined || next.startsWith('--')) throw new Error('--speech needs a file');
       out.speech = next;
       i++;
+    } else if (a === '--settings') {
+      const next = argv[i + 1];
+      if (next !== undefined && !next.startsWith('--')) { out.settings = next; i++; } else out.settings = defaultSettingsPath(process.env);
     } else if (a === '--dev-demo') out.devDemo = true;
     else if (a === '--dev-keys') {
       const next = argv[i + 1];
@@ -110,6 +115,8 @@ export function parseArgs(argv) {
   if (out.projects === null) out.projects = process.env.REVVIEW_PROJECTS || null;
   // the key exists only when a speech file was named (flag or REVVIEW_SPEECH)
   if (out.speech === undefined && process.env.REVVIEW_SPEECH) out.speech = process.env.REVVIEW_SPEECH;
+  // the key exists only when a settings file is kept (flag or REVVIEW_SETTINGS)
+  if (out.settings === undefined && process.env.REVVIEW_SETTINGS) out.settings = process.env.REVVIEW_SETTINGS;
   return out;
 }
 
@@ -210,7 +217,7 @@ export async function main(argv = process.argv.slice(2)) {
       lightsLine = 'lights: none (bad lights config, see the log)';
     }
   }
-  const live = await startLiveServer({ port: args.port, lights, input, devBridge: args.devBridge, devKeys, devDemo: args.devDemo === true, sessions: runner, projects, speech, look, clockSynced: args.clockSync ? timesyncProbe(args.clockSync === true ? undefined : args.clockSync) : null, boot: args.boot, netmon, thermal, dataLock: args.dataLock ? { mountPoint: args.dataLock } : null, ...(args.quietMinutes !== undefined ? { quietMs: args.quietMinutes * 60000 } : {}) });
+  const live = await startLiveServer({ port: args.port, lights, input, devBridge: args.devBridge, devKeys, devDemo: args.devDemo === true, sessions: runner, projects, speech, look, settings: args.settings ? { path: args.settings } : null, clockSynced: args.clockSync ? timesyncProbe(args.clockSync === true ? undefined : args.clockSync) : null, boot: args.boot, netmon, thermal, dataLock: args.dataLock ? { mountPoint: args.dataLock } : null, ...(args.quietMinutes !== undefined ? { quietMs: args.quietMinutes * 60000 } : {}) });
   if (args.boot && runner && args.dataLock) {
     const log = (m) => console.error(m);
     bootAfterUnlock({ live, runner, dirs: args.start, log }).then(() => log('boot: key-on session step done'));
@@ -231,6 +238,7 @@ export async function main(argv = process.argv.slice(2)) {
   console.log(speechLine);
   if (soundsLine) console.log(soundsLine);
   console.log(lookLine);
+  console.log(args.settings ? `settings: ${args.settings}` : 'settings: not kept (no --settings)');
   if (lightsLine) console.log(lightsLine);
   if (netmonLine) console.log(netmonLine);
   if (thermalLine) console.log(thermalLine);

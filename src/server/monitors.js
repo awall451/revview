@@ -26,6 +26,7 @@ export function startMonitors(ctx, { netmon, thermal, dataLock }) {
       onChange: (locked) => {
         if (!locked) { unlocked = true; resolveUnlocked(); }
         if (!ctx.closed) ctx.apply({ hook_event_name: 'RevviewDataLock', locked }, true);
+        if (!ctx.closed) ctx.settings?.dataChanged(locked); // kept settings: read at the unlock, no write while locked
       },
     });
     ctx.dataMonitor.check();
