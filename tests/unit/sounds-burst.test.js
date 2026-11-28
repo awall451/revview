@@ -172,3 +172,48 @@ test('settleMs and maxMs are options', () => {
   timers.fire(5);
   assert.deepEqual(played, ['done']);
 });
+
+// parallel tool calls: needs -> answered -> a new prompt, all inside one burst
+const BASH = (id, command) => ({ tool_name: 'Bash', tool_input: { command }, tool_use_id: id });
+const answer = (b) => ({ hook_event_name: 'RevviewAnswered', session_id: A, agent: '', since: b.sessions[A].pending[0].since, decision: 'allow' });
+function burstBoards() {
+  const b0 = run([...WORKING, ev('PreToolUse', BASH('A', 'ls'))]);
+  const b1 = reduceBoard(b0, ev('PermissionRequest', BASH('A', 'ls')));
+  const b2 = reduceBoard(b1, answer(b1));
+  const b3 = reduceBoard(reduceBoard(b2, ev('PreToolUse', BASH('B', 'pwd'))), ev('PermissionRequest', BASH('B', 'pwd')));
+  return { b0, b1, b2, b3 };
+}
+
+test('needs -> answered -> a new prompt inside one burst gives one needs cue', () => {
+  const { sounds, timers, played } = make();
+  const { b0, b1, b2, b3 } = burstBoards();
+  assert.equal(b1.sessions[A].pending.length, 1);
+  assert.equal(b2.sessions[A].pending.length, 0);
+  assert.equal(b3.sessions[A].pending.length, 1);
+  assert.notEqual(b3.sessions[A].pending[0].since, b1.sessions[A].pending[0].since);
+  sounds.observe(b0, b1); // its own burst: the first prompt
+  timers.fire(250);
+  assert.deepEqual(played, ['needs']);
+  sounds.observe(b1, b2); // the wheel answers it, the next prompt arrives ms later: needs -> needs by class
+  sounds.observe(b2, b3);
+  timers.fire(250);
+  assert.deepEqual(played, ['needs', 'needs']);
+  timers.fire(2000);
+  assert.deepEqual(played, ['needs', 'needs']);
+});
+
+test('a burst with a new prompt that is answered too: no needs cue, nothing remembered for the next burst', () => {
+  const { sounds, timers, played } = make();
+  const { b0, b1, b2, b3 } = burstBoards();
+  const b4 = reduceBoard(b3, answer(b3));
+  sounds.observe(b0, b1);
+  timers.fire(250);
+  sounds.observe(b1, b2);
+  sounds.observe(b2, b3);
+  sounds.observe(b3, b4);
+  timers.fire(250);
+  assert.deepEqual(played, ['needs']);
+  sounds.observe(b4, reduceBoard(b4, ev('Stop')));
+  timers.fire(250);
+  assert.deepEqual(played, ['needs', 'done']);
+});

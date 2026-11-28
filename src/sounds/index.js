@@ -1,6 +1,7 @@
 // Audio cues for the bar. See README.md.
 import { fileURLToPath } from 'node:url';
 import { cueFor } from './classify.js';
+import { selectedKey, shownKey } from '../state/index.js';
 import { hasProgram } from '../speech/config.js';
 
 export { cueFor, cueClass } from './classify.js';
@@ -27,6 +28,7 @@ export function createSounds({ player, log = () => {}, timers, settleMs = 250, m
   let last = null; // the board after its latest change; null: no burst is open
   let settleTimer = null;
   let maxTimer = null;
+  let fresh = new Map(); // session -> sinces of pending entries that appeared during the burst
   let waiters = []; // idle() calls waiting for the burst
   let closed = false;
 
@@ -44,11 +46,20 @@ export function createSounds({ player, log = () => {}, timers, settleMs = 250, m
   const flush = () => {
     clearTimers();
     const [from, to] = [start, last];
+    const seen = fresh;
     start = null;
     last = null;
+    fresh = new Map();
     try {
       if (to && (to.sounds === 'cues' || to.sounds === 'speech')) {
-        const hit = cueFor(from, to);
+        let hit = cueFor(from, to);
+        // a prompt answered inside the burst, then a new one: a needs although the class never changed
+        const live = [...seen].filter(([k, set]) => to.sessions?.[k]?.pending?.some((p) => set.has(p.since)));
+        if (live.length > 0) {
+          const sel = selectedKey(to) ?? shownKey(to);
+          if (live.some(([k]) => k === sel)) hit = { cue: 'needs', session: sel };
+          else hit ??= { cue: 'other', session: live[0][0] };
+        }
         if (hit) player.play(hit.cue);
       }
     } finally {
@@ -72,6 +83,14 @@ export function createSounds({ player, log = () => {}, timers, settleMs = 250, m
         start = prev ?? null;
         maxTimer = setT(flush, maxMs);
       } else if (settleTimer !== null) clearT(settleTimer);
+      for (const [k, sess] of Object.entries(next.sessions ?? {})) {
+        const old = prev?.sessions?.[k]?.pending ?? [];
+        for (const p of sess?.pending ?? []) {
+          if (old.some((o) => o.since === p.since)) continue;
+          if (!fresh.has(k)) fresh.set(k, new Set());
+          fresh.get(k).add(p.since);
+        }
+      }
       last = next;
       settleTimer = setT(flush, settleMs);
       return null;
@@ -85,6 +104,7 @@ export function createSounds({ player, log = () => {}, timers, settleMs = 250, m
       clearTimers();
       start = null;
       last = null;
+      fresh = new Map();
       release();
       return player.close();
     },
