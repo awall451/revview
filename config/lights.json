@@ -1,5 +1,5 @@
 {
-  "_comment": "Lights: small WS2812B LEDs in the housing, one per session in the bar's order (pi/README.md, Lights). Off by default. Read at server start, only when the server is started with --lights-config (pi/revview.service does); the Settings row \"Lights\" turns them on or off until the server restarts. Untested on hardware.",
+  "_comment": "Lights: small WS2812B LEDs in the housing, one per session in the bar's order (pi/README.md, Lights). Off by default. Read at server start, only when the server is started with --lights-config (pi/revview.service does); the Settings row \"Lights\" turns them on or off (kept over a restart when the server is started with --settings: npm start, npm run start:dev and pi/revview.service do; this file is the default). Untested on hardware.",
   "lights": "off",
   "leds": 8,
   "driver": "ws2812-spi",

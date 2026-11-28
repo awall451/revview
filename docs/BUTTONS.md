@@ -229,8 +229,8 @@ All at the existing `TYPE_MM` (state word 6.05 mm, other text 3.55 mm; `src/view
 **Built in WB4 (2026-11-22), with changes:** the position and a mic mark sit in the band, but only when the server
 runs with sessions. A crossed mic and a bottom note row show when push-to-talk does not go to the shown session.
 The list shows a mic on the selected session's row. Back closes one level; the menu button (tap, on release; **[proposal]** hold: night/day look) opens and closes the
-menu. Menu items: New session (choose a project row, press), Projects (read-only), Settings (read-only, four
-facts). The list and menu auto-close after 10 s. All at `TYPE_MM`. The glance-first line is built as: the lower
+menu. Menu items: New session (choose a project row, press), Projects (read-only), Settings (four facts, and rows for Sounds, Lights and Look when the server has them; the
+choices are kept over a restart when the server keeps settings, `--settings`). The list and menu auto-close after 10 s. All at `TYPE_MM`. The glance-first line is built as: the lower
 area is replaced, the band stays. Legibility on the dash is not proven (bench V8). See DECISIONS "wheel buttons 4".
 
 Describe only: the exact pixel layout is for whoever builds it, within the 7-row budget.

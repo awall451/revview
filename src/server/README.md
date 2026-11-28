@@ -4,10 +4,10 @@
 (`src/state`), and pushes the resulting state to the page over Server-Sent Events. It also serves the
 view (`src/view/`). Node standard library only. It holds one **board** (`initialBoard()`, one entry per Claude
 session, see `src/state/README.md`), reduces every event with `reduceBoard` and sends `boardView(board)` to the page.
-No persistence: a fresh or restarted server shows `unknown` (a restored state could not be trusted, and hooks
-posted while the server was down are lost).
+No persistence of sessions: a fresh or restarted server shows `unknown` (a restored state could not be trusted, and hooks
+posted while the server was down are lost). The one exception is the Settings choices (Sounds, Lights, Look), kept only with `--settings` (see "Settings kept over a restart").
 
-Run: `npm start` or `node src/server/index.js [port] [--input [path]] [--dev-bridge [--dev-keys file] [--dev-demo]] [--sessions] [--start dir]... [--projects file] [--speech file] [--look-config file] [--lights-config file] [--clock-sync [file]] [--boot] [--netmon] [--thermal] [--data-lock [dir]] [--quiet-minutes N]` (port default **8138**, or env `REVVIEW_PORT`).
+Run: `npm start` or `node src/server/index.js [port] [--input [path]] [--dev-bridge [--dev-keys file] [--dev-demo]] [--sessions] [--start dir]... [--projects file] [--speech file] [--look-config file] [--lights-config file] [--settings [file]] [--clock-sync [file]] [--boot] [--netmon] [--thermal] [--data-lock [dir]] [--quiet-minutes N]` (port default **8138**, or env `REVVIEW_PORT`).
 `--input` reads the wheel buttons in this process (config `config/buttons.json`, or the path given); a bad config or
 unknown flag prints the message to stderr and exits with code 2 before listening. `--dev-bridge` (or `npm run start:dev`) turns on `POST /dev/key`. SIGTERM and SIGINT close the server (stopping the grab helper) and exit 0.
 It binds to **127.0.0.1 only**; there is deliberately no way to change the host from the CLI.
@@ -32,7 +32,20 @@ no module keeps state of its own.
 | `routes-dev.js` | `POST /dev/key`, `GET /dev/keys`, `GET /dev/demo` (`GET /dev/lights` is in `live.js`) |
 | `gestures.js` | gesture log, `GET /buttons`, the input reader and dev bridge setup |
 | `lifecycle.js` | project marks, owned-sessions poll, launch and compaction timers, the runner the actions get |
+| `settings.js` | the kept Settings choices: read at start, written on each change (see "Settings kept over a restart") |
 | `monitors.js` | starts `netmon.js`, `thermal.js`, `datalock.js` |
+
+## Settings kept over a restart: `--settings [file]`
+
+With `--settings <file>` (or env `REVVIEW_SETTINGS`) the Settings choices Sounds, Lights and Look (and the menu hold's day/night flip) are kept in that file and read back at the next start. A bare `--settings` means `$XDG_STATE_HOME/revview/settings.json`, else `~/.local/state/revview/settings.json`. `npm start` and `npm run start:dev` pass the bare flag; `node src/server/index.js` alone keeps nothing. The Pi service passes a file on the data partition (untested on a Pi). The config files stay the defaults, used for any setting nothing is kept for. Code: `settings.js`; decision: "Settings kept over a restart" in `docs/DECISIONS.md`.
+
+- **Startup line:** `settings: <path>` or `settings: not kept (no --settings)`. One more log line says what was read, or that there was no file, or why the file was refused.
+- **Format:** one JSON object, keys optional: `{"sounds": "off|cues|speech", "look": "day|night|auto", "lights": "off|on"}`. An unknown key, a wrong value, a non-object or a file over 4 KiB is refused as a whole and the config defaults are used.
+- **Only changes are written:** the settings you changed since the start are merged over what the file held, so an untouched config default is never pinned into it.
+- **Atomic write:** `<file>.tmp` in the same directory, fsync, rename. A power cut leaves the old file or the new one. A missing parent directory is created.
+- **Never stops the server:** a missing, refused or unreadable file means the defaults. A refused file is overwritten at the next change, never at the start. A failed write (read-only, no space) is logged once; the choice stays on the board until the restart.
+- **Locked data:** with `--data-lock` and the file under the mount, nothing is read or written while locked. The start logs "waiting for the data unlock"; the unlock logs a second line with what was read.
+- **Reset:** delete the file, or start without `--settings`.
 
 ## Key-on on the Pi: `--boot` and `--netmon`
 
@@ -245,7 +258,7 @@ or missing file is logged and the day look is used, never no bar). The option `l
 monitor) puts the mode on the board at creation (`RevviewLook`, no seq, no broadcast) and starts the clock monitor (`startLookClock`): at start and every
 30 s (timer unref'd) it applies `RevviewLookClock { night }` when the value changes; night is `isNightAt` (local time, `from > to` wraps midnight,
 `from == to` never) and always false while the clock is not set (the `clockSynced` probe says no, or the year is before 2026; logged once). `--clock-sync [file]` (the Pi service passes it) makes the probe the file `/run/systemd/timesync/synchronized` (systemd-timesyncd); without it there is no probe and only the year check applies (a laptop). The hours are the server process's local time: the service's time zone must be the driver's. Both events are internal (403 over HTTP). The Settings
-Look row and the menu hold change the mode until the server restarts. If `from` equals `to` there is never a night (auto always shows day). The startup line is `look: day` or `look: auto (night 21:00-07:00)`.
+Look row and the menu hold change the mode; with `--settings` the choice is kept over a restart, else it holds until the server stops, and the config `mode` is the default when nothing is kept. If `from` equals `to` there is never a night (auto always shows day). The startup line is `look: day` or `look: auto (night 21:00-07:00)`.
 `lookNow` (a `() => Date`) is a test seam.
 
 ## Sounds

@@ -124,7 +124,7 @@ anything you can see:
   the server reads `config/speech.json` by default, which uses Piper only when it is at `/opt/piper/piper` with the
   lessac voice and `aplay` exists, else espeak-ng. Without an engine it does nothing. `run.sh` installs nothing.
 - **Night look.** To see the dark look: press M (the menu), Down to the Settings item and Enter, Down to the Look row,
-  Enter (each press cycles day, night, auto; not kept over a restart; the lasting setting is `"look"` in
+  Enter (each press cycles day, night, auto; kept over a restart when the server keeps settings, see Settings below; the default is `"look"` in
   `config/look.json`, or `--look-config <path>` for another file). Or **hold M** for about half a second: it toggles day
   and night (M tapped still opens the menu, now when you release it). The gallery has a `night-<name>.png` for every shot.
   The `--keys` sheet lists the hold (the M row, HOLD column: day/night).
@@ -132,7 +132,7 @@ anything you can see:
   for other sessions), through the first of `aplay`, `pw-play`, `paplay` that your laptop has (`cuePlayers` in
   `config/speech.json`). With none of them it stays silent and its log says `sounds: cues, no cue player found
   (silent)`. The demo's state changes cue too. Turn them off in the menu: Settings, the Sounds row, press (off /
-  cues / cues and speech; back to the config value when the server restarts), or copy
+  cues / cues and speech; kept over a restart when the server keeps settings, see below), or copy
   `config/speech.json`, set `"sounds": "off"` in the copy and start with `REVVIEW_SPEECH=/path/to/copy bash
   emulator/run.sh` (run.sh passes the environment to the server). `run.sh` prints the server's `sounds:` line (for
   example `sounds: off` or `sounds: cues, no cue player found (silent)`) once the server is up; the rest of the log is
@@ -146,6 +146,21 @@ is session i in the bar's order. The colours and flash patterns are the lights m
 polled from `GET /dev/lights` every 100 ms. The real frames are capped (48 of 255 by day) and look dim, so the page
 draws each LED as colour x 255 / cap, to show the hue on a laptop screen; the raw frame is in each LED's `data-rgb`.
 Settings has a "Lights: on/off" row. The real LEDs are untested on hardware.
+
+## Settings kept over a restart
+
+The Settings choices (Sounds, Lights, Look, and the menu hold's day/night flip) are kept in a file and read back at the
+next start, when the server is started with `--settings`. `npm start` and `npm run start:dev` do that. The file is
+`~/.local/state/revview/settings.json` (or `$XDG_STATE_HOME/revview/settings.json`). `bash emulator/run.sh` does not
+pass the flag, so the emulator keeps nothing and always starts from the config files. The config files stay the
+defaults; they are used for any setting that has no kept choice, and they are never changed.
+
+To try it: run `npm run start:dev`, change a row (for example Look to night), stop the server (Ctrl-C), start it again.
+The bar shows the kept choice. The startup line says `settings: <path>`; without the flag it says `settings: not kept
+(no --settings)`.
+
+To start fresh, delete the file, or run `node src/server/index.js` without `--settings`. A file the server cannot read
+is ignored (the log says why) and replaced at the next change.
 
 ## The keys
 

@@ -46,7 +46,7 @@ plays the result when `board.sounds` is `cues` or `speech`, and logs `sounds: <m
 ## Config keys
 
 In `config/speech.json`: `sounds` (`off`, `cues`, `speech`; default `cues`; `speakOnStop: true` alone means `speech`) and `cuePlayers` (1 to 4 argument lists; default
-`aplay -q`, `pw-play`, `paplay`). `pickPlayer(players)` takes the first whose program is found. The mode is on the board: the Settings row cycles it until the restart.
+`aplay -q`, `pw-play`, `paplay`). `pickPlayer(players)` takes the first whose program is found. The mode is on the board: the Settings row cycles it; with `--settings` the choice is kept over a restart (src/server/README.md), `config/speech.json` stays the default.
 
 ## Stand-in for tests
 
