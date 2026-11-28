@@ -44,7 +44,7 @@ navigation, notes, compaction marks and a repeated identical event do not change
 logs `sounds: <mode>` when the mode changes (per change) and notes the change; it plays nothing at once. **A burst gives one cue:** the first change of a burst keeps its
 `prev` as the start; each further change within `settleMs` of the last extends the burst (never past `maxMs` after its start); when it settles the cue is
 `cueFor(start, last)`, played when the last board's `sounds` is `cues` or `speech`. So needs -> working -> done in one burst is `done`; done -> working -> done is
-nothing (class unchanged); an emulator scene jump is one cue. `observe` returns null (nothing uses a result). `idle()` also waits for a burst that has not settled
+nothing (class unchanged); an emulator scene jump is one cue. `observe` returns null (nothing uses a result); with `settleMs <= 0` there is no burst: it plays at once and returns the cue (the server option `soundsSettleMs: 0`, used by the server wiring tests). `idle()` also waits for a burst that has not settled
 (automatic speech awaits it, at most 2 s, so on a Stop the done cue still comes first); `close()` clears the timers and frees waiting `idle()` calls.
 
 ## Config keys
