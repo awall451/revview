@@ -2200,7 +2200,8 @@ Code: `src/sounds/` (README there), `config/speech.json`, `src/server/feed.js` (
   completed tasks continues the list (2 of 3), which is right if Claude numbers on and nothing is shown (a duplicate "1" is
   ignored, a jump is partial) if it does not. This continuing rule is NOT backed by a recording either (the recording has one
   list of four); it is the one that cannot show a wrong number for a list we saw whole. A long session with several finished
-  lists therefore shows the running total until the next SessionStart. A SessionStart other than `compact` clears it; subagent task
+  lists therefore shows the running total until the next SessionStart. **Superseded in cycle 81** (recordings: section
+  "Task progress, recorded" below): a create 5 s or more after the list became all completed starts a new list. A SessionStart other than `compact` clears it; subagent task
   events (`agent_id`) are ignored; at most 200 ids. Shown as `tasks 3/7` (the word, so it is not read as the session
   position `2/3`) at the right of row A before the diff, in the views that show the tool row; the file gives way.
 - **Room.** Band order: shape, word, clock, quiet tag, hint (+N / position), repo, tags. When it does not fit, the repo gives way
@@ -2435,3 +2436,39 @@ Code: `src/server/settings.js`.
 
 - `tools/long-drive` (not part of the gate) starts the server with the lights, sounds and auto look, with stand-ins for the LED helper and the cue player (`tests/long/fake/`), and scales the server's own JavaScript timers and clocks by the replay speed-up (`tests/long/clock-skew.js`), so its real timers (ping, look clock, quiet, lights tick) run at the replay's pace. The drive passes no `--settings` file: it never changes a Settings choice, so a kept file would only repeat the config defaults. Results and limits (an emulation, nothing on a Pi): `docs/LONG-DRIVE.md`.
 - The SSE ping and the owned-sessions poll run on the injected `timers` like every other server timer (self-arming `setTimeout`, unref'd, cleared by `close()`).
+
+## Task progress, recorded (cycle 81, owner issue #38, branch work/task-recordings)
+
+Recordings: `fixtures/sessions/task-progress/` (README there: models, prompts, the times files). Claude Code 2.1.332,
+interactive in a pty, `claude-haiku-5-5` and `claude-sonnet-5-5`, started with `--model`. Nothing was run on a Pi.
+
+- **Without `CLAUDE_CODE_ENABLE_TODO_TOOLS`** neither model had a task tool (ToolSearch "task list create update" finds
+  only TaskStop and others; the files are written without a list). The binary's gate (read in its bundled source): the task
+  tools are on when the model is one of an older set (`claude-3-*` .. `claude-opus-4-7`, `claude-sonnet-4-6`,
+  `claude-haiku-4-5`), when no model id is known, for an inference-profile model, in background/job sessions, when the
+  launch's `--tools` / allowed-tools list names a task tool, or when `CLAUDE_CODE_ENABLE_TODO_TOOLS` is true; else off. So
+  on the 5.5 models a list exists only with the switch (or the tools named at launch). revview still sets nothing: the
+  owner's choice (the question is in the cycle 81 report).
+- **With the switch** both models used `TaskCreate` / `TaskUpdate` exactly as in `task-list` (ids "1", "2", ...; Post
+  `statusChange {from, to}`). Sonnet also called `TaskList` (Post `tool_response.tasks [{id, subject, status, blockedBy}]`,
+  completed tasks listed, deleted ones gone); ignored by the board (read only).
+- **`/compact`**: PreCompact `manual`, SessionStart `compact`, PostCompact; afterwards Claude updates the same ids "2" and "3":
+  the list lives on. The bar's rule (a `compact` SessionStart keeps the list) was right; now a test from the recording.
+- **Deleted task**: `TaskUpdate {taskId, status: "deleted"}`, Post `updatedFields ["deleted"]`, `statusChange {from:
+  "pending", to: "deleted"}`, no TaskCompleted event. Claude's screen then shows `2/2 tasks done` for 3 created, 1 deleted,
+  2 completed: the bar's rule (a deleted id leaves the total) was right; test from the recording.
+- **Two lists in one session**: the ids go on ("4", "5" after "1".."3"), but Claude Code's own list is new: its screen shows
+  only the new tasks (`2/2`, `1/1`). The source: its task-list watcher arms a 5000 ms timer when every task of the list is
+  completed and then deletes them all (`resetTaskList`, keeping a high-water mark so ids go on); a task that is not
+  completed cancels the timer. Recorded both ways: a task created 0.2-0.5 s after the last completion joins the list
+  (screen `3/3 tasks done`), one created 15-18 s later starts a new one. **The bar was wrong here** (it showed 2/3 and 2/4,
+  the running total). **New rule**: the session's list keeps `doneAt`, the server's time (`at`) at which it became
+  non-empty and all completed (cleared when a task is not completed any more); a `TaskCreate` of the next id at least
+  5000 ms after `doneAt` starts a new list (`tasks 0/1`). Sooner, or without a clock (`at` missing: unit tests, old
+  callers), the old continuing rule applies; a jump or an unknown id is still partial. Limits: the boundary is the
+  hook's arrival time, not Claude's timer (they differ by the hook's run time, about 0.1 s; a create within that band
+  of 5 s could be counted on the wrong side: no recording comes near it, Claude either goes on at once or after a turn);
+  the bar keeps showing the finished `2/2` until the next create, where Claude's screen hides the list after 5 s (not
+  changed: no recording asked for it). The timer lives in the interactive UI; under `claude -p` it is not known to run.
+- **Gallery**: no screenshot changed (no fixture state of the emulator holds two lists; scene 11 replays `task-list`, one
+  list).

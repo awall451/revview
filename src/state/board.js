@@ -267,8 +267,27 @@ const taskId = (raw) => {
   return id !== '' && id.length <= MAX_TASK_ID ? id : '';
 };
 
+// Claude Code 2.1.332 (interactive) clears a list whose tasks are all completed 5 s after it saw them so (its task-list
+// watcher's hide timer, then resetTaskList; ids go on from the high-water mark). Recorded: a create 0.2 s after the last
+// completion joins the list (3/3 on Claude's screen), one 12-18 s later starts a new list (1/1, 2/2).
+const LIST_RESET_MS = 5000;
+const allCompleted = (t) => t !== null && !t.partial && Object.keys(t.ids).length > 0 && Object.values(t.ids).every((v) => v === 'completed');
+
+// The task list after one event, with `doneAt` (the time the whole list became completed, when the clock is known).
+function nextTasks(t, event, at) {
+  const r = nextIds(t, event, at);
+  if (r === t || r === null) return r;
+  if (!allCompleted(r)) {
+    if (!('doneAt' in r)) return r;
+    const { doneAt, ...rest } = r;
+    return rest;
+  }
+  if (allCompleted(t) && finiteNum(t.doneAt)) return { ...r, doneAt: t.doneAt };
+  return finiteAt(at) ? { ...r, doneAt: at } : r;
+}
+
 // The task list after one event (the same reference when nothing changes). Source: PostToolUse of TaskCreate / TaskUpdate.
-function nextTasks(t, event) {
+function nextIds(t, event, at) {
   const name = event.hook_event_name;
   if (name === 'SessionStart') return event.source === 'compact' ? t : null;
   if (name !== 'PostToolUse' || isStr(event.agent_id)) return t;
@@ -280,9 +299,13 @@ function nextTasks(t, event) {
     if (id === '') return t;
     const cur = t ?? empty;
     if (has(cur.ids, id)) return t;
+    // the next id after a list that has been all completed for LIST_RESET_MS: Claude Code cleared it, a new list begins
+    if (allCompleted(t) && finiteNum(t.doneAt) && finiteAt(at) && at - t.doneAt >= LIST_RESET_MS && finiteNum(t.max) && id === String(t.max + 1)) {
+      return { ids: { [id]: 'pending' }, max: t.max + 1, partial: false };
+    }
     // The recording shows ids "1", "2", ... in order. A create that is not the next number (a restart in the middle of a
-    // list, a non-numeric id) means part of the list was never seen: nothing is shown rather than a wrong number. There is
-    // no "all completed, so a new list" rule (no recording backs it): a create after completed tasks continues the list.
+    // list, a non-numeric id) means part of the list was never seen: nothing is shown rather than a wrong number.
+    // Sooner than LIST_RESET_MS (or without a clock) a create after completed tasks continues the list.
     const n = /^\d+$/.test(id) ? Number(id) : NaN;
     const max = typeof cur.max === 'number' ? cur.max : 0;
     const partial = cur.partial || n !== max + 1;
@@ -346,7 +369,7 @@ function stampBoard(b, r, event, at) {
         quietAt = null;
       }
     }
-    if (target) tasks = nextTasks(tasks, event);
+    if (target) tasks = nextTasks(tasks, event, at);
     if (since === (s.since ?? null) && quietAt === (s.quietAt ?? null) && lastAt === (s.lastAt ?? null) && tasks === (s.tasks ?? null)) continue;
     const out = { ...s };
     for (const [key, v] of [['since', since], ['quietAt', quietAt], ['lastAt', lastAt], ['tasks', tasks]]) {
